@@ -1,0 +1,31 @@
+[project]
+id = "incident-tracker"
+
+[db]
+port = 54322
+major_version = 15
+
+[db.pooler]
+enabled = false
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "editorial", "evidence", "sponsor"]
+extra_search_path = ["public"]
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[realtime]
+enabled = true

@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "public-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--host"],
+      "port": 5173,
+      "cwd": "apps/public-web"
+    },
+    {
+      "name": "supabase",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["supabase", "start"],
+      "port": 54321
+    }
+  ]
+}

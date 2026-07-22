@@ -1,0 +1,86 @@
+:root {
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* Surfaces — dark-first (§13.1: deep charcoal, restrained navy, slate) */
+  --bg-base: #0f1117;
+  --bg-surface: #161821;
+  --bg-elevated: #1c1f2b;
+  --bg-hover: #242736;
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+
+  /* Text */
+  --text-primary: #e8e6df;
+  --text-secondary: #9b9a94;
+  --text-muted: #6b6a65;
+
+  /* Brand accent — restrained gold */
+  --accent: #c9a84c;
+  --accent-dim: #8a7234;
+  --accent-glow: rgba(201, 168, 76, 0.15);
+
+  /* Operational colours (§13.1) */
+  --severity-critical: #c53030;
+  --severity-high: #dd6b20;
+  --severity-medium: #d69e2e;
+  --severity-low: #3182ce;
+  --severity-info: #718096;
+
+  --status-active: #e53e3e;
+  --status-developing: #ed8936;
+  --status-monitoring: #ecc94b;
+  --status-resolved: #48bb78;
+  --status-closed: #718096;
+
+  /* Verification rings */
+  --verify-unreviewed: transparent;
+  --verify-triage: #a0aec0;
+  --verify-plausible: #ecc94b;
+  --verify-corroborated: #4299e1;
+  --verify-primary: #48bb78;
+  --verify-editorial: #38b2ac;
+  --verify-disputed: #ed8936;
+  --verify-retracted: #e53e3e;
+
+  /* Module colours */
+  --module-ait: #c53030;
+  --module-unrest: #ed8936;
+  --module-bias: #805ad5;
+  --module-infrastructure: #3182ce;
+  --module-natural: #38a169;
+  --module-economy: #d69e2e;
+
+  /* Borders */
+  --border: #2d303e;
+  --border-strong: #3d4155;
+
+  /* Spacing */
+  --topbar-h: 36px;
+  --ticker-h: 30px;
+  --footer-h: 26px;
+  --panel-w: 320px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-base: #f5f4f0;
+    --bg-surface: #ffffff;
+    --bg-elevated: #f0efeb;
+    --bg-hover: #e8e7e3;
+    --bg-overlay: rgba(0, 0, 0, 0.3);
+    --text-primary: #1a1a1a;
+    --text-secondary: #5a5a55;
+    --text-muted: #8a8a85;
+    --accent: #8a6d1b;
+    --accent-dim: #b8952e;
+    --accent-glow: rgba(138, 109, 27, 0.1);
+    --border: #d4d3cf;
+    --border-strong: #b8b7b3;
+  }
+}

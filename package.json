@@ -1,0 +1,20 @@
+{
+  "name": "incident-tracker",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Alt Afrikaner | Incident Tracker — map-first, evidence-led citizen-intelligence platform for South Africa",
+  "scripts": {
+    "dev": "pnpm --filter public-web dev",
+    "build": "pnpm --filter public-web build",
+    "typecheck": "tsc --build",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "workspaces": [
+    "apps/public-web"
+  ]
+}
