@@ -1,40 +1,4 @@
-/* App shell layout — §15 */
-.app-shell {
-  display: grid;
-  grid-template-rows: var(--topbar-h) 1fr;
-  grid-template-columns: var(--panel-w) 1fr;
-  grid-template-areas:
-    "topbar topbar"
-    "sidebar map";
-  height: 100vh;
-  width: 100%;
-  overflow: hidden;
-}
-
-.app-shell.has-ticker {
-  grid-template-rows: var(--ticker-h) var(--topbar-h) 1fr;
-  grid-template-areas:
-    "ticker ticker"
-    "topbar topbar"
-    "sidebar map";
-}
-
-.app-shell.has-footer {
-  grid-template-rows: var(--topbar-h) 1fr var(--footer-h);
-  grid-template-areas:
-    "topbar topbar"
-    "sidebar map"
-    "footer footer";
-}
-
-.app-shell.has-ticker.has-footer {
-  grid-template-rows: var(--ticker-h) var(--topbar-h) 1fr var(--footer-h);
-  grid-template-areas:
-    "ticker ticker"
-    "topbar topbar"
-    "sidebar map"
-    "footer footer";
-}
+/* App shell layout — now flex-column, defined in design-system.css */
 
 /* Single-column page shell (About / Methodology / Report) with a footer row */
 .page-shell {

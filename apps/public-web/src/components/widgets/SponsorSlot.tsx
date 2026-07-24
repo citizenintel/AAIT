@@ -1,5 +1,6 @@
 import { useAppStore } from '../../store/app-store';
-import { MOCK_SPONSOR_ADS, type SponsorAd } from '../../data/mock-sponsors';
+import { useIncidentData } from '../../lib/hooks/useIncidentData';
+import { type SponsorAd } from '../../data/mock-sponsors';
 
 function SponsorIcon({ icon, color, size = 28 }: { icon: SponsorAd['icon']; color: string; size?: number }) {
   const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
@@ -13,9 +14,23 @@ function SponsorIcon({ icon, color, size = 28 }: { icon: SponsorAd['icon']; colo
 
 export function SponsorSlot({ slot }: { slot: 1 | 2 | 3 | 4 | 5 | 6 }) {
   const sponsorsEnabled = useAppStore((s) => s.sponsorsEnabled);
-  const ad = MOCK_SPONSOR_ADS.find((a) => a.slot === slot && a.enabled);
+  const { campaigns } = useIncidentData();
+  const campaign = campaigns.find((c) => c.placement === `slot-${slot}` && c.status === 'active');
 
-  if (!sponsorsEnabled || !ad) return null;
+  if (!sponsorsEnabled || !campaign) return null;
+
+  // Map CampaignRow to display fields (styling defaults until DB schema carries visual overrides)
+  const ad = {
+    name: campaign.display_name,
+    tagline: campaign.tagline ?? '',
+    description: undefined as string | undefined,
+    websiteUrl: campaign.link_url ?? '',
+    size: campaign.size as SponsorAd['size'],
+    bgColor: '#1a2332',
+    textColor: '#e2e8f0',
+    accentColor: '#c9a84c',
+    icon: 'shield' as SponsorAd['icon'],
+  };
 
   if (ad.size === 'banner') {
     return (

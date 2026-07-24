@@ -6,7 +6,7 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--host"],
       "port": 5173,
-      "cwd": "apps/public-web"
+      "cwd": "apps\\public-web"
     },
     {
       "name": "supabase",

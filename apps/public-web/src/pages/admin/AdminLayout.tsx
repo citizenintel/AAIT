@@ -1,5 +1,6 @@
+import { useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { useAppStore } from '../../store/app-store';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 const NAV_ITEMS = [
   { to: '/admin', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', end: true },
@@ -19,15 +20,20 @@ const NAV_ITEMS = [
 
 export function AdminLayout() {
   const navigate = useNavigate();
-  const user = useAppStore((s) => s.auth.user);
-  const logout = useAppStore((s) => s.logout);
+  const { isAuthenticated, user, signOut } = useAuth();
+
+  useEffect(() => {
+    if (!isAuthenticated) navigate('/login');
+  }, [isAuthenticated, navigate]);
+
+  if (!isAuthenticated) return null;
 
   return (
     <div className="admin-layout">
       <aside className="admin-sidebar">
         <div className="admin-sidebar-brand" onClick={() => navigate('/')}>
-          <div className="admin-brand-title">AAIT</div>
-          <div className="admin-brand-sub">Admin</div>
+          <div className="admin-brand-title">Intelligence Twin</div>
+          <div className="admin-brand-sub">Admin Console</div>
         </div>
 
         <nav className="admin-nav">
@@ -54,7 +60,7 @@ export function AdminLayout() {
               <div className="admin-user-role">{user?.role?.replace(/_/g, ' ')}</div>
             </div>
           </div>
-          <button className="admin-logout" onClick={() => { logout(); navigate('/'); }}>
+          <button className="admin-logout" onClick={async () => { await signOut(); navigate('/'); }}>
             Sign out
           </button>
         </div>

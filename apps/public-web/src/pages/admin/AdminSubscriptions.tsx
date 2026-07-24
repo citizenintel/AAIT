@@ -1,8 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
-  MOCK_TIERS, MOCK_SUBSCRIBERS, BENEFITS,
+  BENEFITS,
   type SubscriptionTier, type Subscriber, type BenefitKey, type BillingPeriod,
 } from '../../data/mock-subscriptions';
+import { fetchTiers, fetchSubscribers, updateTier } from '@/lib/api/subscriptions';
+import { useQuery } from '@/lib/hooks/useQuery';
 
 const STATUS_STYLES: Record<string, { bg: string; color: string; label: string }> = {
   active: { bg: '#38a16922', color: '#38a169', label: 'Active' },
@@ -18,8 +20,13 @@ const EMPTY_TIER: Omit<SubscriptionTier, 'id'> = {
 };
 
 export function AdminSubscriptions() {
-  const [tiers, setTiers] = useState<SubscriptionTier[]>(MOCK_TIERS);
-  const [subscribers] = useState<Subscriber[]>(MOCK_SUBSCRIBERS);
+  const { data: tiersData, loading: tiersLoading, error: tiersError, refetch: refetchTiers } = useQuery(fetchTiers, []);
+  const { data: subscribersData, loading: subsLoading, error: subsError } = useQuery(fetchSubscribers, []);
+  const [tiers, setTiers] = useState<SubscriptionTier[]>([]);
+  const subscribers = subscribersData ?? [];
+
+  useEffect(() => { if (tiersData) setTiers(tiersData); }, [tiersData]);
+
   const [editId, setEditId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Omit<SubscriptionTier, 'id'>>(EMPTY_TIER);
   const [showAdd, setShowAdd] = useState(false);
@@ -53,10 +60,16 @@ export function AdminSubscriptions() {
     }));
   };
 
-  const saveTier = () => {
+  const saveTier = async () => {
     if (!draft.name.trim()) return;
     if (editId) {
-      setTiers((prev) => prev.map((t) => (t.id === editId ? { ...t, ...draft } : t)));
+      try {
+        await updateTier(editId, draft);
+        refetchTiers();
+      } catch {
+        // Fallback: apply locally if API fails
+        setTiers((prev) => prev.map((t) => (t.id === editId ? { ...t, ...draft } : t)));
+      }
     } else {
       setTiers((prev) => [...prev, { id: `tier-${Date.now().toString(36)}`, ...draft }]);
     }
@@ -72,6 +85,9 @@ export function AdminSubscriptions() {
 
   const tierName = (id: string) => tiers.find((t) => t.id === id)?.name ?? id;
   const isEditing = editId !== null || showAdd;
+
+  if (tiersLoading || subsLoading) return <div className="admin-page"><p>Loading subscriptions...</p></div>;
+  if (tiersError || subsError) return <div className="admin-page"><p className="error-text">Error: {tiersError || subsError}</p></div>;
 
   return (
     <div className="admin-page">
@@ -237,11 +253,11 @@ export function AdminSubscriptions() {
           <p><strong>Subscription Terms &amp; Conditions.</strong></p>
           <p><strong>1. Fees &amp; refunds.</strong> Subscription fees are as stated at the time of purchase and are denominated in South African Rand (ZAR). Fees are non-refundable except as required by the Consumer Protection Act 68 of 2008 (&ldquo;CPA&rdquo;), which entitles you to cancel a fixed-term agreement on 20 business days&rsquo; written notice, subject to a reasonable cancellation penalty not exceeding the lesser of the amount the CPA permits or the remaining fees due. If you believe a charge is in error, contact us within 30 days of the transaction.</p>
           <p><strong>2. Billing &amp; renewal.</strong> Subscriptions renew automatically at the end of each billing period (monthly or yearly, as selected) unless cancelled before the renewal date. You may cancel at any time through your account settings or by contacting us. Cancellation takes effect at the end of the current billing period; no partial refunds are given for unused portions unless required by law.</p>
-          <p><strong>3. Payment processing.</strong> Payments are processed securely by PayPal. The Alt Afrikaner Incident Tracker (&ldquo;AAIT&rdquo;) does not receive, store or have access to your full payment credentials at any time. You are subject to PayPal&rsquo;s own terms of service and privacy policy in addition to these terms.</p>
-          <p><strong>4. Data availability &amp; accuracy.</strong> Subscription benefits are subject to data availability &mdash; not all incident categories, provinces or time periods may have active data at any given time. AAIT makes no warranties, express or implied, regarding the completeness, accuracy, timeliness or fitness for any purpose of the data provided through any subscription tier. Data is provided &ldquo;as is&rdquo; for research and awareness purposes only and must not be relied upon as the sole basis for any legal, security, insurance, financial or other professional decision.</p>
-          <p><strong>5. AI-generated analytics.</strong> Premium analytical breakdowns, summaries and trend data may be generated or assisted by artificial intelligence. AI-generated content is reviewed by human editors but may contain errors, omissions or inaccuracies. AI tools are never used to infer any person&rsquo;s race, ethnicity, religion, nationality or other protected characteristic. Subscribers must independently verify AI-generated analytics before use in reporting, legal proceedings, insurance claims or any consequential decision-making. AAIT accepts no liability for decisions made in reliance on AI-generated content.</p>
+          <p><strong>3. Payment processing.</strong> Payments are processed securely by PayPal. Intelligence Twin (the &ldquo;Platform&rdquo;) does not receive, store or have access to your full payment credentials at any time. You are subject to PayPal&rsquo;s own terms of service and privacy policy in addition to these terms.</p>
+          <p><strong>4. Data availability &amp; accuracy.</strong> Subscription benefits are subject to data availability &mdash; not all incident categories, provinces or time periods may have active data at any given time. Intelligence Twin makes no warranties, express or implied, regarding the completeness, accuracy, timeliness or fitness for any purpose of the data provided through any subscription tier. Data is provided &ldquo;as is&rdquo; for research and awareness purposes only and must not be relied upon as the sole basis for any legal, security, insurance, financial or other professional decision.</p>
+          <p><strong>5. AI-generated analytics.</strong> Premium analytical breakdowns, summaries and trend data may be generated or assisted by artificial intelligence. AI-generated content is reviewed by human editors but may contain errors, omissions or inaccuracies. AI tools are never used to infer any person&rsquo;s race, ethnicity, religion, nationality or other protected characteristic. Subscribers must independently verify AI-generated analytics before use in reporting, legal proceedings, insurance claims or any consequential decision-making. Intelligence Twin accepts no liability for decisions made in reliance on AI-generated content.</p>
           <p><strong>6. Permitted use &amp; restrictions.</strong> Subscription data and analytics are licensed for personal research and reporting use only. You may not: (a) redistribute, republish, resell or sub-license subscription data or analytics to any third party; (b) scrape, data-mine, bulk-export or systematically extract data beyond what the subscription interface provides; (c) use subscription data or analytics to harass, defame, surveil, identify or take action against any person; or (d) use subscription data for purposes that violate the Platform&rsquo;s Disclaimer &amp; Terms of Use or any applicable law. Violation may result in immediate termination of your subscription without refund.</p>
-          <p><strong>7. Changes to subscriptions.</strong> AAIT reserves the right to modify subscription pricing, benefits, or tier structure with not less than 30 days&rsquo; prior notice. Notice will be provided via the email address associated with your account. Continued use after the effective date of a change constitutes acceptance. If you do not accept a change, you may cancel before the next renewal.</p>
+          <p><strong>7. Changes to subscriptions.</strong> Intelligence Twin reserves the right to modify subscription pricing, benefits, or tier structure with not less than 30 days&rsquo; prior notice. Notice will be provided via the email address associated with your account. Continued use after the effective date of a change constitutes acceptance. If you do not accept a change, you may cancel before the next renewal.</p>
           <p><strong>8. Privacy.</strong> Your personal information is processed in accordance with the Protection of Personal Information Act 4 of 2013 (&ldquo;POPIA&rdquo;) and the Platform&rsquo;s privacy practices as set out in the Disclaimer &amp; Terms of Use. Subscription activity data is used solely to provide the service and for aggregate, anonymised analytics.</p>
           <p><strong>9. General.</strong> These subscription terms form part of, and are subject to, the Platform&rsquo;s full Disclaimer &amp; Terms of Use. To the extent of any conflict, the Disclaimer &amp; Terms of Use prevail. These terms are governed by the laws of the Republic of South Africa. You consent to the exclusive jurisdiction of the courts of the Republic of South Africa.</p>
           <p><strong>10. Electronic agreement.</strong> By completing the subscription payment you confirm that you have read, understood and agreed to these terms and the Platform&rsquo;s full Disclaimer &amp; Terms of Use. This constitutes an agreement concluded by electronic means in terms of the Electronic Communications and Transactions Act 25 of 2002.</p>

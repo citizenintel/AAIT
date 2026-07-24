@@ -1,6 +1,8 @@
-import { useState, Fragment } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { useAppStore } from '../../store/app-store';
-import { MOCK_SUBMISSIONS, summariseSubmission, type Submission, type SubmissionSummary } from '../../data/mock-submissions';
+import { fetchSubmissions, updateSubmissionStatus, summariseWithAI } from '@/lib/api/submissions';
+import { useQuery, useMutation } from '@/lib/hooks/useQuery';
+import type { SubmissionSummary } from '../../data/mock-submissions';
 import { MODULE_META } from '../../data/mock-incidents';
 
 const formatBytes = (b: number) => (b < 1024 ? `${b} B` : b < 1024 * 1024 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
@@ -21,7 +23,10 @@ const QUICK_REPLIES = [
 ];
 
 export function AdminSubmissions() {
-  const [subs] = useState<Submission[]>(MOCK_SUBMISSIONS);
+  const { data: rawSubs, loading, error, refetch } = useQuery(fetchSubmissions);
+  const statusMutation = useMutation(updateSubmissionStatus);
+  const summariseMutation = useMutation(summariseWithAI);
+
   const [openId, setOpenId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [sentTo, setSentTo] = useState<Record<string, boolean>>({});
@@ -29,14 +34,44 @@ export function AdminSubmissions() {
   const [sharePermitted, setSharePermitted] = useState<Record<string, boolean>>({});
   const [staged, setStaged] = useState<Record<string, boolean>>({});
 
+  // Map SubmissionRow[] to the shape the template expects
+  const subs = useMemo(() => (rawSubs ?? []).map((row) => {
+    const attachmentCount = row.evidence_items?.length ?? 0;
+    const attachmentBytes = row.evidence_items?.reduce((s, e) => s + e.file_size_bytes, 0) ?? 0;
+    return {
+      id: row.id,
+      title: row.narrative?.slice(0, 60) ?? row.category?.label_en ?? 'Untitled',
+      status: row.status,
+      reporter: row.contributor?.display_name ?? 'Anonymous',
+      attachments: attachmentCount,
+      attachmentBytes,
+      oversized: attachmentBytes > 1048576,
+      retentionExpiry: attachmentBytes > 1048576
+        ? new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
+        : null,
+      submitted: row.submitted_at ?? row.created_at,
+      town: row.location?.town ?? '',
+      province: row.location?.province ?? '',
+      dateOccurred: row.occurred_at ?? '',
+      knowledgeType: row.knowledge_type,
+      narrative: row.narrative ?? '',
+      motives: row.reported_motive_statements?.split(', ').filter(Boolean) ?? [],
+    };
+  }), [rawSubs]);
+
   // Gating: admins have everything. In production, moderators need the assigned
   // `ai_summarise` / `view_sensitive` permissions — checked server-side.
   const user = useAppStore((s) => s.auth.user);
   const isAdmin = user?.role?.includes('admin') ?? false;
 
   const openReview = (id: string) => { setOpenId(openId === id ? null : id); setMessage(''); };
-  const sendReply = (sub: Submission) => { if (message.trim()) setSentTo((p) => ({ ...p, [sub.id]: true })); };
-  const runSummary = (sub: Submission) => setSummaries((p) => ({ ...p, [sub.id]: summariseSubmission(sub) }));
+  const sendReply = (sub: typeof subs[number]) => { if (message.trim()) setSentTo((p) => ({ ...p, [sub.id]: true })); };
+  const runSummary = async (sub: typeof subs[number]) => {
+    try {
+      const result = await summariseMutation.execute(sub.id);
+      setSummaries((p) => ({ ...p, [sub.id]: result }));
+    } catch { /* error is surfaced via summariseMutation.error */ }
+  };
 
   return (
     <div className="admin-page">
@@ -44,6 +79,9 @@ export function AdminSubmissions() {
         <h1>Submissions</h1>
         <p>Citizen reports awaiting editorial review. Nothing publishes automatically. The AI summary tool drafts a public map entry and keeps sensitive data separate, for admin eyes only.</p>
       </div>
+
+      {loading && <div className="import-msg" style={{ marginBottom: 16 }}>Loading submissions…</div>}
+      {error && <div className="import-msg warning" style={{ marginBottom: 16 }}><strong>Error:</strong> {error}</div>}
 
       <div className="stats-grid" style={{ marginBottom: 24 }}>
         <div className="stat-card"><div className="stat-value">{subs.filter((s) => s.status === 'pending_review').length}</div><div className="stat-label">Pending</div></div>
@@ -72,8 +110,8 @@ export function AdminSubmissions() {
                 <Fragment key={sub.id}>
                   <tr>
                     <td><code className="id-code">{sub.id}</code></td>
-                    <td className="td-title">{sub.title}<span className="demo-tag">DEMO</span></td>
-                    <td style={{ fontSize: 12 }}>{sub.reporter.replace(' DEMO', '')}{sub.reporter.includes('DEMO') && <span className="demo-tag">DEMO</span>}</td>
+                    <td className="td-title">{sub.title}</td>
+                    <td style={{ fontSize: 12 }}>{sub.reporter}</td>
                     <td><span className="table-badge" style={{ background: st.bg, color: st.color }}>{st.label}</span></td>
                     <td>{sub.attachments}{sub.oversized && <span className="table-badge" style={{ background: '#d69e2e22', color: '#d69e2e', marginLeft: 4 }}>⚠</span>}</td>
                     <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{sub.submitted}</td>
@@ -183,7 +221,7 @@ export function AdminSubmissions() {
       </div>
 
       <div className="admin-note">
-        All submissions are synthetic DEMO data. In production the summariser runs on a free server-side model (key server-side) under strict PII-separation rules; sensitive data stays in the identity vault and is shared only with users an admin has permitted.
+        The summariser runs on a free server-side model (key server-side) under strict PII-separation rules; sensitive data stays in the identity vault and is shared only with users an admin has permitted.
       </div>
     </div>
   );

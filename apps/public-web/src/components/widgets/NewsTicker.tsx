@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { MOCK_NEWS, sourceDomain } from '../../data/mock-news';
-import { MOCK_INCIDENTS, MODULE_META } from '../../data/mock-incidents';
+import { MODULE_META } from '../../data/mock-incidents';
+import { useIncidentData } from '../../lib/hooks/useIncidentData';
 import { SponsorSlot } from './SponsorSlot';
 
 function timeAgo(dateStr: string) {
@@ -12,11 +13,12 @@ function timeAgo(dateStr: string) {
 }
 
 function LivePanel() {
+  const { incidents } = useIncidentData();
   const stats = useMemo(() => {
-    const critical = MOCK_INCIDENTS.filter((i) => i.severity === 'critical').length;
+    const critical = incidents.filter((i) => i.severity === 'critical').length;
     const sources = new Set(MOCK_NEWS.map((n) => n.source)).size;
-    return { total: MOCK_INCIDENTS.length, critical, sources, articles: MOCK_NEWS.length };
-  }, []);
+    return { total: incidents.length, critical, sources, articles: MOCK_NEWS.length };
+  }, [incidents]);
 
   return (
     <div className="bottom-panel-live">
@@ -47,11 +49,12 @@ function LivePanel() {
 }
 
 function RecentActivity() {
+  const { incidents } = useIncidentData();
   const recent = useMemo(() => {
-    return [...MOCK_INCIDENTS]
+    return [...incidents]
       .sort((a, b) => new Date(b.dateReported).getTime() - new Date(a.dateReported).getTime())
       .slice(0, 4);
-  }, []);
+  }, [incidents]);
 
   const sevColours: Record<string, string> = { critical: '#c53030', high: '#dd6b20', medium: '#d69e2e', low: '#3182ce' };
 

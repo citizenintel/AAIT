@@ -16,12 +16,12 @@ export function AboutPage() {
             Back to map
           </button>
 
-          <h1>About Alt Afrikaner Incident Tracker</h1>
+          <h1>About Intelligence Twin</h1>
 
           <section>
             <h2>Mission</h2>
             <p>
-              The Alt Afrikaner Incident Tracker (AAIT) is a map-first, evidence-led citizen-intelligence platform
+              Intelligence Twin is a map-first, evidence-led situational awareness platform
               for South Africa. We track, verify, and visualise incidents that mainstream reporting often
               undercounts, fragments, or ignores — from farm attacks to infrastructure failures, civil unrest
               to environmental events.
@@ -36,23 +36,23 @@ export function AboutPage() {
             <h2>What we track</h2>
             <div className="about-modules">
               <div className="about-module">
-                <h3 style={{ color: '#c53030' }}>AAIT — Farm &amp; Rural</h3>
+                <h3 style={{ color: 'var(--module-ait)' }}>Farm &amp; Rural Security</h3>
                 <p>Farm attacks, farm murders, smallholding attacks, livestock theft, rural road attacks, land invasions, and related agricultural security incidents.</p>
               </div>
               <div className="about-module">
-                <h3 style={{ color: '#ed8936' }}>Unrest Watch</h3>
+                <h3 style={{ color: 'var(--module-unrest)' }}>Unrest Watch</h3>
                 <p>Protests, riots, looting, taxi violence, political violence, service delivery protests, and civil unrest events.</p>
               </div>
               <div className="about-module">
-                <h3 style={{ color: '#805ad5' }}>Bias Monitor</h3>
+                <h3 style={{ color: 'var(--module-bias)' }}>Bias Monitor</h3>
                 <p>Hate crimes, xenophobic violence, political intimidation, and incidents where bias indicators are present. Assessed using a structured human-review methodology.</p>
               </div>
               <div className="about-module">
-                <h3 style={{ color: '#3182ce' }}>Infrastructure Watch</h3>
+                <h3 style={{ color: 'var(--module-infrastructure)' }}>Infrastructure Watch</h3>
                 <p>Electricity disruptions, water failures, telecom outages, municipal service breakdowns, and sabotage events.</p>
               </div>
               <div className="about-module">
-                <h3 style={{ color: '#38a169' }}>Natural Events</h3>
+                <h3 style={{ color: 'var(--module-natural)' }}>Natural Events</h3>
                 <p>Fires, floods, droughts, severe storms, and environmental incidents affecting communities.</p>
               </div>
             </div>

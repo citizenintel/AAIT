@@ -1,17 +1,28 @@
 import { useState } from 'react';
-import { MOCK_RSS_FEEDS, type RssFeedConfig } from '../../data/mock-news';
+import type { RssFeedConfig } from '../../data/mock-news';
+import { fetchRssFeeds, updateRssFeed, createRssFeed, deleteRssFeed } from '@/lib/api/news-feeds';
+import { useQuery } from '@/lib/hooks/useQuery';
 
 export function AdminFeeds() {
-  const [feeds, setFeeds] = useState<RssFeedConfig[]>(MOCK_RSS_FEEDS);
+  const { data: feeds, loading, error, refetch } = useQuery(fetchRssFeeds, []);
   const [showAdd, setShowAdd] = useState(false);
 
-  const toggleFeed = (id: string) => {
-    setFeeds(prev => prev.map(f => f.id === id ? { ...f, enabled: !f.enabled } : f));
+  const toggleFeed = async (id: string) => {
+    const feed = (feeds ?? []).find(f => f.id === id);
+    if (!feed) return;
+    try {
+      await updateRssFeed(id, { enabled: !feed.enabled });
+      refetch();
+    } catch { /* errors surfaced on next refetch */ }
   };
 
-  const enabledCount = feeds.filter(f => f.enabled).length;
-  const totalArticles = feeds.reduce((s, f) => s + f.articleCount, 0);
-  const categories = [...new Set(feeds.map(f => f.category))];
+  const feedList = feeds ?? [];
+  const enabledCount = feedList.filter(f => f.enabled).length;
+  const totalArticles = feedList.reduce((s, f) => s + f.articleCount, 0);
+  const categories = [...new Set(feedList.map(f => f.category))];
+
+  if (loading) return <div className="admin-page"><p>Loading feeds...</p></div>;
+  if (error) return <div className="admin-page"><p className="error-text">Error loading feeds: {error}</p></div>;
 
   const timeAgo = (dateStr: string | null) => {
     if (!dateStr) return 'never';
@@ -35,7 +46,7 @@ export function AdminFeeds() {
           <div className="stat-label">Active feeds</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{feeds.length}</div>
+          <div className="stat-value">{feedList.length}</div>
           <div className="stat-label">Total feeds</div>
         </div>
         <div className="stat-card">
@@ -93,7 +104,7 @@ export function AdminFeeds() {
             </tr>
           </thead>
           <tbody>
-            {feeds.map(feed => (
+            {feedList.map(feed => (
               <tr key={feed.id}>
                 <td>
                   <label className="toggle-switch" style={{ margin: 0 }}>

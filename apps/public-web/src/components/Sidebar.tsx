@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useAppStore } from '../store/app-store';
-import { MOCK_INCIDENTS, MODULE_META } from '../data/mock-incidents';
+import { MODULE_META } from '../data/mock-incidents';
+import { useIncidentData } from '@/lib/hooks/useIncidentData';
 import type { ModuleKey } from '../data/types';
 import { SponsorSlot } from './widgets/SponsorSlot';
 
@@ -65,6 +66,7 @@ const LAYER_GROUPS: { id: ModuleKey; items: LayerItem[] }[] = [
 ];
 
 export function Sidebar() {
+  const { incidents } = useIncidentData();
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['ait']));
   const modules = useAppStore((s) => s.filters.modules);
   const categories = useAppStore((s) => s.filters.categories);
@@ -73,14 +75,14 @@ export function Sidebar() {
 
   const moduleCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const inc of MOCK_INCIDENTS) {
+    for (const inc of incidents) {
       counts[inc.module] = (counts[inc.module] ?? 0) + 1;
     }
     return counts;
-  }, []);
+  }, [incidents]);
 
   const infographics = useMemo(() => {
-    const active = MOCK_INCIDENTS.filter((inc) => modules[inc.module]);
+    const active = incidents.filter((inc) => modules[inc.module]);
     const byCat: Record<string, number> = {};
     const bySev: Record<string, number> = {};
     for (const inc of active) {
@@ -93,13 +95,13 @@ export function Sidebar() {
     const sevColours: Record<string, string> = { critical: '#c53030', high: '#dd6b20', medium: '#d69e2e', low: '#3182ce' };
     const sevData = sevOrder.map((k) => ({ key: k, count: bySev[k] ?? 0, colour: sevColours[k] ?? '#718096' })).filter((s) => s.count > 0);
     return { topCats, maxCat, sevData, total: active.length };
-  }, [modules]);
+  }, [incidents, modules]);
 
   const fmtCat = (s: string) => s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 
-  // "The Last 24 Hours on AAIT" summary — reflects the modules currently switched on.
+  // "The Last 24 Hours" summary — reflects the modules currently switched on.
   const summary = useMemo(() => {
-    const active = MOCK_INCIDENTS.filter((inc) => modules[inc.module]);
+    const active = incidents.filter((inc) => modules[inc.module]);
     let deceased = 0, injured = 0, critical = 0, verified = 0;
     const byProvince: Record<string, number> = {};
     for (const inc of active) {
@@ -112,7 +114,7 @@ export function Sidebar() {
     const topProvinces = Object.entries(byProvince).sort((a, b) => b[1] - a[1]).slice(0, 3);
     const maxProv = topProvinces[0]?.[1] ?? 1;
     return { total: active.length, critical, deceased, injured, verified, topProvinces, maxProv };
-  }, [modules]);
+  }, [incidents, modules]);
 
   const verifiedPct = summary.total > 0 ? Math.round((summary.verified / summary.total) * 100) : 0;
 
@@ -206,7 +208,7 @@ export function Sidebar() {
       <SponsorSlot slot={2} />
 
       <div className="sidebar-summary">
-        <div className="sidebar-summary-title">The Last 24 Hours on AAIT</div>
+        <div className="sidebar-summary-title">The Last 24 Hours</div>
         <div className="summary-grid">
           <div className="summary-cell">
             <div className="summary-value">{summary.total}</div>

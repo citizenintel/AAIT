@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { MOCK_INCIDENTS } from '../../data/mock-incidents';
+import { useIncidentData } from '../../lib/hooks/useIncidentData';
 
 export function TrendLine() {
+  const { incidents } = useIncidentData();
   const data = useMemo(() => {
     const days: Record<string, number> = {};
     const today = new Date('2026-07-20');
@@ -10,14 +11,14 @@ export function TrendLine() {
       d.setDate(d.getDate() - i);
       days[d.toISOString().slice(0, 10)] = 0;
     }
-    for (const inc of MOCK_INCIDENTS) {
+    for (const inc of incidents) {
       const current = days[inc.dateOccurred];
       if (current !== undefined) {
         days[inc.dateOccurred] = current + 1;
       }
     }
     return Object.entries(days).map(([date, count]) => ({ date, count }));
-  }, []);
+  }, [incidents]);
 
   const maxCount = Math.max(...data.map(d => d.count), 1);
   const w = 260;

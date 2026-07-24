@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { TopBar } from '../components/TopBar';
 import { Footer } from '../components/Footer';
 import { MODULE_META } from '../data/mock-incidents';
+import { createSubmission } from '@/lib/api/submissions';
+import { uploadEvidence } from '@/lib/api/evidence';
 
 const SOFT_LIMIT_BYTES = 1024 * 1024; // 1 MB — files above this are held for 7 days then purged
 const formatBytes = (b: number) => (b < 1024 ? `${b} B` : b < 1024 * 1024 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1024 / 1024).toFixed(2)} MB`);
@@ -43,6 +45,9 @@ export function ReportPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>('type');
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [referenceId, setReferenceId] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState('');
@@ -103,8 +108,50 @@ export function ReportPage() {
     if (idx > 0) setStep(STEPS[idx - 1]!.key);
   };
 
-  const handleSubmit = () => {
-    setSubmitted(true);
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      const narrative = [
+        form.title,
+        form.description,
+        form.notes ? `\n\nAdditional notes: ${form.notes}` : '',
+      ].join('\n\n').trim();
+
+      const sourceUrls = form.sourceUrl ? [form.sourceUrl] : [];
+
+      const id = await createSubmission({
+        category_slug: form.module,
+        knowledge_type: form.knowledgeType,
+        occurred_at: form.dateOccurred || undefined,
+        narrative,
+        province: form.province || undefined,
+        town: form.town || undefined,
+        reported_motive_statements: form.motives.length > 0
+          ? form.motives.map(m => MOTIVE_OPTIONS.find(o => o.value === m)?.label ?? m).join(', ')
+          : undefined,
+        source_urls: sourceUrls.length > 0 ? sourceUrls : undefined,
+        declared_truthful: form.declaration,
+        uncertainty_disclosed: true,
+        evidence_unaltered: true,
+        accepts_review: true,
+      });
+
+      for (const file of files) {
+        try {
+          await uploadEvidence(file, id);
+        } catch {
+          // File upload failure shouldn't block submission
+        }
+      }
+
+      setReferenceId(id);
+      setSubmitted(true);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Submission failed');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -122,7 +169,7 @@ export function ReportPage() {
               Citizen reports never publish automatically — an editor must verify and approve before publication.
             </p>
             <p style={{ color: 'var(--text-muted)', marginTop: 8, fontSize: 13 }}>
-              Reference: SUB-{Date.now().toString(36).toUpperCase()}
+              Reference: {referenceId}
             </p>
             <div style={{ marginTop: 32, display: 'flex', gap: 12, justifyContent: 'center' }}>
               <button className="btn btn-primary" onClick={() => navigate('/')}>Back to map</button>
@@ -360,6 +407,8 @@ export function ReportPage() {
             </div>
           )}
 
+          {submitError && <div className="login-error" style={{ marginBottom: 12 }}>{submitError}</div>}
+
           {/* Navigation */}
           <div className="wizard-nav">
             {stepIndex > 0 && <button className="btn btn-secondary" onClick={goBack}>Back</button>}
@@ -369,8 +418,8 @@ export function ReportPage() {
                 Continue
               </button>
             ) : (
-              <button className="btn btn-primary" disabled={!canProceed()} onClick={handleSubmit}>
-                Submit report
+              <button className="btn btn-primary" disabled={!canProceed() || submitting} onClick={handleSubmit}>
+                {submitting ? 'Submitting...' : 'Submit report'}
               </button>
             )}
           </div>

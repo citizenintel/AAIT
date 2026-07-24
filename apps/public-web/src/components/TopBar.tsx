@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore } from '../store/app-store';
-import { MOCK_INCIDENTS } from '../data/mock-incidents';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { useIncidentData } from '@/lib/hooks/useIncidentData';
 
 export function TopBar() {
+  const { incidents } = useIncidentData();
   const navigate = useNavigate();
   const location = useLocation();
-  const isAuth = useAppStore((s) => s.auth.isAuthenticated);
-  const user = useAppStore((s) => s.auth.user);
+  const { isAuthenticated: isAuth, user } = useAuth();
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
   const searchQuery = useAppStore((s) => s.filters.searchQuery);
 
@@ -34,11 +35,11 @@ export function TopBar() {
     setSearchQuery(value);
   };
 
-  const dismissedIds = useAppStore((s) => s.alerts.dismissedIds);
+  const dismissedIds = useAppStore((s) => s.dismissedAlertIds);
   const dismissAlert = useAppStore((s) => s.dismissAlert);
   const dismissAllAlerts = useAppStore((s) => s.dismissAllAlerts);
 
-  const criticalAlerts = MOCK_INCIDENTS.filter(i => i.severity === 'critical');
+  const criticalAlerts = incidents.filter(i => i.severity === 'critical');
   const activeAlerts = criticalAlerts.filter(i => !dismissedIds[i.id]);
   const activeCount = activeAlerts.length;
   const isMap = location.pathname === '/';
@@ -46,8 +47,8 @@ export function TopBar() {
   return (
     <header className="topbar">
       <div className="topbar-brand" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
-        <div className="topbar-title">AAIT</div>
-        <div className="topbar-context">Alt Afrikaner Incident Tracker — map-first, evidence-led citizen intelligence for South Africa</div>
+        <div className="topbar-title">Intelligence Twin</div>
+        <div className="topbar-context">Live situational awareness for South Africa</div>
       </div>
 
       <div className="topbar-spacer" />

@@ -1,13 +1,15 @@
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app-store';
-import { MOCK_INCIDENTS, SEVERITY_META, VERIFICATION_META, MODULE_META } from '../data/mock-incidents';
+import { SEVERITY_META, VERIFICATION_META, MODULE_META } from '../data/mock-incidents';
+import { useIncidentData } from '@/lib/hooks/useIncidentData';
 
 export function IncidentDetail() {
+  const { incidents } = useIncidentData();
   const selectedId = useAppStore((s) => s.ui.selectedIncidentId);
   const setSelected = useAppStore((s) => s.setSelectedIncident);
   const navigate = useNavigate();
 
-  const incident = MOCK_INCIDENTS.find(i => i.id === selectedId);
+  const incident = incidents.find(i => i.id === selectedId);
   if (!incident) return null;
 
   const sev = SEVERITY_META[incident.severity];

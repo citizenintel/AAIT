@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useAppStore, type WidgetId } from '../../store/app-store';
-import { MOCK_INCIDENTS, MODULE_META, SEVERITY_META, VERIFICATION_META } from '../../data/mock-incidents';
+import { MODULE_META, SEVERITY_META, VERIFICATION_META } from '../../data/mock-incidents';
+import { useIncidentData } from '../../lib/hooks/useIncidentData';
 import { PieChart } from './PieChart';
 import { TrendLine } from './TrendLine';
 import { StatsBar } from './StatsBar';
@@ -10,19 +11,20 @@ import { ProvinceBar } from './ProvinceBar';
 import { SponsorSlot } from './SponsorSlot';
 
 function WidgetRenderer({ id }: { id: WidgetId }) {
+  const { incidents } = useIncidentData();
   const severitySlices = useMemo(() =>
     Object.entries(SEVERITY_META).map(([key, meta]) => ({
       label: meta.label,
-      value: MOCK_INCIDENTS.filter(i => i.severity === key).length,
+      value: incidents.filter(i => i.severity === key).length,
       colour: meta.colour,
-    })), []);
+    })), [incidents]);
 
   const moduleSlices = useMemo(() =>
     Object.entries(MODULE_META).map(([key, meta]) => ({
       label: meta.label,
-      value: MOCK_INCIDENTS.filter(i => i.module === key).length,
+      value: incidents.filter(i => i.module === key).length,
       colour: meta.colour,
-    })), []);
+    })), [incidents]);
 
   const verificationSlices = useMemo(() => {
     const groups: Record<string, { label: string; colour: string; count: number }> = {
@@ -31,14 +33,14 @@ function WidgetRenderer({ id }: { id: WidgetId }) {
       corroborated: { label: 'Corroborated', colour: '#4299e1', count: 0 },
       verified: { label: 'Verified', colour: '#48bb78', count: 0 },
     };
-    for (const inc of MOCK_INCIDENTS) {
+    for (const inc of incidents) {
       if (inc.verification.startsWith('v0') || inc.verification.startsWith('v1')) groups.unverified!.count++;
       else if (inc.verification.startsWith('v2')) groups.plausible!.count++;
       else if (inc.verification.startsWith('v3')) groups.corroborated!.count++;
       else groups.verified!.count++;
     }
     return Object.values(groups).map(g => ({ label: g.label, value: g.count, colour: g.colour }));
-  }, []);
+  }, [incidents]);
 
   switch (id) {
     case 'stats_bar': return <StatsBar />;

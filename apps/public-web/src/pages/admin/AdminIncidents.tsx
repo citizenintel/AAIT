@@ -1,22 +1,25 @@
 import { useState, useMemo } from 'react';
-import { MOCK_INCIDENTS, MODULE_META, SEVERITY_META, VERIFICATION_META } from '../../data/mock-incidents';
+import { MODULE_META, SEVERITY_META, VERIFICATION_META } from '../../data/mock-incidents';
+import { fetchIncidents } from '@/lib/api/incidents';
+import { useQuery } from '@/lib/hooks/useQuery';
 
 export function AdminIncidents() {
   const [search, setSearch] = useState('');
   const [moduleFilter, setModuleFilter] = useState('all');
   const [severityFilter, setSeverityFilter] = useState('all');
+  const { data: incidents, loading } = useQuery(() => fetchIncidents(), []);
 
   const filtered = useMemo(() => {
-    return MOCK_INCIDENTS.filter(inc => {
-      if (moduleFilter !== 'all' && inc.module !== moduleFilter) return false;
+    return (incidents ?? []).filter(inc => {
+      if (moduleFilter !== 'all' && inc.category?.module !== moduleFilter) return false;
       if (severityFilter !== 'all' && inc.severity !== severityFilter) return false;
       if (search) {
         const q = search.toLowerCase();
-        if (!inc.title.toLowerCase().includes(q) && !inc.town.toLowerCase().includes(q) && !inc.province.toLowerCase().includes(q)) return false;
+        if (!inc.title.toLowerCase().includes(q) && !(inc.location?.town ?? '').toLowerCase().includes(q) && !(inc.location?.province ?? '').toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [search, moduleFilter, severityFilter]);
+  }, [search, moduleFilter, severityFilter, incidents]);
 
   return (
     <div className="admin-page">
@@ -35,7 +38,7 @@ export function AdminIncidents() {
           <option value="all">All severities</option>
           {Object.entries(SEVERITY_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
-        <span className="toolbar-count">{filtered.length} of {MOCK_INCIDENTS.length}</span>
+        <span className="toolbar-count">{filtered.length} of {(incidents ?? []).length}</span>
       </div>
 
       <div className="admin-card">
@@ -55,20 +58,20 @@ export function AdminIncidents() {
           </thead>
           <tbody>
             {filtered.map(inc => {
-              const mod = MODULE_META[inc.module];
-              const sev = SEVERITY_META[inc.severity];
-              const ver = VERIFICATION_META[inc.verification];
+              const mod = MODULE_META[inc.category?.module as keyof typeof MODULE_META];
+              const sev = SEVERITY_META[inc.severity as keyof typeof SEVERITY_META];
+              const ver = VERIFICATION_META[inc.verification_state];
               return (
                 <tr key={inc.id}>
                   <td><code className="id-code">{inc.id}</code></td>
-                  <td className="td-title">{inc.title}{inc.isSynthetic && <span className="demo-tag">DEMO</span>}</td>
-                  <td><span style={{ color: mod.colour, fontWeight: 500 }}>{mod.label}</span></td>
-                  <td><span className="table-badge" style={{ background: sev.colour + '22', color: sev.colour }}>{sev.label}</span></td>
+                  <td className="td-title">{inc.title}</td>
+                  <td><span style={{ color: mod?.colour, fontWeight: 500 }}>{mod?.label}</span></td>
+                  <td><span className="table-badge" style={{ background: (sev?.colour ?? '#888') + '22', color: sev?.colour }}>{sev?.label}</span></td>
                   <td><span className="table-badge verification">{ver?.label}</span></td>
-                  <td>{inc.town}, {inc.province}</td>
-                  <td>{inc.dateOccurred}</td>
-                  <td style={{ textAlign: 'center' }}>{inc.sourceCount}</td>
-                  <td style={{ textAlign: 'center' }}>{inc.isSynthetic ? '✓' : ''}</td>
+                  <td>{inc.location?.town}, {inc.location?.province}</td>
+                  <td>{inc.occurred_at}</td>
+                  <td style={{ textAlign: 'center' }}>{inc.source_count}</td>
+                  <td style={{ textAlign: 'center' }}></td>
                 </tr>
               );
             })}

@@ -494,7 +494,7 @@ export const MOCK_INCIDENTS: MockIncident[] = [
 ];
 
 export const MODULE_META = {
-  ait: { label: 'AAIT', colour: '#c53030', description: 'Farm attacks, rural crime, and agricultural security incidents' },
+  ait: { label: 'Farm & Rural', colour: '#c53030', description: 'Farm attacks, rural crime, and agricultural security incidents' },
   unrest: { label: 'Unrest Watch', colour: '#ed8936', description: 'Protests, riots, political violence, and civil unrest' },
   bias: { label: 'Bias Monitor', colour: '#805ad5', description: 'Hate crimes, xenophobia, political intimidation, and bias indicators' },
   infrastructure: { label: 'Infrastructure', colour: '#3182ce', description: 'Electricity, water, telecom, and municipal service failures' },

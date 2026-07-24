@@ -1,18 +1,24 @@
 import { useMemo, useState } from 'react';
-import { MOCK_INCIDENTS, SEVERITY_META, MODULE_META, VERIFICATION_META } from '../../data/mock-incidents';
-
-const PROVINCES = ['All provinces', ...Array.from(new Set(MOCK_INCIDENTS.map((i) => i.province))).sort()];
+import { SEVERITY_META, MODULE_META, VERIFICATION_META } from '../../data/mock-incidents';
+import { fetchIncidents } from '@/lib/api/incidents';
+import { useQuery } from '@/lib/hooks/useQuery';
 
 export function AdminReports() {
+  const { data: incidents, loading, error } = useQuery(fetchIncidents, []);
   const [province, setProvince] = useState('All provinces');
   const [includeSynthetic, setIncludeSynthetic] = useState(true);
 
+  const provinces = useMemo(() => {
+    const all = (incidents ?? []).map((i) => i.location?.province).filter(Boolean) as string[];
+    return ['All provinces', ...Array.from(new Set(all)).sort()];
+  }, [incidents]);
+
   const rows = useMemo(() => {
-    return MOCK_INCIDENTS
-      .filter((i) => province === 'All provinces' || i.province === province)
-      .filter((i) => includeSynthetic || !i.isSynthetic)
-      .sort((a, b) => (a.dateOccurred < b.dateOccurred ? 1 : -1));
-  }, [province, includeSynthetic]);
+    return (incidents ?? [])
+      .filter((i) => province === 'All provinces' || i.location?.province === province)
+      .filter((i) => includeSynthetic || i.is_published)
+      .sort((a, b) => ((a.occurred_at ?? '') < (b.occurred_at ?? '') ? 1 : -1));
+  }, [incidents, province, includeSynthetic]);
 
   const stats = useMemo(() => {
     const bySeverity: Record<string, number> = {};
@@ -20,14 +26,18 @@ export function AdminReports() {
     let deceased = 0, injured = 0;
     for (const i of rows) {
       bySeverity[i.severity] = (bySeverity[i.severity] ?? 0) + 1;
-      byModule[i.module] = (byModule[i.module] ?? 0) + 1;
-      deceased += i.casualties?.deceased ?? 0;
-      injured += i.casualties?.injured ?? 0;
+      const mod = i.category?.module ?? 'unknown';
+      byModule[mod] = (byModule[mod] ?? 0) + 1;
+      deceased += i.fatality_count_confirmed ?? 0;
+      injured += i.injury_count_confirmed ?? 0;
     }
     return { bySeverity, byModule, deceased, injured };
   }, [rows]);
 
   const generatedAt = new Date().toLocaleString('en-ZA', { dateStyle: 'long', timeStyle: 'short' });
+
+  if (loading) return <div className="admin-page"><p>Loading report data...</p></div>;
+  if (error) return <div className="admin-page"><p className="error-text">Error loading data: {error}</p></div>;
 
   return (
     <div className="admin-page">
@@ -41,7 +51,7 @@ export function AdminReports() {
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Province</label>
             <select className="form-input" value={province} onChange={(e) => setProvince(e.target.value)}>
-              {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
+              {provinces.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
           <label className="toggle-switch" style={{ alignSelf: 'flex-end', marginBottom: 6 }}>
@@ -62,7 +72,7 @@ export function AdminReports() {
       <div className="report-document">
         <div className="report-doc-header">
           <div>
-            <div className="report-doc-brand">Alt Afrikaner Incident Tracker</div>
+            <div className="report-doc-brand">Intelligence Twin</div>
             <h2 className="report-doc-title">Incident Report</h2>
           </div>
           <div className="report-doc-meta">
@@ -108,13 +118,13 @@ export function AdminReports() {
             <tbody>
               {rows.map((i) => (
                 <tr key={i.id}>
-                  <td>{i.dateOccurred}</td>
-                  <td>{MODULE_META[i.module]?.label ?? i.module}</td>
-                  <td style={{ textTransform: 'capitalize' }}>{SEVERITY_META[i.severity]?.label ?? i.severity}</td>
-                  <td>{i.town}</td>
-                  <td>{i.province}</td>
-                  <td>{VERIFICATION_META[i.verification]?.label ?? i.verification}</td>
-                  <td>{(i.casualties?.deceased ?? 0)}D / {(i.casualties?.injured ?? 0)}I</td>
+                  <td>{i.occurred_at ?? ''}</td>
+                  <td>{MODULE_META[i.category?.module as keyof typeof MODULE_META]?.label ?? i.category?.module ?? ''}</td>
+                  <td style={{ textTransform: 'capitalize' }}>{SEVERITY_META[i.severity as keyof typeof SEVERITY_META]?.label ?? i.severity}</td>
+                  <td>{i.location?.town ?? ''}</td>
+                  <td>{i.location?.province ?? ''}</td>
+                  <td>{VERIFICATION_META[i.verification_state as keyof typeof VERIFICATION_META]?.label ?? i.verification_state}</td>
+                  <td>{(i.fatality_count_confirmed ?? 0)}D / {(i.injury_count_confirmed ?? 0)}I</td>
                 </tr>
               ))}
             </tbody>
@@ -122,7 +132,7 @@ export function AdminReports() {
         </div>
 
         <div className="report-doc-footer">
-          Alt Afrikaner Incident Tracker · Mapped. Sourced. Reviewed. · This report contains synthetic test data unless stated otherwise. Not for distribution.
+          Intelligence Twin · Mapped. Sourced. Reviewed. · This report contains synthetic test data unless stated otherwise. Not for distribution.
         </div>
       </div>
     </div>

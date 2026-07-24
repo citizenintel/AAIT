@@ -1,13 +1,15 @@
 import { useMemo } from 'react';
-import { MOCK_INCIDENTS, MODULE_META } from '../../data/mock-incidents';
+import { MODULE_META } from '../../data/mock-incidents';
+import { useIncidentData } from '../../lib/hooks/useIncidentData';
 
 export function CasualtiesCard() {
+  const { incidents } = useIncidentData();
   const data = useMemo(() => {
     let totalDeceased = 0;
     let totalInjured = 0;
     const byModule: Record<string, { deceased: number; injured: number }> = {};
 
-    for (const inc of MOCK_INCIDENTS) {
+    for (const inc of incidents) {
       const d = inc.casualties?.deceased ?? 0;
       const inj = inc.casualties?.injured ?? 0;
       totalDeceased += d;
@@ -20,7 +22,7 @@ export function CasualtiesCard() {
     }
 
     return { totalDeceased, totalInjured, byModule };
-  }, []);
+  }, [incidents]);
 
   return (
     <div className="widget-casualties">

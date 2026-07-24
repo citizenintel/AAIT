@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { MOCK_INCIDENTS, SEVERITY_META, VERIFICATION_META, MODULE_META } from '../../data/mock-incidents';
+import { SEVERITY_META, VERIFICATION_META, MODULE_META, type MockIncident } from '../../data/mock-incidents';
 import { useAppStore } from '../../store/app-store';
+import { useIncidentData } from '../../lib/hooks/useIncidentData';
 
 // Satellite imagery + place labels. Reused for the flat "Satellite" view and as the
 // drape for the "3D" terrain view (a fresh object per key so setStyle always reprocesses).
@@ -108,6 +109,7 @@ const MEASURE_LINE_LAYER = 'measure-line';
 const MEASURE_POINT_LAYER = 'measure-points';
 
 export function MapView() {
+  const { incidents } = useIncidentData();
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
@@ -124,7 +126,7 @@ export function MapView() {
   const setSelectedIncident = useAppStore((s) => s.setSelectedIncident);
 
   const filteredIncidents = useMemo(() => {
-    return MOCK_INCIDENTS.filter((inc) => {
+    return incidents.filter((inc) => {
       if (!filters.modules[inc.module]) return false;
       if (!filters.showSynthetic && inc.isSynthetic) return false;
       if (!filters.severities[inc.severity]) return false;
@@ -137,7 +139,7 @@ export function MapView() {
       if (Object.keys(filters.categories).length > 0 && filters.categories[catKey] === false) return false;
       return true;
     });
-  }, [filters]);
+  }, [incidents, filters]);
 
   const addMeasureLayers = useCallback((map: maplibregl.Map) => {
     if (map.getSource(MEASURE_SOURCE)) return;
@@ -343,7 +345,7 @@ export function MapView() {
     return () => clearTimeout(t);
   }, [activeStyle]);
 
-  function addMarkers(map: maplibregl.Map, incidents: typeof MOCK_INCIDENTS) {
+  function addMarkers(map: maplibregl.Map, incidents: MockIncident[]) {
     markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
 

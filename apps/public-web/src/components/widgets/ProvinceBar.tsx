@@ -1,16 +1,17 @@
 import { useMemo } from 'react';
-import { MOCK_INCIDENTS } from '../../data/mock-incidents';
+import { useIncidentData } from '../../lib/hooks/useIncidentData';
 
 export function ProvinceBar() {
+  const { incidents } = useIncidentData();
   const data = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const inc of MOCK_INCIDENTS) {
+    for (const inc of incidents) {
       counts[inc.province] = (counts[inc.province] ?? 0) + 1;
     }
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6);
-  }, []);
+  }, [incidents]);
 
   const max = Math.max(...data.map(d => d[1]), 1);
 

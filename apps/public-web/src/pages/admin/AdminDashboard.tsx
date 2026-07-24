@@ -1,28 +1,33 @@
-import { MOCK_INCIDENTS, MODULE_META, SEVERITY_META } from '../../data/mock-incidents';
+import { MODULE_META, SEVERITY_META } from '../../data/mock-incidents';
+import { fetchIncidents } from '@/lib/api/incidents';
+import { useQuery } from '@/lib/hooks/useQuery';
 
 export function AdminDashboard() {
-  const total = MOCK_INCIDENTS.length;
-  const synthetic = MOCK_INCIDENTS.filter(i => i.isSynthetic).length;
-  const critical = MOCK_INCIDENTS.filter(i => i.severity === 'critical').length;
-  const verified = MOCK_INCIDENTS.filter(i => i.verification.includes('v5')).length;
+  const { data: incidents, loading } = useQuery(() => fetchIncidents(), []);
+  const all = incidents ?? [];
+
+  const total = all.length;
+  const critical = all.filter(i => i.severity === 'critical').length;
+  const verified = all.filter(i => i.verification_state?.includes('v5')).length;
 
   const byModule = Object.entries(MODULE_META).map(([key, meta]) => ({
     key,
     label: meta.label,
     colour: meta.colour,
-    count: MOCK_INCIDENTS.filter(i => i.module === key).length,
+    count: all.filter(i => i.category?.module === key).length,
   }));
 
   const bySeverity = Object.entries(SEVERITY_META).map(([key, meta]) => ({
     key,
     label: meta.label,
     colour: meta.colour,
-    count: MOCK_INCIDENTS.filter(i => i.severity === key).length,
+    count: all.filter(i => i.severity === key).length,
   }));
 
   const byProvince = Object.entries(
-    MOCK_INCIDENTS.reduce<Record<string, number>>((acc, i) => {
-      acc[i.province] = (acc[i.province] ?? 0) + 1;
+    all.reduce<Record<string, number>>((acc, i) => {
+      const prov = i.location?.province ?? 'Unknown';
+      acc[prov] = (acc[prov] ?? 0) + 1;
       return acc;
     }, {})
   ).sort((a, b) => b[1] - a[1]);
@@ -33,6 +38,8 @@ export function AdminDashboard() {
         <h1>Dashboard</h1>
         <p>Overview of all tracked incidents</p>
       </div>
+
+      {loading && <p style={{ textAlign: 'center', padding: '2rem', opacity: 0.6 }}>Loading dashboard data…</p>}
 
       <div className="stats-grid">
         <div className="stat-card">
@@ -46,10 +53,6 @@ export function AdminDashboard() {
         <div className="stat-card">
           <div className="stat-value">{verified}</div>
           <div className="stat-label">Verified</div>
-        </div>
-        <div className="stat-card synthetic">
-          <div className="stat-value">{synthetic}</div>
-          <div className="stat-label">Synthetic</div>
         </div>
       </div>
 
@@ -120,16 +123,20 @@ export function AdminDashboard() {
             </tr>
           </thead>
           <tbody>
-            {MOCK_INCIDENTS.slice(0, 10).map(inc => (
+            {all.slice(0, 10).map(inc => {
+              const mod = MODULE_META[inc.category?.module as keyof typeof MODULE_META];
+              const sev = SEVERITY_META[inc.severity as keyof typeof SEVERITY_META];
+              return (
               <tr key={inc.id}>
-                <td className="td-title">{inc.title}{inc.isSynthetic && <span className="demo-tag">DEMO</span>}</td>
-                <td><span style={{ color: MODULE_META[inc.module].colour }}>{MODULE_META[inc.module].label}</span></td>
-                <td><span className="table-badge" style={{ color: SEVERITY_META[inc.severity].colour }}>{inc.severity}</span></td>
-                <td>{inc.verification.replace(/_/g, ' ').replace(/^v\d\s*/, '')}</td>
-                <td>{inc.province}</td>
-                <td>{inc.dateOccurred}</td>
+                <td className="td-title">{inc.title}</td>
+                <td><span style={{ color: mod?.colour }}>{mod?.label}</span></td>
+                <td><span className="table-badge" style={{ color: sev?.colour }}>{inc.severity}</span></td>
+                <td>{inc.verification_state?.replace(/_/g, ' ').replace(/^v\d\s*/, '') ?? ''}</td>
+                <td>{inc.location?.province}</td>
+                <td>{inc.occurred_at}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

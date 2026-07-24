@@ -1,38 +1,31 @@
-import { useState } from 'react';
-
-interface FeatureFlag {
-  key: string;
-  label: string;
-  description: string;
-  enabled: boolean;
-  category: string;
-}
-
-const INITIAL_FLAGS: FeatureFlag[] = [
-  { key: 'map_provider', label: 'Map provider', description: 'Switch between MapLibre (free) and Google Maps (paid)', enabled: true, category: 'Map' },
-  { key: 'satellite', label: 'Satellite imagery', description: 'ESRI World Imagery satellite view', enabled: true, category: 'Map' },
-  { key: '3d_terrain', label: '3D terrain', description: 'Elevated terrain rendering (requires compatible provider)', enabled: false, category: 'Map' },
-  { key: 'geocoding', label: 'Geocoding', description: 'Address-to-coordinate lookup', enabled: false, category: 'Map' },
-  { key: 'email_notifications', label: 'Email notifications', description: 'Send email alerts for critical incidents', enabled: false, category: 'Notifications' },
-  { key: 'push_notifications', label: 'Push notifications', description: 'Browser push for subscribed users', enabled: false, category: 'Notifications' },
-  { key: 'malware_scanning', label: 'Malware scanning', description: 'Scan uploaded evidence files', enabled: false, category: 'Security' },
-  { key: 'ai_assistance', label: 'AI assistance', description: 'AI-assisted categorisation (output never auto-publishes)', enabled: false, category: 'AI' },
-  { key: 'translation', label: 'Translation', description: 'Auto-translate incident summaries EN↔AF', enabled: false, category: 'AI' },
-  { key: 'sponsorship', label: 'Sponsorship', description: 'Display sponsor campaigns', enabled: true, category: 'Revenue' },
-  { key: 'news_ingestion', label: 'News ingestion', description: 'Automated news source monitoring', enabled: false, category: 'Ingestion' },
-  { key: 'bulk_import', label: 'Bulk import', description: 'CSV/JSON bulk incident import', enabled: false, category: 'Ingestion' },
-  { key: 'data_export', label: 'Data export', description: 'Export incident data as CSV/JSON', enabled: true, category: 'Data' },
-  { key: 'analytics', label: 'Analytics', description: 'Aggregate analytics dashboard', enabled: true, category: 'Data' },
-];
+import { fetchFeatureFlags, toggleFeatureFlag } from '@/lib/api/feature-flags';
+import type { FeatureFlagRow } from '@/lib/api/feature-flags';
+import { useQuery } from '@/lib/hooks/useQuery';
 
 export function AdminSettings() {
-  const [flags, setFlags] = useState(INITIAL_FLAGS);
+  const { data: flagRows, loading, error, refetch } = useQuery(fetchFeatureFlags, []);
+  const flags = (flagRows ?? []).map((f: FeatureFlagRow) => ({
+    key: f.key,
+    label: f.label,
+    description: f.label,
+    enabled: f.is_enabled,
+    category: f.category.charAt(0).toUpperCase() + f.category.slice(1),
+    id: f.id,
+  }));
 
-  const toggleFlag = (key: string) => {
-    setFlags(prev => prev.map(f => f.key === key ? { ...f, enabled: !f.enabled } : f));
+  const toggleFlag = async (key: string) => {
+    const flag = flags.find(f => f.key === key);
+    if (!flag) return;
+    try {
+      await toggleFeatureFlag(flag.id, !flag.enabled);
+      refetch();
+    } catch { /* errors surfaced on next refetch */ }
   };
 
   const categories = [...new Set(flags.map(f => f.category))];
+
+  if (loading) return <div className="admin-page"><p>Loading settings...</p></div>;
+  if (error) return <div className="admin-page"><p className="error-text">Error loading settings: {error}</p></div>;
 
   return (
     <div className="admin-page">
@@ -81,7 +74,7 @@ export function AdminSettings() {
           <tbody>
             <tr><td>Verification</td><td>1.0</td><td>V0–V5, VX, VR, VA state machine</td></tr>
             <tr><td>Bias assessment</td><td>1.0</td><td>Structured human review, no automated scoring</td></tr>
-            <tr><td>Taxonomy</td><td>1.0</td><td>AAIT, Unrest Watch, National Monitor, Infrastructure, Natural Events</td></tr>
+            <tr><td>Taxonomy</td><td>1.0</td><td>Farm & Rural, Unrest Watch, National Monitor, Infrastructure, Natural Events</td></tr>
             <tr><td>Source independence</td><td>1.0</td><td>Ownership-group based deduplication</td></tr>
           </tbody>
         </table>

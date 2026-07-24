@@ -19,7 +19,7 @@ export function MapPage() {
       <div className="map-area">
         <div className="information-strip">
           <span className="info-strip-badge">LIVE</span>
-          <span className="info-strip-label">Alt Afrikaner Incident Tracker</span>
+          <span className="info-strip-label">Intelligence Twin</span>
           <span className="info-strip-status">Real-time monitoring · South Africa</span>
         </div>
         <div className="map-region">

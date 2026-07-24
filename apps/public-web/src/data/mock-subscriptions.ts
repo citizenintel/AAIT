@@ -12,7 +12,7 @@ export type BenefitKey =
   | 'ai_insights';
 
 export const BENEFITS: { key: BenefitKey; label: string; desc: string; category: 'access' | 'feature' }[] = [
-  { key: 'view_ait', label: 'AAIT data (farm attacks, rural crime)', desc: 'View all AAIT module incidents and detail pages', category: 'access' },
+  { key: 'view_ait', label: 'Farm & Rural data (farm attacks, rural crime)', desc: 'View all Farm & Rural module incidents and detail pages', category: 'access' },
   { key: 'view_unrest', label: 'Unrest Watch data', desc: 'View protests, riots, political violence data', category: 'access' },
   { key: 'view_bias', label: 'Bias Monitor data', desc: 'View hate crimes, xenophobia, bias indicators', category: 'access' },
   { key: 'view_infrastructure', label: 'Infrastructure data', desc: 'View electricity, water, telecom failures', category: 'access' },
@@ -63,7 +63,7 @@ export const MOCK_TIERS: SubscriptionTier[] = [
     isActive: true,
     isFeatured: false,
     maxSubscribers: null,
-    description: 'Basic access to the public map with AAIT and Natural Events data.',
+    description: 'Basic access to the public map with Farm & Rural and Natural Events data.',
   },
   {
     id: 'tier-basic',

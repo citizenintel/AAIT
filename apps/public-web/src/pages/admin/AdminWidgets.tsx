@@ -3,7 +3,7 @@ import { useAppStore, type WidgetId } from '../../store/app-store';
 const WIDGET_LABELS: Record<WidgetId, { label: string; description: string }> = {
   stats_bar: { label: 'Stats bar', description: 'Top bar showing total incidents, critical, deceased, injured, verified, provinces' },
   severity_pie: { label: 'Severity pie chart', description: 'Donut chart breaking down incidents by severity level' },
-  module_pie: { label: 'Module pie chart', description: 'Donut chart breaking down incidents by module (AAIT, Unrest, etc.)' },
+  module_pie: { label: 'Module pie chart', description: 'Donut chart breaking down incidents by module (Farm & Rural, Unrest, etc.)' },
   verification_pie: { label: 'Verification pie chart', description: 'Donut chart showing verification state distribution' },
   province_bar: { label: 'Province bar chart', description: 'Horizontal bar chart of incidents by province' },
   trend_line: { label: '14-day trend line', description: 'Sparkline showing incident trend over the last two weeks' },

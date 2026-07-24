@@ -1,0 +1,12 @@
+name = "intelligence-twin"
+compatibility_date = "2024-12-01"
+pages_build_output_dir = "dist"
+
+[build]
+command = "npm run build"
+
+[env.preview]
+name = "intelligence-twin-preview"
+
+[env.production]
+name = "intelligence-twin"

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAppStore } from '../../store/app-store';
+import { fetchSponsors, updateCampaignStatus } from '@/lib/api/sponsors';
+import { useQuery, useMutation } from '@/lib/hooks/useQuery';
 import {
-  MOCK_SPONSOR_ADS,
   DURATION_LABELS,
   DURATION_PRICES,
   SIZE_PRICES,
@@ -41,7 +42,48 @@ function calcPrice(duration: AdDuration, size: string): number {
 }
 
 export function AdminSponsors() {
-  const [ads, setAds] = useState(MOCK_SPONSOR_ADS);
+  const { data: sponsors, loading, error, refetch } = useQuery(fetchSponsors);
+  const statusMutation = useMutation(updateCampaignStatus);
+
+  // Flatten SponsorRow[] (with nested campaigns) into a SponsorAd-shaped list
+  // so the existing table template works unchanged
+  const initialAds = useMemo(() => {
+    if (!sponsors) return [];
+    const result: SponsorAd[] = [];
+    let slotIndex = 1;
+    for (const sp of sponsors) {
+      for (const c of sp.campaigns ?? []) {
+        result.push({
+          id: c.id,
+          name: c.display_name || sp.name,
+          slot: (slotIndex <= 6 ? slotIndex : slotIndex % 6 + 1) as SponsorAd['slot'],
+          enabled: c.status === 'active',
+          size: (c.size as SponsorAd['size']) || 'standard',
+          tagline: c.tagline ?? '',
+          websiteUrl: c.link_url ?? sp.url ?? '',
+          bgColor: '#1a1a2e',
+          textColor: '#e0e0e0',
+          accentColor: '#4a90d9',
+          icon: 'shield',
+          duration: '7d',
+          startedAt: c.starts_at ?? new Date().toISOString(),
+          expiresAt: c.ends_at ?? new Date().toISOString(),
+          impressions: c.impressions ?? 0,
+          clicks: c.clicks ?? 0,
+          paidZAR: 0,
+        });
+        slotIndex++;
+      }
+    }
+    return result;
+  }, [sponsors]);
+
+  const [ads, setAds] = useState<SponsorAd[]>([]);
+  // Sync API data into local state when it arrives
+  if (initialAds.length > 0 && ads.length === 0) {
+    setAds(initialAds);
+  }
+
   const [editId, setEditId] = useState<string | null>(null);
   const sponsorsEnabled = useAppStore((s) => s.sponsorsEnabled);
   const setSponsorsEnabled = useAppStore((s) => s.setSponsorsEnabled);
@@ -51,10 +93,22 @@ export function AdminSponsors() {
   const totalImpressions = ads.reduce((sum, a) => sum + a.impressions, 0);
   const totalClicks = ads.reduce((sum, a) => sum + a.clicks, 0);
 
-  const toggleAd = (id: string) => {
+  const toggleAd = async (id: string) => {
+    const ad = ads.find((a) => a.id === id);
+    if (!ad) return;
+    const newStatus = ad.enabled ? 'paused' : 'active';
+    // Optimistic local update
     setAds((prev) =>
       prev.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a))
     );
+    try {
+      await statusMutation.execute(id, newStatus);
+    } catch {
+      // Revert on failure
+      setAds((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, enabled: ad.enabled } : a))
+      );
+    }
   };
 
   const setDuration = (id: string, duration: AdDuration) => {
@@ -85,6 +139,9 @@ export function AdminSponsors() {
         <h1>Sponsors</h1>
         <p>Manage sponsor campaigns across 6 slots — 2 sidebar, 2 dashboard, 2 bottom banners.</p>
       </div>
+
+      {loading && <div className="import-msg" style={{ marginBottom: 16 }}>Loading sponsors…</div>}
+      {error && <div className="import-msg warning" style={{ marginBottom: 16 }}><strong>Error:</strong> {error}</div>}
 
       <div className="stats-grid" style={{ marginBottom: 24 }}>
         <div className="stat-card">
@@ -270,7 +327,7 @@ export function AdminSponsors() {
       </div>
 
       <div className="admin-note">
-        All sponsors shown are synthetic test data for development purposes.
+        Sponsor data is loaded from the database. When Supabase is not configured, synthetic fallback data is shown.
       </div>
     </div>
   );

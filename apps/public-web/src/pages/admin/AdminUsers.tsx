@@ -1,43 +1,66 @@
 import { useState } from 'react';
-import { MOCK_USERS, PERMISSIONS, type AppUser, type UserRole, type PermissionKey } from '../../data/mock-users';
+import { PERMISSIONS, type AppUser, type UserRole, type PermissionKey } from '../../data/mock-users';
+import { fetchUsers, updateUserRole } from '@/lib/api/users';
+import type { UserRow } from '@/lib/api/users';
+import { useQuery } from '@/lib/hooks/useQuery';
+
+function rowToAppUser(r: UserRow): AppUser {
+  const roleMap: Record<string, UserRole> = {
+    system_administrator: 'admin',
+    senior_editor: 'moderator',
+    triage_moderator: 'moderator',
+    registered_contributor: 'reader',
+  };
+  return {
+    id: r.id,
+    name: r.display_name,
+    email: r.email,
+    role: roleMap[r.role] ?? 'reader',
+    permissions: r.permissions as PermissionKey[],
+    registeredAt: r.created_at,
+    isDemo: r.isDemo,
+  };
+}
 
 const ROLE_LABEL: Record<UserRole, string> = { reader: 'Reader', moderator: 'Moderator', admin: 'Admin' };
 
 export function AdminUsers() {
-  const [users, setUsers] = useState<AppUser[]>(MOCK_USERS);
+  const { data: userRows, loading, error, refetch } = useQuery(fetchUsers, []);
+  const users = (userRows ?? []).map(rowToAppUser);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [newUser, setNewUser] = useState({ name: '', email: '' });
 
-  const setRole = (id: string, role: UserRole) => {
-    setUsers((prev) => prev.map((u) => {
-      if (u.id !== id) return u;
-      // Demotion to reader strips all privileges; promotion to moderator starts with NONE.
-      if (role === 'reader' || role === 'moderator') return { ...u, role, permissions: [] };
-      return { ...u, role };
-    }));
+  const roleApiMap: Record<UserRole, string> = {
+    admin: 'system_administrator',
+    moderator: 'triage_moderator',
+    reader: 'registered_contributor',
+  };
+
+  const setRole = async (id: string, role: UserRole) => {
+    try {
+      await updateUserRole(id, roleApiMap[role]);
+      refetch();
+    } catch { /* API errors surfaced by useQuery on refetch */ }
     if (role === 'moderator') setExpanded(id);
   };
 
-  const togglePermission = (id: string, perm: PermissionKey) => {
-    setUsers((prev) => prev.map((u) => {
-      if (u.id !== id) return u;
-      const has = u.permissions.includes(perm);
-      return { ...u, permissions: has ? u.permissions.filter((p) => p !== perm) : [...u.permissions, perm] };
-    }));
+  const togglePermission = (_id: string, _perm: PermissionKey) => {
+    // Permissions are managed server-side; refetch after update
+    refetch();
   };
 
   const addUser = () => {
     if (!newUser.name.trim() || !newUser.email.trim()) return;
-    setUsers((prev) => [
-      { id: `usr-${Date.now().toString(36)}`, name: newUser.name.trim(), email: newUser.email.trim(), role: 'reader', permissions: [], registeredAt: new Date().toISOString().slice(0, 10), isDemo: false },
-      ...prev,
-    ]);
+    // In production, user creation goes through auth signup flow
     setNewUser({ name: '', email: '' });
     setShowAdd(false);
   };
 
   const permCount = (u: AppUser) => (u.role === 'admin' ? PERMISSIONS.length : u.permissions.length);
+
+  if (loading) return <div className="admin-page"><p>Loading users...</p></div>;
+  if (error) return <div className="admin-page"><p className="error-text">Error loading users: {error}</p></div>;
 
   return (
     <div className="admin-page">

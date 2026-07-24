@@ -25,7 +25,7 @@ export function TickerBar() {
     items = source.map((n) => `${n.title}  ·  ${sourceDomain(n.source)}`);
   }
 
-  if (items.length === 0) items = ['Alt Afrikaner Incident Tracker'];
+  if (items.length === 0) items = ['Intelligence Twin'];
 
   // Duplicate the sequence so the CSS translateX(-50%) loop is seamless.
   const loop = [...items, ...items];
