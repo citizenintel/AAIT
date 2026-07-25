@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import '@/lib/maplibre-setup';
 import { formatDistanceToNow } from 'date-fns';
 import { MODULE_META, SEVERITY_META, VERIFICATION_META } from '@/data/mock-incidents';
 import type { MockIncident } from '@/data/mock-incidents';
@@ -489,7 +490,7 @@ export function IntelligenceMap({
     if (isVector) {
       if (map.getLayer(ROADS_OVERLAY)) map.removeLayer(ROADS_OVERLAY);
       if (map.getLayer(ROADS_CASING)) map.removeLayer(ROADS_CASING);
-      const roadLayers = (map.getStyle()?.layers ?? []).filter(l => ROAD_LAYER_RE.test(l.id));
+      const roadLayers = (map.getStyle()?.layers ?? []).filter((l: { id: string }) => ROAD_LAYER_RE.test(l.id));
       for (const l of roadLayers) {
         try { map.setLayoutProperty(l.id, 'visibility', show ? 'visible' : 'none'); } catch { /* layer gone */ }
       }
@@ -555,8 +556,8 @@ export function IntelligenceMap({
 
     // If the remote style fails, switch to the fallback inline style
     let styleLoadFailed = false;
-    map.on('error', (e) => {
-      if (!styleLoadFailed && e.error?.message?.includes('style')) {
+    map.on('error', (e: maplibregl.ErrorEvent) => {
+      if (!styleLoadFailed && (e as any).error?.message?.includes('style')) {
         styleLoadFailed = true;
         map.setStyle(FALLBACK_DARK_STYLE);
       }
@@ -569,6 +570,13 @@ export function IntelligenceMap({
       didMountRef.current = true;
     });
 
+    // Force repaints when raster tiles finish loading (fixes blank tile boxes in MapLibre v6)
+    map.on('sourcedata', (e: maplibregl.MapSourceDataEvent) => {
+      if (e.isSourceLoaded && e.dataType === 'source') {
+        map.triggerRepaint();
+      }
+    });
+
     // If the style was swapped (fallback or user-switched), re-add layers
     map.on('styledata', () => {
       if (map.isStyleLoaded() && !map.getSource(EVENTS_SOURCE)) {
@@ -578,7 +586,7 @@ export function IntelligenceMap({
     });
 
     // Measure click handler (runs on every map click; only acts when measuring)
-    map.on('click', (e) => {
+    map.on('click', (e: maplibregl.MapMouseEvent) => {
       const state = measureRef.current;
       if (!state.active) return;
       const coords: [number, number] = [e.lngLat.lng, e.lngLat.lat];
@@ -593,7 +601,7 @@ export function IntelligenceMap({
     });
 
     // Click handler for event circles
-    map.on('click', EVENTS_LAYER, (e) => {
+    map.on('click', EVENTS_LAYER, (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
       if (measureRef.current.active) return;
 
       const feature = e.features?.[0];
@@ -643,7 +651,7 @@ export function IntelligenceMap({
     });
 
     // Click handler for mock incident circles
-    map.on('click', INCIDENTS_LAYER, (e) => {
+    map.on('click', INCIDENTS_LAYER, (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
       if (measureRef.current.active) return;
 
       const feature = e.features?.[0];
@@ -774,6 +782,7 @@ export function IntelligenceMap({
       if (is3D) enable3D(map);
       const applied = applyRoads(map, activeStyle, showRoadsRef.current);
       if (!applied && tries < 6) { tries += 1; map.once('idle', reAdd); }
+      map.triggerRepaint();
     };
     map.once('idle', reAdd);
     return () => { map.off('idle', reAdd); };

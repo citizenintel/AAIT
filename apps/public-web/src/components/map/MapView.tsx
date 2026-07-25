@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import '@/lib/maplibre-setup';
 import { SEVERITY_META, VERIFICATION_META, MODULE_META, type MockIncident } from '../../data/mock-incidents';
 import { useAppStore } from '../../store/app-store';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
@@ -218,7 +219,7 @@ export function MapView() {
       // vector basemaps already draw roads — just toggle their visibility
       if (map.getLayer(ROADS_OVERLAY)) map.removeLayer(ROADS_OVERLAY);
       if (map.getLayer(ROADS_CASING)) map.removeLayer(ROADS_CASING);
-      const roadLayers = (map.getStyle()?.layers ?? []).filter(l => ROAD_LAYER_RE.test(l.id));
+      const roadLayers = (map.getStyle()?.layers ?? []).filter((l: { id: string }) => ROAD_LAYER_RE.test(l.id));
       for (const l of roadLayers) {
         try { map.setLayoutProperty(l.id, 'visibility', show ? 'visible' : 'none'); } catch { /* layer gone */ }
       }
@@ -277,7 +278,7 @@ export function MapView() {
     map.addControl(new maplibregl.ScaleControl({ maxWidth: 150 }), 'bottom-left');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
     map.on('load', () => { addMarkers(map, filteredIncidents); addMeasureLayers(map); });
-    map.on('click', (e) => {
+    map.on('click', (e: maplibregl.MapMouseEvent) => {
       const state = measureRef.current;
       if (!state.active) return;
       const coords: [number, number] = [e.lngLat.lng, e.lngLat.lat];

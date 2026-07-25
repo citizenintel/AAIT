@@ -6,12 +6,30 @@ import { useQuery } from '@/lib/hooks/useQuery';
 export function AdminFeeds() {
   const { data: feeds, loading, error, refetch } = useQuery(fetchRssFeeds, []);
   const [showAdd, setShowAdd] = useState(false);
+  const [newFeed, setNewFeed] = useState({ name: '', url: '', category: '' });
 
   const toggleFeed = async (id: string) => {
     const feed = (feeds ?? []).find(f => f.id === id);
     if (!feed) return;
     try {
       await updateRssFeed(id, { enabled: !feed.enabled });
+      refetch();
+    } catch { /* errors surfaced on next refetch */ }
+  };
+
+  const addFeed = async () => {
+    if (!newFeed.name || !newFeed.url) return;
+    try {
+      await createRssFeed({ name: newFeed.name, url: newFeed.url, category: newFeed.category || 'general', enabled: true });
+      setNewFeed({ name: '', url: '', category: '' });
+      setShowAdd(false);
+      refetch();
+    } catch { /* errors surfaced on next refetch */ }
+  };
+
+  const removeFeed = async (id: string) => {
+    try {
+      await deleteRssFeed(id);
       refetch();
     } catch { /* errors surfaced on next refetch */ }
   };
@@ -71,22 +89,21 @@ export function AdminFeeds() {
           <div className="feed-add-form" style={{ marginBottom: 16, padding: 16, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)' }}>
             <div className="form-group">
               <label className="form-label">Feed name</label>
-              <input type="text" className="form-input" placeholder="e.g. Daily Maverick" />
+              <input type="text" className="form-input" placeholder="e.g. Daily Maverick" value={newFeed.name} onChange={e => setNewFeed(s => ({ ...s, name: e.target.value }))} />
             </div>
             <div className="form-group">
               <label className="form-label">RSS/Atom URL</label>
-              <input type="url" className="form-input" placeholder="https://example.com/feed/rss" />
+              <input type="url" className="form-input" placeholder="https://example.com/feed/rss" value={newFeed.url} onChange={e => setNewFeed(s => ({ ...s, url: e.target.value }))} />
             </div>
             <div className="form-group">
               <label className="form-label">Category</label>
-              <select className="form-input">
+              <select className="form-input" value={newFeed.category} onChange={e => setNewFeed(s => ({ ...s, category: e.target.value }))}>
                 <option value="">Select category</option>
                 {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                <option value="new">+ New category</option>
               </select>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-primary">Add feed</button>
+              <button className="btn btn-primary" onClick={addFeed}>Add feed</button>
               <button className="btn btn-secondary" onClick={() => setShowAdd(false)}>Cancel</button>
             </div>
           </div>
@@ -122,7 +139,7 @@ export function AdminFeeds() {
                 <td>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button className="btn btn-small">Fetch now</button>
-                    <button className="btn btn-small btn-secondary">Edit</button>
+                    <button className="btn btn-small btn-danger" onClick={() => removeFeed(feed.id)}>Delete</button>
                   </div>
                 </td>
               </tr>

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { IncidentDataProvider } from '@/lib/hooks/useIncidentData';
 import { AppShell } from '@/components/shell/AppShell';
 import { AdminLayout } from '@/pages/admin/AdminLayout';
@@ -53,6 +53,7 @@ export default function App() {
           <Route path="synthetic" element={<AdminSynthetic />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

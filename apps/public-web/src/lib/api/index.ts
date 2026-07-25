@@ -22,3 +22,7 @@ export type { FeatureFlagRow } from './feature-flags';
 export { fetchNewsItems, fetchRssFeeds, updateRssFeed, createRssFeed, deleteRssFeed } from './news-feeds';
 
 export { fetchTiers, fetchSubscribers, updateTier, cancelSubscription } from './subscriptions';
+
+export { fetchEvents, fetchEventById } from './events';
+
+export { fetchAssets, fetchAssetById } from './assets';

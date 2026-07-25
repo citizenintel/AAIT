@@ -76,6 +76,17 @@
 .form-input:focus, .form-textarea:focus { border-color: var(--accent); }
 .form-textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
 select.form-input { cursor: pointer; }
+select.form-input option,
+select option {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.form-input::placeholder, .form-textarea::placeholder {
+  color: var(--text-muted);
+}
+.topbar-search-input::placeholder {
+  color: var(--text-muted);
+}
 
 /* TopBar additions */
 .topbar-search.active { background: var(--bg-base); border-color: var(--accent); }

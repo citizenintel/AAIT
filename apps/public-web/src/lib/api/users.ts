@@ -12,8 +12,26 @@ export interface UserRow {
   isDemo: boolean;
 }
 
+let mockRows: UserRow[] | null = null;
+
+function getMockRows(): UserRow[] {
+  if (!mockRows) {
+    mockRows = MOCK_USERS.map(u => ({
+      id: u.id,
+      display_name: u.name,
+      email: u.email,
+      role: u.role === 'admin' ? 'system_administrator' : u.role === 'moderator' ? 'triage_moderator' : 'registered_contributor',
+      permissions: [...u.permissions],
+      is_active: true,
+      created_at: u.registeredAt,
+      isDemo: u.isDemo,
+    }));
+  }
+  return mockRows;
+}
+
 export async function fetchUsers(): Promise<UserRow[]> {
-  if (!isSupabaseConfigured()) return mockToRows();
+  if (!isSupabaseConfigured()) return getMockRows();
 
   const { data: profiles, error } = await supabase
     .from('profiles')
@@ -42,7 +60,14 @@ export async function fetchUsers(): Promise<UserRow[]> {
 }
 
 export async function updateUserRole(userId: string, role: string): Promise<void> {
-  if (!isSupabaseConfigured()) return;
+  if (!isSupabaseConfigured()) {
+    const rows = getMockRows();
+    const idx = rows.findIndex(u => u.id === userId);
+    if (idx !== -1) {
+      Object.assign(rows[idx]!, { role, permissions: roleToPermissions(role) });
+    }
+    return;
+  }
 
   await supabase
     .from('user_roles')
@@ -56,8 +81,48 @@ export async function updateUserRole(userId: string, role: string): Promise<void
   if (error) throw new Error(error.message);
 }
 
+export async function updateUserPermissions(userId: string, permissions: string[]): Promise<void> {
+  if (!isSupabaseConfigured()) {
+    const rows = getMockRows();
+    const idx = rows.findIndex(u => u.id === userId);
+    if (idx !== -1) {
+      Object.assign(rows[idx]!, { permissions: [...permissions] });
+    }
+    return;
+  }
+
+  const { error } = await supabase
+    .from('user_permissions')
+    .upsert({ user_id: userId, permissions, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+
+  if (error) throw new Error(error.message);
+}
+
+export async function createMockUser(name: string, email: string): Promise<UserRow> {
+  const row: UserRow = {
+    id: `user-${Date.now().toString(36)}`,
+    display_name: name,
+    email,
+    role: 'registered_contributor',
+    permissions: [],
+    is_active: true,
+    created_at: new Date().toISOString(),
+    isDemo: false,
+  };
+  if (!isSupabaseConfigured()) {
+    getMockRows().unshift(row);
+    return row;
+  }
+  throw new Error('User creation goes through the auth signup flow');
+}
+
 export async function deactivateUser(userId: string): Promise<void> {
-  if (!isSupabaseConfigured()) return;
+  if (!isSupabaseConfigured()) {
+    const rows = getMockRows();
+    const idx = rows.findIndex(u => u.id === userId);
+    if (idx !== -1) Object.assign(rows[idx]!, { is_active: false });
+    return;
+  }
 
   const { error } = await supabase
     .from('profiles')
@@ -75,17 +140,4 @@ function roleToPermissions(role: string): string[] {
     registered_contributor: [],
   };
   return perms[role] ?? [];
-}
-
-function mockToRows(): UserRow[] {
-  return MOCK_USERS.map(u => ({
-    id: u.id,
-    display_name: u.name,
-    email: u.email,
-    role: u.role === 'admin' ? 'system_administrator' : u.role === 'moderator' ? 'triage_moderator' : 'registered_contributor',
-    permissions: u.permissions,
-    is_active: true,
-    created_at: u.registeredAt,
-    isDemo: u.isDemo,
-  }));
 }

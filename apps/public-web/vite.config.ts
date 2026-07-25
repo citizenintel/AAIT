@@ -49,7 +49,7 @@ export default defineConfig({
     esbuildOptions: {
       target: 'es2022',
     },
-    exclude: ['@duckdb/duckdb-wasm'],
+    exclude: ['@duckdb/duckdb-wasm', 'maplibre-gl'],
   },
   worker: {
     format: 'es',

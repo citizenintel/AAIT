@@ -10,7 +10,7 @@ export interface FeatureFlagRow {
   status: string;
 }
 
-const DEFAULT_FLAGS: FeatureFlagRow[] = [
+const SEED_FLAGS: FeatureFlagRow[] = [
   { id: '1', key: 'map_provider', label: 'MapLibre GL JS', category: 'map', is_enabled: true, provider: 'maplibre', status: 'active' },
   { id: '2', key: 'satellite', label: 'Satellite imagery', category: 'map', is_enabled: true, provider: null, status: 'active' },
   { id: '3', key: '3d_terrain', label: '3D terrain rendering', category: 'map', is_enabled: false, provider: null, status: 'inactive' },
@@ -27,15 +27,17 @@ const DEFAULT_FLAGS: FeatureFlagRow[] = [
   { id: '14', key: 'analytics', label: 'Analytics engine', category: 'data', is_enabled: true, provider: null, status: 'active' },
 ];
 
+let mockFlags: FeatureFlagRow[] = SEED_FLAGS.map(f => ({ ...f }));
+
 export async function fetchFeatureFlags(): Promise<FeatureFlagRow[]> {
-  if (!isSupabaseConfigured()) return DEFAULT_FLAGS;
+  if (!isSupabaseConfigured()) return mockFlags;
 
   const { data, error } = await supabase
     .from('feature_flags')
     .select('*')
     .order('category', { ascending: true });
 
-  if (error) return DEFAULT_FLAGS;
+  if (error) return mockFlags;
 
   return (data ?? []).map(f => ({
     id: f.id,
@@ -49,7 +51,11 @@ export async function fetchFeatureFlags(): Promise<FeatureFlagRow[]> {
 }
 
 export async function toggleFeatureFlag(id: string, enabled: boolean): Promise<void> {
-  if (!isSupabaseConfigured()) return;
+  if (!isSupabaseConfigured()) {
+    const idx = mockFlags.findIndex(f => f.id === id);
+    if (idx !== -1) Object.assign(mockFlags[idx]!, { is_enabled: enabled, status: enabled ? 'active' : 'inactive' });
+    return;
+  }
 
   const { error } = await supabase
     .from('feature_flags')

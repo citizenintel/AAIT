@@ -2,6 +2,8 @@ import { supabase, isSupabaseConfigured } from '../supabase';
 import { MOCK_NEWS, MOCK_RSS_FEEDS } from '../../data/mock-news';
 import type { NewsItem, RssFeedConfig } from '../../data/mock-news';
 
+let mockFeeds: RssFeedConfig[] = MOCK_RSS_FEEDS.map(f => ({ ...f }));
+
 export async function fetchNewsItems(limit = 50): Promise<NewsItem[]> {
   if (!isSupabaseConfigured()) return MOCK_NEWS;
 
@@ -16,19 +18,23 @@ export async function fetchNewsItems(limit = 50): Promise<NewsItem[]> {
 }
 
 export async function fetchRssFeeds(): Promise<RssFeedConfig[]> {
-  if (!isSupabaseConfigured()) return MOCK_RSS_FEEDS;
+  if (!isSupabaseConfigured()) return mockFeeds;
 
   const { data, error } = await supabase
     .from('rss_feeds')
     .select('*')
     .order('name', { ascending: true });
 
-  if (error) return MOCK_RSS_FEEDS;
-  return data ?? MOCK_RSS_FEEDS;
+  if (error) return mockFeeds;
+  return data ?? mockFeeds;
 }
 
 export async function updateRssFeed(id: string, updates: Partial<RssFeedConfig>): Promise<void> {
-  if (!isSupabaseConfigured()) return;
+  if (!isSupabaseConfigured()) {
+    const idx = mockFeeds.findIndex(f => f.id === id);
+    if (idx !== -1) Object.assign(mockFeeds[idx]!, updates);
+    return;
+  }
 
   const { error } = await supabase
     .from('rss_feeds')
@@ -39,7 +45,11 @@ export async function updateRssFeed(id: string, updates: Partial<RssFeedConfig>)
 }
 
 export async function createRssFeed(feed: Omit<RssFeedConfig, 'id' | 'lastFetched' | 'articleCount'>): Promise<string> {
-  if (!isSupabaseConfigured()) throw new Error('Database not configured');
+  const id = `rss-${Date.now().toString(36)}`;
+  if (!isSupabaseConfigured()) {
+    mockFeeds.push({ ...feed, id, lastFetched: null, articleCount: 0 });
+    return id;
+  }
 
   const { data, error } = await supabase
     .from('rss_feeds')
@@ -52,7 +62,10 @@ export async function createRssFeed(feed: Omit<RssFeedConfig, 'id' | 'lastFetche
 }
 
 export async function deleteRssFeed(id: string): Promise<void> {
-  if (!isSupabaseConfigured()) return;
+  if (!isSupabaseConfigured()) {
+    mockFeeds = mockFeeds.filter(f => f.id !== id);
+    return;
+  }
 
   const { error } = await supabase
     .from('rss_feeds')

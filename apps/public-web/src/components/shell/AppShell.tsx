@@ -10,8 +10,8 @@ import { CommandPalette } from '@/components/shared/CommandPalette';
 import { TickerBar } from '@/components/TickerBar';
 import { Sidebar } from '@/components/Sidebar';
 import { WidgetPanel } from '@/components/widgets/WidgetPanel';
-import { MOCK_EVENTS } from '@/data/mock-events';
-import { MOCK_ASSETS } from '@/data/mock-assets';
+import { fetchEvents } from '@/lib/api/events';
+import { fetchAssets } from '@/lib/api/assets';
 import type { InterfaceLevel, RenderingTier } from '@/types/ontology';
 
 const LEVEL_LABELS: Record<InterfaceLevel, string> = {
@@ -51,9 +51,10 @@ export function AppShell() {
     setRenderingTier(tier);
     document.documentElement.setAttribute('data-tier', tier);
 
-    hydrate().then(() => {
-      addEvents(MOCK_EVENTS);
-      addAssets(MOCK_ASSETS);
+    hydrate().then(async () => {
+      const [events, assets] = await Promise.all([fetchEvents(), fetchAssets()]);
+      addEvents(events);
+      addAssets(assets);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

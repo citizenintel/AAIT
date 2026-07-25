@@ -9,7 +9,7 @@ import { useQuery } from '@/lib/hooks/useQuery';
 const STATUS_STYLES: Record<string, { bg: string; color: string; label: string }> = {
   active: { bg: '#38a16922', color: '#38a169', label: 'Active' },
   cancelled: { bg: '#c5303022', color: '#c53030', label: 'Cancelled' },
-  expired: { bg: '#71809622', color: '#718096', label: 'Expired' },
+  expired: { bg: '#8a94a622', color: '#8a94a6', label: 'Expired' },
   past_due: { bg: '#ed893622', color: '#ed8936', label: 'Past due' },
 };
 

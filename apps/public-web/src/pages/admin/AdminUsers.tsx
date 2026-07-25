@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { PERMISSIONS, type AppUser, type UserRole, type PermissionKey } from '../../data/mock-users';
-import { fetchUsers, updateUserRole } from '@/lib/api/users';
+import { fetchUsers, updateUserRole, updateUserPermissions, createMockUser } from '@/lib/api/users';
 import type { UserRow } from '@/lib/api/users';
 import { useQuery } from '@/lib/hooks/useQuery';
 
@@ -45,14 +45,24 @@ export function AdminUsers() {
     if (role === 'moderator') setExpanded(id);
   };
 
-  const togglePermission = (_id: string, _perm: PermissionKey) => {
-    // Permissions are managed server-side; refetch after update
-    refetch();
+  const togglePermission = async (id: string, perm: PermissionKey) => {
+    const user = users.find(u => u.id === id);
+    if (!user) return;
+    const updated = user.permissions.includes(perm)
+      ? user.permissions.filter(p => p !== perm)
+      : [...user.permissions, perm];
+    try {
+      await updateUserPermissions(id, updated);
+      refetch();
+    } catch { /* errors surfaced on next refetch */ }
   };
 
-  const addUser = () => {
+  const addUser = async () => {
     if (!newUser.name.trim() || !newUser.email.trim()) return;
-    // In production, user creation goes through auth signup flow
+    try {
+      await createMockUser(newUser.name.trim(), newUser.email.trim());
+      refetch();
+    } catch { /* production: auth signup flow */ }
     setNewUser({ name: '', email: '' });
     setShowAdd(false);
   };

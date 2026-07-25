@@ -1,5 +1,5 @@
 import { isSupabaseConfigured, sponsor } from '../supabase';
-import { MOCK_SPONSOR_ADS } from '../../data/mock-sponsors';
+import { MOCK_SPONSOR_ADS, type SponsorAd } from '../../data/mock-sponsors';
 
 export interface SponsorRow {
   id: string;
@@ -52,7 +52,7 @@ export async function fetchActiveCampaigns(): Promise<CampaignRow[]> {
       sponsor_id: a.id,
       name: a.name,
       size: a.size,
-      placement: 'footer',
+      placement: `slot-${a.slot}`,
       status: 'active',
       starts_at: a.startedAt,
       ends_at: a.expiresAt,
@@ -97,6 +97,31 @@ export async function updateCampaignStatus(id: string, status: string): Promise<
     .eq('id', id);
 
   if (error) throw new Error(error.message);
+}
+
+export async function createMockCampaign(name: string, tagline: string, size: string, slot: number): Promise<SponsorAd> {
+  const now = new Date();
+  const expires = new Date(now.getTime() + 604800000);
+  const ad: SponsorAd = {
+    id: `sp-${Date.now().toString(36)}`,
+    name,
+    slot: slot as SponsorAd['slot'],
+    enabled: true,
+    size: size as SponsorAd['size'],
+    tagline,
+    websiteUrl: '',
+    bgColor: '#1a2332',
+    textColor: '#e2e8f0',
+    accentColor: '#4299e1',
+    icon: 'shield',
+    duration: '7d',
+    startedAt: now.toISOString(),
+    expiresAt: expires.toISOString(),
+    impressions: 0,
+    clicks: 0,
+    paidZAR: 499,
+  };
+  return ad;
 }
 
 function mockToRows(): SponsorRow[] {

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAppStore } from '../../store/app-store';
-import { fetchSponsors, updateCampaignStatus } from '@/lib/api/sponsors';
+import { fetchSponsors, updateCampaignStatus, createMockCampaign } from '@/lib/api/sponsors';
 import { useQuery, useMutation } from '@/lib/hooks/useQuery';
 import {
   DURATION_LABELS,
@@ -15,7 +15,7 @@ const SIZE_LABELS: Record<string, string> = { premium: 'Premium', banner: 'Banne
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   active: { bg: '#38a16922', color: '#38a169' },
   paused: { bg: '#d69e2e22', color: '#d69e2e' },
-  expired: { bg: '#71809622', color: '#718096' },
+  expired: { bg: '#8a94a622', color: '#8a94a6' },
 };
 
 function getStatus(ad: SponsorAd): 'active' | 'paused' | 'expired' {
@@ -85,6 +85,8 @@ export function AdminSponsors() {
   }
 
   const [editId, setEditId] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newSponsor, setNewSponsor] = useState({ name: '', tagline: '', size: 'standard' as string });
   const sponsorsEnabled = useAppStore((s) => s.sponsorsEnabled);
   const setSponsorsEnabled = useAppStore((s) => s.setSponsorsEnabled);
 
@@ -109,6 +111,18 @@ export function AdminSponsors() {
         prev.map((a) => (a.id === id ? { ...a, enabled: ad.enabled } : a))
       );
     }
+  };
+
+  const addSponsor = async () => {
+    if (!newSponsor.name.trim()) return;
+    const usedSlots = new Set(ads.map(a => a.slot));
+    const freeSlot = ([1, 2, 3, 4, 5, 6] as const).find(s => !usedSlots.has(s)) ?? 1;
+    try {
+      const ad = await createMockCampaign(newSponsor.name.trim(), newSponsor.tagline.trim(), newSponsor.size, freeSlot);
+      setAds(prev => [...prev, ad]);
+    } catch { /* production: DB insert */ }
+    setNewSponsor({ name: '', tagline: '', size: 'standard' });
+    setShowAddForm(false);
   };
 
   const setDuration = (id: string, duration: AdDuration) => {
@@ -186,8 +200,51 @@ export function AdminSponsors() {
       <div className="admin-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h2>Campaigns</h2>
-          <button className="btn btn-primary" disabled={activeCount >= 6}>+ Add sponsor</button>
+          <button className="btn btn-primary" disabled={activeCount >= 6} onClick={() => setShowAddForm(v => !v)}>+ Add sponsor</button>
         </div>
+
+        {showAddForm && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap' }}>
+            <div>
+              <label className="form-label" style={{ marginBottom: 2 }}>Name</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Sponsor name"
+                value={newSponsor.name}
+                onChange={e => setNewSponsor(s => ({ ...s, name: e.target.value }))}
+                style={{ width: 180, fontSize: 13 }}
+              />
+            </div>
+            <div>
+              <label className="form-label" style={{ marginBottom: 2 }}>Tagline</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Short tagline"
+                value={newSponsor.tagline}
+                onChange={e => setNewSponsor(s => ({ ...s, tagline: e.target.value }))}
+                style={{ width: 200, fontSize: 13 }}
+              />
+            </div>
+            <div>
+              <label className="form-label" style={{ marginBottom: 2 }}>Size</label>
+              <select
+                className="form-input"
+                value={newSponsor.size}
+                onChange={e => setNewSponsor(s => ({ ...s, size: e.target.value }))}
+                style={{ width: 130, fontSize: 13 }}
+              >
+                <option value="compact">Compact</option>
+                <option value="standard">Standard</option>
+                <option value="banner">Banner</option>
+                <option value="premium">Premium</option>
+              </select>
+            </div>
+            <button className="btn btn-primary" onClick={addSponsor} disabled={!newSponsor.name.trim()}>Create</button>
+            <button className="btn btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
+          </div>
+        )}
 
         <table className="admin-table">
           <thead>
@@ -234,12 +291,13 @@ export function AdminSponsors() {
                   <td>
                     {isEditing ? (
                       <select
+                        className="form-input"
                         value={ad.duration}
                         onChange={(e) => {
                           setDuration(ad.id, e.target.value as AdDuration);
                           setEditId(null);
                         }}
-                        style={{ fontSize: 11, padding: '2px 4px', background: 'var(--surface)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 4 }}
+                        style={{ fontSize: 11, padding: '2px 4px', width: 'auto' }}
                       >
                         {Object.entries(DURATION_LABELS).map(([k, v]) => (
                           <option key={k} value={k}>
