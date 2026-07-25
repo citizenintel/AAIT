@@ -308,22 +308,26 @@ export function MapView() {
     if (!map) return;
     const is3D = activeStyle === '3d';
     if (!is3D) disable3D(map);
+
+    const canvas = map.getCanvas();
+    canvas.style.transition = 'opacity 250ms ease';
+    canvas.style.opacity = '0.15';
+
     map.setStyle(MAP_STYLES[activeStyle]!);
     map.triggerRepaint();
-    // NOTE: `style.load` does NOT fire reliably after setStyle() in maplibre-gl v4
-    // (the style rebuilds from scratch and skips the event), which silently drops
-    // the measure source/layers on every basemap switch. `idle` fires once the new
-    // style has applied, so re-add the custom layers there instead.
+
     let tries = 0;
     const reAdd = () => {
       addMeasureLayers(map);
       addMarkers(map, filteredIncidents);
       if (measureRef.current.points.length > 0) updateMeasureGeometry(map, measureRef.current.points);
       if (is3D) enable3D(map);
-      // On CARTO vector styles the road layers may not be merged in at the first idle;
-      // applyRoads returns false in that case, so retry until they appear.
       const applied = applyRoads(map, activeStyle, showRoadsRef.current);
-      if (!applied && tries < 6) { tries += 1; map.once('idle', reAdd); }
+      if (!applied && tries < 6) { tries += 1; map.once('idle', reAdd); return; }
+      requestAnimationFrame(() => {
+        canvas.style.opacity = '1';
+        setTimeout(() => { canvas.style.transition = ''; }, 300);
+      });
     };
     map.once('idle', reAdd);
     return () => { map.off('idle', reAdd); };

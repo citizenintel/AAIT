@@ -3,15 +3,16 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/hooks/useAuth';
 
 const NAV_ITEMS = [
-  { to: '/admin', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', end: true },
+  { to: '/admin', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', end: true, modAccess: true },
   { to: '/admin/incidents', label: 'Incidents', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
   { to: '/admin/submissions', label: 'Submissions', icon: 'M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z' },
   { to: '/admin/sponsors', label: 'Sponsors', icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z' },
   { to: '/admin/widgets', label: 'Widgets', icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z' },
   { to: '/admin/feeds', label: 'News Feeds', icon: 'M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z' },
-  { to: '/admin/ticker', label: 'Live Ticker', icon: 'M3 8h18M3 8l2 8a2 2 0 002 2h10a2 2 0 002-2l2-8M8 12h8' },
+  { to: '/admin/ticker', label: 'Live Ticker', icon: 'M3 8h18M3 8l2 8a2 2 0 002 2h10a2 2 0 002-2l2-8M8 12h8', modAccess: true },
   { to: '/admin/reports', label: 'Reports', icon: 'M9 17v-6h6v6M9 7h6M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z' },
   { to: '/admin/import', label: 'Import Data', icon: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12' },
+  { to: '/admin/security', label: 'Upload Security', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4' },
   { to: '/admin/users', label: 'Users & Roles', icon: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75' },
   { to: '/admin/subscriptions', label: 'Subscriptions', icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z' },
   { to: '/admin/synthetic', label: 'Test Data', icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z' },
@@ -28,6 +29,9 @@ export function AdminLayout() {
 
   if (!isAuthenticated) return null;
 
+  const isModerator = user?.role === 'moderator';
+  const visibleNav = isModerator ? NAV_ITEMS.filter(i => i.modAccess) : NAV_ITEMS;
+
   return (
     <div className="admin-layout">
       <aside className="admin-sidebar">
@@ -37,7 +41,7 @@ export function AdminLayout() {
         </div>
 
         <nav className="admin-nav">
-          {NAV_ITEMS.map(item => (
+          {visibleNav.map(item => (
             <NavLink
               key={item.to}
               to={item.to}

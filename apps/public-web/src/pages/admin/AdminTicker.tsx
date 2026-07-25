@@ -1,12 +1,56 @@
 import { useAppStore } from '../../store/app-store';
 import { MOCK_RSS_FEEDS } from '../../data/mock-news';
 import { TickerBar } from '../../components/TickerBar';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 export function AdminTicker() {
+  const { user } = useAuth();
+  const isModerator = user?.role === 'moderator';
   const ticker = useAppStore((s) => s.ticker);
   const updateTicker = useAppStore((s) => s.updateTicker);
 
   const enabledFeeds = MOCK_RSS_FEEDS.filter((f) => f.enabled);
+
+  if (isModerator) {
+    return (
+      <div className="admin-page">
+        <div className="admin-page-header">
+          <h1>Live Ticker</h1>
+          <p>Edit the custom ticker message. Other ticker settings are managed by admins.</p>
+        </div>
+
+        <div className="admin-card">
+          <h2>My own words</h2>
+          <div className="form-group">
+            <label className="form-label">Ticker messages — one line per message</label>
+            <textarea
+              className="form-input"
+              rows={5}
+              value={ticker.customText}
+              onChange={(e) => updateTicker({ customText: e.target.value })}
+              placeholder={'Breaking: …\nReminder: …\nNotice: …'}
+            />
+            <div className="form-hint">Each line becomes a separate scrolling item, separated by a dot. Changes apply when an admin sets the ticker to &quot;My own words&quot; mode.</div>
+          </div>
+        </div>
+
+        <div className="admin-card">
+          <h2>Live preview</h2>
+          {ticker.enabled ? (
+            <div className="ticker-preview">
+              <TickerBar />
+            </div>
+          ) : (
+            <div className="admin-note" style={{ margin: 0 }}>Ticker is currently off.</div>
+          )}
+        </div>
+
+        <div className="admin-note">
+          Moderators can edit custom ticker text. To change ticker mode, appearance, speed, or toggle on/off, contact a platform admin.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-page">
@@ -94,6 +138,36 @@ export function AdminTicker() {
           </div>
           <div className="form-hint">Normal shows bright white text. Alert switches the whole bar to an urgent red treatment for warnings.</div>
         </div>
+
+        <div className="form-group">
+          <label className="form-label">Font weight</label>
+          <div className="ticker-dir-toggle">
+            <button className={`btn btn-small${!ticker.fontBold ? ' btn-primary' : ' btn-secondary'}`} onClick={() => updateTicker({ fontBold: false })}>
+              Normal
+            </button>
+            <button className={`btn btn-small${ticker.fontBold ? ' btn-primary' : ' btn-secondary'}`} onClick={() => updateTicker({ fontBold: true })}>
+              Bold
+            </button>
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Text colour</label>
+          <div className="ticker-dir-toggle">
+            {([['white', '#fff', 'White'], ['green', '#22c55e', 'Green'], ['yellow', '#eab308', 'Yellow'], ['red', '#ef4444', 'Red']] as const).map(([val, hex, lbl]) => (
+              <button
+                key={val}
+                className={`btn btn-small${ticker.fontColor === val ? ' btn-primary' : ' btn-secondary'}`}
+                onClick={() => updateTicker({ fontColor: val })}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: hex, border: '1px solid rgba(255,255,255,.2)', flexShrink: 0 }} />
+                {lbl}
+              </button>
+            ))}
+          </div>
+          <div className="form-hint">Set the ticker text colour for emphasis. Use red/yellow for urgent alerts, green for positive updates.</div>
+        </div>
       </div>
 
       {/* Motion */}
@@ -113,16 +187,16 @@ export function AdminTicker() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Speed — {ticker.speedSeconds}s per loop {ticker.speedSeconds <= 25 ? '(fast)' : ticker.speedSeconds >= 60 ? '(slow)' : '(medium)'}</label>
-          <input
-            type="range"
-            min={15}
-            max={90}
-            step={5}
-            value={ticker.speedSeconds}
-            onChange={(e) => updateTicker({ speedSeconds: Number(e.target.value) })}
-            style={{ width: '100%' }}
-          />
+          <label className="form-label">Speed</label>
+          <div className="ticker-dir-toggle">
+            <button className={`btn btn-small${ticker.speedSeconds <= 45 ? ' btn-primary' : ' btn-secondary'}`} onClick={() => updateTicker({ speedSeconds: 45 })}>
+              Normal speed
+            </button>
+            <button className={`btn btn-small${ticker.speedSeconds > 45 ? ' btn-primary' : ' btn-secondary'}`} onClick={() => updateTicker({ speedSeconds: 68 })}>
+              Slower (50%)
+            </button>
+          </div>
+          <div className="form-hint">Normal is the standard news ticker pace. Slower gives readers 50% more time per headline.</div>
         </div>
       </div>
 

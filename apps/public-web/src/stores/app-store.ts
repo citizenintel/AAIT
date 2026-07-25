@@ -84,6 +84,8 @@ export interface TickerConfig {
   direction: 'ltr' | 'rtl';
   speedSeconds: number;
   tone: 'normal' | 'alert';
+  fontBold: boolean;
+  fontColor: 'white' | 'green' | 'yellow' | 'red';
 }
 
 interface AuthUser {
@@ -464,6 +466,8 @@ export const useAppStore = create<AppStore>()(
       direction: 'rtl',
       speedSeconds: 45,
       tone: 'normal',
+      fontBold: false,
+      fontColor: 'white',
     },
     updateTicker: (patch) => set((s) => { Object.assign(s.ticker, patch); }),
 

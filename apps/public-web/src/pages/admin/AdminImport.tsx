@@ -43,6 +43,13 @@ interface AISortedRow {
   module: string;
   severity: string;
   warnings: string[];
+  flags: AIFlag[];
+}
+
+interface AIFlag {
+  type: 'gap' | 'inaccurate' | 'fake_news' | 'suspicious';
+  field: string;
+  message: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +120,29 @@ const SEVERITY_KEYWORDS: Record<string, string[]> = {
 
 const PROVINCES = ['Gauteng', 'Limpopo', 'Mpumalanga', 'North West', 'Free State', 'KwaZulu-Natal', 'Eastern Cape', 'Western Cape', 'Northern Cape'];
 
+const FAKE_NEWS_SIGNALS: string[] = [
+  'share before they delete', 'they don\'t want you to know', 'wake up', 'mainstream media won\'t tell',
+  'forwarded as received', 'please share', 'this is being suppressed', 'unconfirmed but', 'a friend told me',
+  'reportedly', 'allegedly happened', 'sources say', 'whatsapp', 'sent via whatsapp',
+];
+
+const SUSPICIOUS_DOMAINS: string[] = [
+  'bit.ly', 'tinyurl', 'goo.gl', 't.co', 'ow.ly',
+];
+
+function detectFakeNewsSignals(text: string): string[] {
+  const lower = text.toLowerCase();
+  const hits: string[] = [];
+  for (const sig of FAKE_NEWS_SIGNALS) {
+    if (lower.includes(sig)) hits.push(sig);
+  }
+  for (const d of SUSPICIOUS_DOMAINS) {
+    if (lower.includes(d)) hits.push(`contains short URL (${d})`);
+  }
+  if (/!!{2,}|\?{3,}|[A-Z]{10,}/.test(text)) hits.push('excessive punctuation or all-caps');
+  return hits;
+}
+
 function classifyModule(text: string): string {
   const lower = text.toLowerCase();
   let best = 'ait';
@@ -177,10 +207,14 @@ function aiSortRow(
   const publicFields: Record<string, string> = {};
   const confidentialFields: Record<string, string> = {};
   const warnings: string[] = [];
+  const flags: AIFlag[] = [];
 
   for (const f of TARGET_FIELDS) {
     const val = get(f.key);
-    if (!val) continue;
+    if (!val) {
+      flags.push({ type: 'gap', field: f.label, message: `No data provided for "${f.label}" — left blank` });
+      continue;
+    }
     if (f.confidential) {
       confidentialFields[f.label] = val;
     } else if (f.key === 'summary') {
@@ -205,13 +239,39 @@ function aiSortRow(
   if (extracted.length > 0) {
     warnings.push(`${extracted.length} PII item${extracted.length > 1 ? 's' : ''} extracted and moved to confidential`);
   }
-  if (!get('dateOccurred')) warnings.push('No date detected — review required');
-  if (!province) warnings.push('No province detected — manual assignment needed');
+  if (!get('dateOccurred')) {
+    warnings.push('No date detected — review required');
+    flags.push({ type: 'gap', field: 'Date', message: 'No date found in submission — left blank for admin review' });
+  }
+  if (!province) {
+    warnings.push('No province detected — manual assignment needed');
+    flags.push({ type: 'gap', field: 'Province', message: 'Province could not be determined — left blank' });
+  }
+
+  const fakeSignals = detectFakeNewsSignals(allText);
+  if (fakeSignals.length > 0) {
+    flags.push({ type: 'fake_news', field: 'Content', message: `Possible fake/unverified content: ${fakeSignals.join(', ')}` });
+    warnings.push(`Fake news signals detected (${fakeSignals.length})`);
+  }
+
+  const dateVal = get('dateOccurred');
+  if (dateVal) {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) {
+      flags.push({ type: 'inaccurate', field: 'Date', message: `Date "${dateVal}" is not a valid date format` });
+    } else if (d.getTime() > Date.now() + 86400000) {
+      flags.push({ type: 'inaccurate', field: 'Date', message: `Date "${dateVal}" is in the future — likely incorrect` });
+    }
+  }
+
+  if (summary.length < 15 && summary.length > 0) {
+    flags.push({ type: 'suspicious', field: 'Summary', message: 'Very short description — may lack useful detail' });
+  }
 
   const mappedFields = Object.values(mapping).filter(v => v >= 0).length;
   const confidence = Math.min(100, Math.round((mappedFields / TARGET_FIELDS.length) * 80 + (province ? 10 : 0) + (get('dateOccurred') ? 10 : 0)));
 
-  return { public: publicFields, confidential: confidentialFields, rawRow: row, confidence, module, severity, warnings };
+  return { public: publicFields, confidential: confidentialFields, rawRow: row, confidence, module, severity, warnings, flags };
 }
 
 // ---------------------------------------------------------------------------
@@ -461,13 +521,19 @@ export function AdminImport() {
     const severities: Record<string, number> = {};
     let piiCount = 0;
     let warningCount = 0;
+    let flagCount = 0;
+    let fakeNewsCount = 0;
+    let gapCount = 0;
     for (const r of sortedRows) {
       modules[r.module] = (modules[r.module] ?? 0) + 1;
       severities[r.severity] = (severities[r.severity] ?? 0) + 1;
       if (Object.keys(r.confidential).length > 0) piiCount++;
       warningCount += r.warnings.length;
+      flagCount += r.flags.length;
+      fakeNewsCount += r.flags.filter(f => f.type === 'fake_news').length;
+      gapCount += r.flags.filter(f => f.type === 'gap').length;
     }
-    return { modules, severities, piiCount, warningCount, avgConfidence: Math.round(sortedRows.reduce((s, r) => s + r.confidence, 0) / sortedRows.length) };
+    return { modules, severities, piiCount, warningCount, flagCount, fakeNewsCount, gapCount, avgConfidence: Math.round(sortedRows.reduce((s, r) => s + r.confidence, 0) / sortedRows.length) };
   }, [sortedRows]);
 
   const oversizedAttachments = attachments.filter(a => a.sizeBytes > MAX_IMAGE_BYTES);
@@ -687,6 +753,16 @@ export function AdminImport() {
                     <div style={{ fontSize: 20, fontWeight: 700, color: '#38a169' }}>{stats.avgConfidence}%</div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Avg confidence</div>
                   </div>
+                  {stats.fakeNewsCount > 0 && (
+                    <div style={{ background: '#ef444422', padding: '10px 12px', borderRadius: 6, border: '1px solid #ef444444' }}>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: '#ef4444' }}>{stats.fakeNewsCount}</div>
+                      <div style={{ fontSize: 11, color: '#ef4444' }}>Fake news flags</div>
+                    </div>
+                  )}
+                  <div style={{ background: 'var(--bg-elevated)', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-secondary)' }}>{stats.gapCount}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Data gaps (blank)</div>
+                  </div>
                 </div>
 
                 {/* Module breakdown */}
@@ -760,6 +836,12 @@ export function AdminImport() {
                             {row.public['Summary / notes'] || row.public['Location / where'] || row.rawRow[0] || '—'}
                           </span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {row.flags.some(f => f.type === 'fake_news') && (
+                              <span title="Possible fake news detected" style={{ fontSize: 10, color: '#ef4444', fontWeight: 700 }}>🚩 FAKE?</span>
+                            )}
+                            {row.flags.some(f => f.type === 'inaccurate') && (
+                              <span title="Inaccurate data flagged" style={{ fontSize: 10, color: '#ef4444' }}>❌</span>
+                            )}
                             {row.warnings.length > 0 && (
                               <span title={row.warnings.join('\n')} style={{ fontSize: 10, color: '#d69e2e' }}>⚠ {row.warnings.length}</span>
                             )}
@@ -821,6 +903,27 @@ export function AdminImport() {
                                 </div>
                               )}
                             </div>
+
+                            {row.flags.length > 0 && (
+                              <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, color: 'var(--text-muted)' }}>
+                                  AI Flags — admin review required
+                                </div>
+                                {row.flags.map((flag, fi) => (
+                                  <div key={fi} style={{
+                                    fontSize: 11, padding: '4px 8px', borderRadius: 4, marginBottom: 3,
+                                    background: flag.type === 'fake_news' ? '#ef444418' : flag.type === 'inaccurate' ? '#ef444418' : flag.type === 'suspicious' ? '#f9731618' : 'var(--bg-elevated)',
+                                    color: flag.type === 'fake_news' ? '#ef4444' : flag.type === 'inaccurate' ? '#ef4444' : flag.type === 'suspicious' ? '#f97316' : 'var(--text-secondary)',
+                                    border: `1px solid ${flag.type === 'fake_news' || flag.type === 'inaccurate' ? '#ef444433' : flag.type === 'suspicious' ? '#f9731633' : 'var(--border)'}`,
+                                  }}>
+                                    <span style={{ fontWeight: 600 }}>
+                                      {flag.type === 'fake_news' ? '🚩 POSSIBLE FAKE' : flag.type === 'inaccurate' ? '❌ INACCURATE' : flag.type === 'suspicious' ? '⚠ SUSPICIOUS' : '○ GAP'}
+                                    </span>
+                                    {' — '}{flag.field}: {flag.message}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

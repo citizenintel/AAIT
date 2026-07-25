@@ -776,6 +776,11 @@ export function IntelligenceMap({
 
     const is3D = activeStyle === '3d';
     if (!is3D) disable3D(map);
+
+    const canvas = map.getCanvas();
+    canvas.style.transition = 'opacity 250ms ease';
+    canvas.style.opacity = '0.15';
+
     map.setStyle(MAP_STYLES[activeStyle]!);
 
     let tries = 0;
@@ -785,8 +790,12 @@ export function IntelligenceMap({
       if (measureRef.current.points.length > 0) updateMeasureGeometry(map, measureRef.current.points);
       if (is3D) enable3D(map);
       const applied = applyRoads(map, activeStyle, showRoadsRef.current);
-      if (!applied && tries < 6) { tries += 1; map.once('idle', reAdd); }
+      if (!applied && tries < 6) { tries += 1; map.once('idle', reAdd); return; }
       map.triggerRepaint();
+      requestAnimationFrame(() => {
+        canvas.style.opacity = '1';
+        setTimeout(() => { canvas.style.transition = ''; }, 300);
+      });
     };
     map.once('idle', reAdd);
     return () => { map.off('idle', reAdd); };
