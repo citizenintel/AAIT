@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0a1628"/>
+      <stop offset="40%" stop-color="#1a2744"/>
+      <stop offset="100%" stop-color="#2d3a52"/>
+    </linearGradient>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a3320"/>
+      <stop offset="100%" stop-color="#0d1a10"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="60%" r="40%">
+      <stop offset="0%" stop-color="#c9a84c" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#c9a84c" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="800" height="400" fill="url(#sky)"/>
+  <rect width="800" height="400" fill="url(#glow)"/>
+  <!-- Stars -->
+  <circle cx="120" cy="40" r="1" fill="#fff" opacity="0.6"/>
+  <circle cx="300" cy="25" r="1.2" fill="#fff" opacity="0.5"/>
+  <circle cx="500" cy="50" r="0.8" fill="#fff" opacity="0.7"/>
+  <circle cx="650" cy="30" r="1" fill="#fff" opacity="0.4"/>
+  <circle cx="750" cy="60" r="1.5" fill="#fff" opacity="0.3"/>
+  <circle cx="200" cy="70" r="0.7" fill="#fff" opacity="0.5"/>
+  <circle cx="420" cy="35" r="1.1" fill="#fff" opacity="0.6"/>
+  <!-- Horizon hills -->
+  <path d="M0 260 Q100 220 200 240 Q350 200 450 230 Q550 210 650 235 Q750 215 800 225 L800 400 L0 400Z" fill="#1a3320" opacity="0.8"/>
+  <path d="M0 280 Q150 250 300 265 Q450 240 550 260 Q700 245 800 255 L800 400 L0 400Z" fill="url(#ground)"/>
+  <!-- Farm fields pattern -->
+  <line x1="50" y1="300" x2="750" y2="295" stroke="#2a5030" stroke-width="0.5" opacity="0.4"/>
+  <line x1="50" y1="320" x2="750" y2="318" stroke="#2a5030" stroke-width="0.5" opacity="0.3"/>
+  <line x1="50" y1="340" x2="750" y2="340" stroke="#2a5030" stroke-width="0.5" opacity="0.2"/>
+  <!-- Farmhouse silhouette -->
+  <rect x="340" y="240" width="40" height="30" fill="#111a22"/>
+  <polygon points="335,240 380,240 360,220" fill="#111a22"/>
+  <rect x="355" y="252" width="8" height="18" fill="#c9a84c" opacity="0.3"/>
+  <!-- Windmill -->
+  <rect x="520" y="225" width="3" height="45" fill="#1a2530"/>
+  <circle cx="521" cy="225" r="12" fill="none" stroke="#1a2530" stroke-width="1.5"/>
+  <line x1="521" y1="213" x2="521" y2="237" stroke="#1a2530" stroke-width="1"/>
+  <line x1="509" y1="225" x2="533" y2="225" stroke="#1a2530" stroke-width="1"/>
+  <!-- Incident pins -->
+  <circle cx="180" cy="270" r="4" fill="#ef4444" opacity="0.8"/>
+  <circle cx="180" cy="270" r="7" fill="#ef4444" opacity="0.2"/>
+  <circle cx="450" cy="255" r="3" fill="#f59e0b" opacity="0.8"/>
+  <circle cx="450" cy="255" r="6" fill="#f59e0b" opacity="0.2"/>
+  <circle cx="650" cy="260" r="3.5" fill="#ef4444" opacity="0.7"/>
+  <circle cx="650" cy="260" r="6" fill="#ef4444" opacity="0.15"/>
+  <!-- Brand text -->
+  <text x="400" y="160" text-anchor="middle" fill="#c9a84c" font-family="system-ui,sans-serif" font-size="18" font-weight="700" letter-spacing="0.15em" opacity="0.9">INTELLIGENCE TWIN</text>
+  <text x="400" y="182" text-anchor="middle" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="10" letter-spacing="0.1em" opacity="0.7">FARM &amp; RURAL INCIDENT MONITORING</text>
+  <!-- Bottom fade -->
+  <rect x="0" y="370" width="800" height="30" fill="url(#sky)" opacity="0.5"/>
+</svg>

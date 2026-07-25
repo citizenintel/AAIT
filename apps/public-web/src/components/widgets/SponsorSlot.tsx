@@ -106,8 +106,8 @@ const PROMO_CARDS: PromoCard[] = [
 ];
 
 const HERO_IMAGES = [
-  { src: `${import.meta.env.BASE_URL}brand/hero-farm.jpg`, alt: 'Alt Afrikaner Incident Tracker — aerial farm view with incident pins' },
-  { src: `${import.meta.env.BASE_URL}brand/hero-command.jpg`, alt: 'Alt Afrikaner Incident Tracker — command center with SA incident map' },
+  { src: `${import.meta.env.BASE_URL}brand/hero-farm.svg`, alt: 'Intelligence Twin — farm and rural incident monitoring' },
+  { src: `${import.meta.env.BASE_URL}brand/hero-command.svg`, alt: 'Intelligence Twin — command center with SA incident map' },
 ];
 
 function SlotHeroImage({ slot }: { slot: number }) {

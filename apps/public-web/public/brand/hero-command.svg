@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0a0f1a"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <radialGradient id="mapGlow" cx="50%" cy="50%" r="45%">
+      <stop offset="0%" stop-color="#3182ce" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#3182ce" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="screenGlow" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#c9a84c" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#c9a84c" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="800" height="400" fill="url(#bg)"/>
+  <rect width="800" height="400" fill="url(#screenGlow)"/>
+  <!-- Grid overlay -->
+  <g opacity="0.06" stroke="#3182ce" stroke-width="0.5">
+    <line x1="0" y1="50" x2="800" y2="50"/><line x1="0" y1="100" x2="800" y2="100"/>
+    <line x1="0" y1="150" x2="800" y2="150"/><line x1="0" y1="200" x2="800" y2="200"/>
+    <line x1="0" y1="250" x2="800" y2="250"/><line x1="0" y1="300" x2="800" y2="300"/>
+    <line x1="0" y1="350" x2="800" y2="350"/>
+    <line x1="100" y1="0" x2="100" y2="400"/><line x1="200" y1="0" x2="200" y2="400"/>
+    <line x1="300" y1="0" x2="300" y2="400"/><line x1="400" y1="0" x2="400" y2="400"/>
+    <line x1="500" y1="0" x2="500" y2="400"/><line x1="600" y1="0" x2="600" y2="400"/>
+    <line x1="700" y1="0" x2="700" y2="400"/>
+  </g>
+  <!-- SA map outline (simplified) -->
+  <g transform="translate(200,80) scale(0.7)" fill="none" stroke="#3182ce" stroke-width="1.5" opacity="0.3">
+    <path d="M200,20 L280,15 L350,30 L400,25 L430,50 L450,100 L460,150 L440,200 L420,250 L380,290 L340,310 L280,330 L220,340 L180,335 L150,310 L120,280 L90,250 L70,200 L80,150 L100,100 L130,60 L160,35Z"/>
+  </g>
+  <rect width="800" height="400" fill="url(#mapGlow)"/>
+  <!-- Command center incident dots on map -->
+  <g transform="translate(200,80) scale(0.7)">
+    <circle cx="350" cy="120" r="5" fill="#ef4444" opacity="0.8"/>
+    <circle cx="350" cy="120" r="9" fill="#ef4444" opacity="0.15"/>
+    <circle cx="280" cy="180" r="4" fill="#f59e0b" opacity="0.8"/>
+    <circle cx="280" cy="180" r="7" fill="#f59e0b" opacity="0.15"/>
+    <circle cx="200" cy="250" r="3.5" fill="#3182ce" opacity="0.8"/>
+    <circle cx="200" cy="250" r="6" fill="#3182ce" opacity="0.15"/>
+    <circle cx="380" cy="200" r="4.5" fill="#ef4444" opacity="0.7"/>
+    <circle cx="380" cy="200" r="8" fill="#ef4444" opacity="0.12"/>
+    <circle cx="150" cy="160" r="3" fill="#38a169" opacity="0.8"/>
+    <circle cx="150" cy="160" r="5.5" fill="#38a169" opacity="0.15"/>
+    <circle cx="320" cy="260" r="3" fill="#f59e0b" opacity="0.7"/>
+    <circle cx="420" cy="160" r="3.5" fill="#9f7aea" opacity="0.7"/>
+  </g>
+  <!-- HUD elements — left panel -->
+  <rect x="30" y="60" width="120" height="80" rx="4" fill="#111827" stroke="#c9a84c" stroke-width="0.5" opacity="0.6"/>
+  <text x="40" y="80" fill="#c9a84c" font-family="monospace" font-size="7" opacity="0.8">LIVE INCIDENTS</text>
+  <text x="40" y="105" fill="#e2e8f0" font-family="monospace" font-size="22" font-weight="700" opacity="0.9">23</text>
+  <text x="40" y="118" fill="#ef4444" font-family="monospace" font-size="8" opacity="0.7">7 CRITICAL</text>
+  <text x="40" y="130" fill="#38a169" font-family="monospace" font-size="8" opacity="0.7">4 VERIFIED</text>
+  <!-- HUD — right panel -->
+  <rect x="650" y="60" width="120" height="80" rx="4" fill="#111827" stroke="#c9a84c" stroke-width="0.5" opacity="0.6"/>
+  <text x="660" y="80" fill="#c9a84c" font-family="monospace" font-size="7" opacity="0.8">PROVINCES</text>
+  <text x="660" y="105" fill="#e2e8f0" font-family="monospace" font-size="22" font-weight="700" opacity="0.9">9</text>
+  <text x="660" y="118" fill="#94a3b8" font-family="monospace" font-size="8" opacity="0.7">ALL ACTIVE</text>
+  <text x="660" y="130" fill="#3182ce" font-family="monospace" font-size="8" opacity="0.7">16 SOURCES</text>
+  <!-- Scanning line -->
+  <line x1="0" y1="200" x2="800" y2="200" stroke="#c9a84c" stroke-width="0.5" opacity="0.1"/>
+  <!-- Brand text -->
+  <text x="400" y="340" text-anchor="middle" fill="#c9a84c" font-family="system-ui,sans-serif" font-size="18" font-weight="700" letter-spacing="0.15em" opacity="0.9">INTELLIGENCE TWIN</text>
+  <text x="400" y="362" text-anchor="middle" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="10" letter-spacing="0.1em" opacity="0.7">COMMAND CENTER — SOUTH AFRICA INCIDENT MAP</text>
+  <!-- Corner brackets -->
+  <path d="M20,20 L20,40 M20,20 L40,20" stroke="#c9a84c" stroke-width="1" opacity="0.4"/>
+  <path d="M780,20 L780,40 M780,20 L760,20" stroke="#c9a84c" stroke-width="1" opacity="0.4"/>
+  <path d="M20,380 L20,360 M20,380 L40,380" stroke="#c9a84c" stroke-width="1" opacity="0.4"/>
+  <path d="M780,380 L780,360 M780,380 L760,380" stroke="#c9a84c" stroke-width="1" opacity="0.4"/>
+</svg>
