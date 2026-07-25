@@ -26,6 +26,8 @@ interface IntelligenceMapProps {
   selectedEventId: string | null;
   onEventSelect: (id: string | null) => void;
   currentTime: Date;
+  flyToCenter?: [number, number];
+  flyToZoom?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -274,6 +276,8 @@ export function IntelligenceMap({
   selectedEventId,
   onEventSelect,
   currentTime,
+  flyToCenter,
+  flyToZoom,
 }: IntelligenceMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -895,6 +899,20 @@ export function IntelligenceMap({
       essential: true,
     });
   }, [selectedEventId, events]);
+
+  // ------------------------------------------------------------------
+  // Fly to explicit center/zoom (used by BriefView chapters)
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !flyToCenter) return;
+    map.flyTo({
+      center: flyToCenter,
+      zoom: flyToZoom ?? 6,
+      duration: 2000,
+      essential: true,
+    });
+  }, [flyToCenter, flyToZoom]);
 
   // ------------------------------------------------------------------
   // Measure toggle / undo helpers

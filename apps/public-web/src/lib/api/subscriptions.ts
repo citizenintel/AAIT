@@ -6,7 +6,7 @@ let mockTiers: SubscriptionTier[] = MOCK_TIERS.map(t => ({ ...t, benefits: [...t
 let mockSubscribers: Subscriber[] = MOCK_SUBSCRIBERS.map(s => ({ ...s }));
 
 export async function fetchTiers(): Promise<SubscriptionTier[]> {
-  if (!isSupabaseConfigured()) return mockTiers;
+  if (!isSupabaseConfigured()) return mockTiers.map(t => ({ ...t, benefits: [...t.benefits] }));
 
   const { data, error } = await supabase
     .from('subscription_tiers')
@@ -18,7 +18,7 @@ export async function fetchTiers(): Promise<SubscriptionTier[]> {
 }
 
 export async function fetchSubscribers(): Promise<Subscriber[]> {
-  if (!isSupabaseConfigured()) return mockSubscribers;
+  if (!isSupabaseConfigured()) return mockSubscribers.map(s => ({ ...s }));
 
   const { data, error } = await supabase
     .from('subscribers')

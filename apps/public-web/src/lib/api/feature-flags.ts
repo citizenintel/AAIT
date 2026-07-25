@@ -30,7 +30,7 @@ const SEED_FLAGS: FeatureFlagRow[] = [
 let mockFlags: FeatureFlagRow[] = SEED_FLAGS.map(f => ({ ...f }));
 
 export async function fetchFeatureFlags(): Promise<FeatureFlagRow[]> {
-  if (!isSupabaseConfigured()) return mockFlags;
+  if (!isSupabaseConfigured()) return mockFlags.map(f => ({ ...f }));
 
   const { data, error } = await supabase
     .from('feature_flags')

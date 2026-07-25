@@ -18,7 +18,7 @@ export async function fetchNewsItems(limit = 50): Promise<NewsItem[]> {
 }
 
 export async function fetchRssFeeds(): Promise<RssFeedConfig[]> {
-  if (!isSupabaseConfigured()) return mockFeeds;
+  if (!isSupabaseConfigured()) return mockFeeds.map(f => ({ ...f }));
 
   const { data, error } = await supabase
     .from('rss_feeds')

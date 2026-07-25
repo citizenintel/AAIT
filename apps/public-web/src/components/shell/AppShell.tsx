@@ -43,7 +43,9 @@ export function AppShell() {
 
   const [lensOpen, setLensOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const lensRef = useRef<HTMLDivElement>(null);
+  const alertsRef = useRef<HTMLDivElement>(null);
 
   // Init: detect tier, hydrate, load mock data
   useEffect(() => {
@@ -84,10 +86,14 @@ export function AppShell() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  // Close lens dropdown on outside click
+  const alerts = useAppStore((s) => s.alerts);
+  const acknowledgeAlert = useAppStore((s) => s.acknowledgeAlert);
+
+  // Close lens/alerts dropdowns on outside click
   useEffect(() => {
     function handle(e: MouseEvent) {
       if (lensRef.current && !lensRef.current.contains(e.target as Node)) setLensOpen(false);
+      if (alertsRef.current && !alertsRef.current.contains(e.target as Node)) setAlertsOpen(false);
     }
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
@@ -181,12 +187,38 @@ export function AppShell() {
         <button className="header-nav-btn" onClick={() => navigate('/methodology')}>Methodology</button>
         <button className="header-nav-btn accent" onClick={() => navigate('/report')}>+ Report</button>
 
-        <button className="alert-indicator" data-critical={hasCritical}>
-          🔔
-          <span className="alert-count" data-severity={hasCritical ? 'critical' : undefined}>
-            {alertCount}
-          </span>
-        </button>
+        <div className="lens-selector" ref={alertsRef}>
+          <button className="alert-indicator" data-critical={hasCritical} onClick={() => setAlertsOpen(!alertsOpen)}>
+            🔔
+            <span className="alert-count" data-severity={hasCritical ? 'critical' : undefined}>
+              {alertCount}
+            </span>
+          </button>
+          {alertsOpen && (
+            <div className="lens-dropdown" style={{ right: 0, left: 'auto', minWidth: 280, maxHeight: 320, overflowY: 'auto' }}>
+              <div style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid var(--border)' }}>
+                Alerts {alertCount > 0 && `(${alertCount} new)`}
+              </div>
+              {alerts.length === 0 ? (
+                <div style={{ padding: '16px 12px', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>No alerts</div>
+              ) : (
+                alerts.slice(0, 10).map((a) => (
+                  <button
+                    key={a.id}
+                    className="lens-option"
+                    style={{ opacity: a.acknowledged ? 0.5 : 1 }}
+                    onClick={() => { acknowledgeAlert(a.id); if (a.eventId) { useAppStore.getState().selectEvent(a.eventId); setAlertsOpen(false); } }}
+                  >
+                    <span className="lens-option-name" style={{ color: a.severity === 'critical' ? '#ef4444' : a.severity === 'high' ? '#f59e0b' : 'var(--text-primary)' }}>
+                      {a.title}
+                    </span>
+                    <span className="lens-option-desc">{a.description.slice(0, 80)}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
 
         {isAuth ? (
           <button className="header-nav-btn" onClick={() => navigate('/admin')} title={`Logged in as ${user?.displayName}`}>

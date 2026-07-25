@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useAppStore } from '../../store/app-store';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
-import { MODULE_META, SEVERITY_META } from '../../data/mock-incidents';
+import { MODULE_META } from '../../data/mock-incidents';
 import { type SponsorAd } from '../../data/mock-sponsors';
 
 function SponsorIcon({ icon, color, size = 28 }: { icon: SponsorAd['icon']; color: string; size?: number }) {
@@ -14,129 +14,221 @@ function SponsorIcon({ icon, color, size = 28 }: { icon: SponsorAd['icon']; colo
   }
 }
 
-const INFOGRAPHIC_VARIANTS: readonly { type: 'severity' | 'module' | 'topProvince' | 'casualties' | 'recentCount' | 'verifiedPct' }[] = [
-  { type: 'severity' },
-  { type: 'module' },
-  { type: 'topProvince' },
-  { type: 'casualties' },
-  { type: 'recentCount' },
-  { type: 'verifiedPct' },
+// ---------------------------------------------------------------------------
+// SVG icons for internal promo cards
+// ---------------------------------------------------------------------------
+
+function PromoIcon({ type, color, size = 22 }: { type: string; color: string; size?: number }) {
+  const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  switch (type) {
+    case 'radar':
+      return <svg {...p}><circle cx="12" cy="12" r="10" opacity="0.3" /><circle cx="12" cy="12" r="6" opacity="0.5" /><circle cx="12" cy="12" r="2" fill={color} stroke="none" /><line x1="12" y1="2" x2="12" y2="12" strokeWidth="2" /></svg>;
+    case 'shield-check':
+      return <svg {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-4" strokeWidth="2" /></svg>;
+    case 'megaphone':
+      return <svg {...p}><path d="M3 11l18-5v14L3 15v-4z" /><path d="M11.6 16.8a3 3 0 01-5.2-1.8" /><line x1="21" y1="6" x2="21" y2="20" /></svg>;
+    case 'chart':
+      return <svg {...p}><rect x="3" y="12" width="4" height="9" rx="1" fill={color} opacity="0.3" /><rect x="10" y="8" width="4" height="13" rx="1" fill={color} opacity="0.5" /><rect x="17" y="4" width="4" height="17" rx="1" fill={color} opacity="0.7" /></svg>;
+    case 'heart':
+      return <svg {...p}><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" fill={color} opacity="0.2" /></svg>;
+    case 'map-pin':
+      return <svg {...p}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" fill={color} opacity="0.3" /></svg>;
+    default:
+      return <svg {...p}><circle cx="12" cy="12" r="10" /></svg>;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Internal promo card content
+// ---------------------------------------------------------------------------
+
+interface PromoCard {
+  icon: string;
+  accent: string;
+  badge: string;
+  title: string;
+  body: string;
+  footnote?: string;
+  cta?: string;
+  liveData?: boolean;
+}
+
+const PROMO_CARDS: PromoCard[] = [
+  {
+    icon: 'radar',
+    accent: '#c9a84c',
+    badge: 'INTELLIGENCE',
+    title: 'Intelligence Twin',
+    body: 'Real-time incident tracking across South Africa. Verified, cross-referenced, bias-assessed. Not what you think happened — what actually did.',
+    footnote: 'Independent. Data-driven. No agenda.',
+  },
+  {
+    icon: 'shield-check',
+    accent: '#38a169',
+    badge: 'VERIFIED',
+    title: 'Every Claim Checked',
+    body: 'Five-level verification pipeline. Multiple independent sources. No single-source claims published as fact.',
+    liveData: true,
+  },
+  {
+    icon: 'megaphone',
+    accent: '#4299e1',
+    badge: 'REPORT',
+    title: 'See Something? Report It',
+    body: 'Citizen reports are the backbone of ground truth. Your eyes matter more than any news feed. Secure, anonymous submission.',
+    cta: 'Submit a report →',
+  },
+  {
+    icon: 'chart',
+    accent: '#9f7aea',
+    badge: 'SUBSCRIBE',
+    title: 'Go Deeper',
+    body: 'Premium analytics, trend breakdowns, and AI-powered pattern detection. Research-grade data for those who need more than headlines.',
+    cta: 'View plans →',
+  },
+  {
+    icon: 'map-pin',
+    accent: '#ed8936',
+    badge: 'LIVE DATA',
+    title: 'Across All 9 Provinces',
+    body: 'Farm attacks, service delivery, infrastructure, unrest, crime — tracked by module, mapped by location, measured by change from baseline.',
+    liveData: true,
+  },
+  {
+    icon: 'heart',
+    accent: '#c9a84c',
+    badge: 'SPONSOR',
+    title: 'Advertise Here',
+    body: 'Want this spot? Contact Webadmin to rent it as a sponsor. Every bit helps — this is hard work, and unfortunately we can\'t do it for free, even though we\'d love to.',
+    footnote: 'Thank you for your support.',
+    cta: 'Become a sponsor →',
+  },
 ];
 
-function SlotInfoGraphic({ slot }: { slot: number }) {
+function SlotPromoCard({ slot }: { slot: number }) {
   const { incidents } = useIncidentData();
-  const variant = INFOGRAPHIC_VARIANTS[(slot - 1) % INFOGRAPHIC_VARIANTS.length]!;
+  const card = PROMO_CARDS[(slot - 1) % PROMO_CARDS.length]!;
 
-  const data = useMemo(() => {
-    const now = Date.now();
-    const recent = incidents.filter(i => now - new Date(i.dateOccurred).getTime() < 86400000);
-
-    const moduleCounts = Object.entries(MODULE_META).map(([key, meta]) => ({
-      label: meta.label, count: incidents.filter(i => i.module === key).length, colour: meta.colour,
-    })).sort((a, b) => b.count - a.count);
-
-    const provinceCounts: Record<string, number> = {};
-    for (const inc of incidents) {
-      provinceCounts[inc.province] = (provinceCounts[inc.province] ?? 0) + 1;
-    }
-    const topProvince = Object.entries(provinceCounts).sort(([, a], [, b]) => b - a)[0];
-
-    const deceased = incidents.reduce((s, i) => s + (i.casualties?.deceased ?? 0), 0);
-    const injured = incidents.reduce((s, i) => s + (i.casualties?.injured ?? 0), 0);
+  const liveStats = useMemo(() => {
+    if (!card.liveData) return null;
 
     const verified = incidents.filter(i => i.verification.startsWith('v4') || i.verification.startsWith('v5')).length;
     const verifiedPct = incidents.length > 0 ? Math.round((verified / incidents.length) * 100) : 0;
+    const provinces = new Set(incidents.map(i => i.province)).size;
+    const moduleCounts = Object.entries(MODULE_META).map(([key, meta]) => ({
+      label: meta.label, count: incidents.filter(i => i.module === key).length, colour: meta.colour,
+    })).filter(m => m.count > 0).sort((a, b) => b.count - a.count).slice(0, 3);
 
-    return {
-      recent,
-      criticalCount: incidents.filter(i => i.severity === 'critical').length,
-      highCount: incidents.filter(i => i.severity === 'high').length,
-      moduleCounts,
-      topProvince,
-      deceased,
-      injured,
-      verifiedPct,
-      total: incidents.length,
-    };
-  }, [incidents]);
+    return { total: incidents.length, verifiedPct, provinces, moduleCounts };
+  }, [incidents, card.liveData]);
 
-  const box: React.CSSProperties = {
-    background: 'var(--surface-1, var(--surface))',
-    border: '1px solid var(--border)',
-    borderRadius: 8,
-    padding: '10px 12px',
-    fontSize: 12,
-    lineHeight: 1.4,
-  };
-  const labelStyle: React.CSSProperties = { fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 };
-  const bigStat: React.CSSProperties = { fontSize: 22, fontWeight: 700, lineHeight: 1.1 };
-  const sub: React.CSSProperties = { fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 };
+  const bg = '#111827';
+  const borderColor = card.accent + '44';
 
-  switch (variant.type) {
-    case 'severity':
-      return (
-        <div className="sponsor-slot infographic" style={box}>
-          <div style={labelStyle}>Severity Snapshot</div>
-          <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
-            <span style={{ fontWeight: 700, color: SEVERITY_META.critical.colour }}>{data.criticalCount} critical</span>
-            <span style={{ fontWeight: 700, color: SEVERITY_META.high.colour }}>{data.highCount} high</span>
+  return (
+    <div
+      className="sponsor-slot promo-card"
+      style={{
+        background: `linear-gradient(135deg, ${bg} 0%, ${card.accent}11 100%)`,
+        border: `1px solid ${borderColor}`,
+        borderRadius: 8,
+        padding: '10px 12px',
+        fontSize: 11,
+        lineHeight: 1.45,
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Decorative corner glow */}
+      <div style={{
+        position: 'absolute', top: -20, right: -20, width: 60, height: 60,
+        background: `radial-gradient(circle, ${card.accent}18 0%, transparent 70%)`,
+        borderRadius: '50%', pointerEvents: 'none',
+      }} />
+
+      {/* Header row: icon + badge */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <PromoIcon type={card.icon} color={card.accent} size={20} />
+        <span style={{
+          fontSize: 8, fontWeight: 700, letterSpacing: '0.08em',
+          color: card.accent, textTransform: 'uppercase' as const,
+          background: card.accent + '15', padding: '2px 6px', borderRadius: 3,
+        }}>
+          {card.badge}
+        </span>
+      </div>
+
+      {/* Title */}
+      <div style={{
+        fontSize: 12, fontWeight: 700, color: '#e2e8f0',
+        marginBottom: 4, lineHeight: 1.2,
+      }}>
+        {card.title}
+      </div>
+
+      {/* Body */}
+      <div style={{ fontSize: 10.5, color: '#94a3b8', lineHeight: 1.5, marginBottom: liveStats ? 6 : 4 }}>
+        {card.body}
+      </div>
+
+      {/* Live data strip */}
+      {liveStats && card.icon === 'shield-check' && (
+        <div style={{
+          display: 'flex', gap: 10, padding: '5px 0', marginBottom: 2,
+          borderTop: `1px solid ${borderColor}`,
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: card.accent }}>{liveStats.verifiedPct}%</div>
+            <div style={{ fontSize: 8, color: '#64748b', textTransform: 'uppercase' as const }}>verified</div>
           </div>
-          <div style={sub}>{data.total} total incidents tracked</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0' }}>{liveStats.total}</div>
+            <div style={{ fontSize: 8, color: '#64748b', textTransform: 'uppercase' as const }}>tracked</div>
+          </div>
         </div>
-      );
-    case 'module': {
-      const top3 = data.moduleCounts.slice(0, 3);
-      return (
-        <div className="sponsor-slot infographic" style={box}>
-          <div style={labelStyle}>Top Modules</div>
-          {top3.map(m => (
-            <div key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-              <span style={{ fontSize: 10, width: 70, flexShrink: 0, color: 'var(--text-secondary)' }}>{m.label}</span>
-              <div style={{ flex: 1, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ width: `${Math.min(100, data.total > 0 ? (m.count / data.total) * 100 : 0)}%`, height: '100%', background: m.colour, borderRadius: 3 }} />
-              </div>
-              <span style={{ fontSize: 10, fontWeight: 600, width: 20, textAlign: 'right' }}>{m.count}</span>
+      )}
+
+      {liveStats && card.icon === 'map-pin' && (
+        <div style={{ borderTop: `1px solid ${borderColor}`, paddingTop: 5, marginBottom: 2 }}>
+          {liveStats.moduleCounts.map(m => (
+            <div key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: m.colour, flexShrink: 0 }} />
+              <span style={{ fontSize: 9, color: '#94a3b8', flex: 1 }}>{m.label}</span>
+              <span style={{ fontSize: 9, fontWeight: 600, color: '#e2e8f0' }}>{m.count}</span>
             </div>
           ))}
+          <div style={{ fontSize: 8, color: '#64748b', marginTop: 3 }}>{liveStats.provinces} provinces active</div>
         </div>
-      );
-    }
-    case 'topProvince':
-      return (
-        <div className="sponsor-slot infographic" style={box}>
-          <div style={labelStyle}>Most Active Province</div>
-          <div style={bigStat}>{data.topProvince?.[0] ?? '—'}</div>
-          <div style={sub}>{data.topProvince?.[1] ?? 0} incidents</div>
+      )}
+
+      {/* CTA */}
+      {card.cta && (
+        <div style={{
+          fontSize: 9, fontWeight: 600, color: card.accent,
+          marginTop: 2, letterSpacing: '0.02em',
+          cursor: 'default',
+        }}>
+          {card.cta}
         </div>
-      );
-    case 'casualties':
-      return (
-        <div className="sponsor-slot infographic" style={box}>
-          <div style={labelStyle}>Casualties</div>
-          <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
-            <span style={{ fontWeight: 700, color: '#c53030' }}>{data.deceased} deceased</span>
-            <span style={{ fontWeight: 700, color: '#ed8936' }}>{data.injured} injured</span>
-          </div>
-          <div style={sub}>All tracked incidents</div>
+      )}
+
+      {/* Footnote */}
+      {card.footnote && (
+        <div style={{ fontSize: 8.5, color: '#64748b', fontStyle: 'italic', marginTop: 3 }}>
+          {card.footnote}
         </div>
-      );
-    case 'recentCount':
-      return (
-        <div className="sponsor-slot infographic" style={box}>
-          <div style={labelStyle}>Last 24 Hours</div>
-          <div style={bigStat}>{data.recent.length}</div>
-          <div style={sub}>incidents reported</div>
-        </div>
-      );
-    case 'verifiedPct':
-      return (
-        <div className="sponsor-slot infographic" style={box}>
-          <div style={labelStyle}>Verification Rate</div>
-          <div style={bigStat}>{data.verifiedPct}%</div>
-          <div style={sub}>of incidents fully verified</div>
-        </div>
-      );
-  }
+      )}
+
+      {/* AAIT badge */}
+      <div style={{
+        position: 'absolute', bottom: 4, right: 6,
+        fontSize: 7, fontWeight: 700, letterSpacing: '0.12em',
+        color: card.accent + '55',
+      }}>
+        AAIT
+      </div>
+    </div>
+  );
 }
 
 export function SponsorSlot({ slot }: { slot: 1 | 2 | 3 | 4 | 5 | 6 }) {
@@ -145,7 +237,7 @@ export function SponsorSlot({ slot }: { slot: 1 | 2 | 3 | 4 | 5 | 6 }) {
   const campaign = campaigns.find((c) => c.placement === `slot-${slot}` && c.status === 'active');
 
   if (!sponsorsEnabled || !campaign) {
-    return <SlotInfoGraphic slot={slot} />;
+    return <SlotPromoCard slot={slot} />;
   }
 
   const ad = {

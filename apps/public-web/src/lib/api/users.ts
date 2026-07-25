@@ -31,7 +31,7 @@ function getMockRows(): UserRow[] {
 }
 
 export async function fetchUsers(): Promise<UserRow[]> {
-  if (!isSupabaseConfigured()) return getMockRows();
+  if (!isSupabaseConfigured()) return getMockRows().map(u => ({ ...u, permissions: [...u.permissions] }));
 
   const { data: profiles, error } = await supabase
     .from('profiles')

@@ -104,6 +104,31 @@ export function BriefView() {
 
   const highlightedId = chapter?.highlightedEventIds[0] ?? null;
 
+  const exportBrief = useCallback(() => {
+    if (chapters.length === 0) return;
+    const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const lines = [
+      `INTELLIGENCE TWIN — BRIEFING`,
+      `Audience: ${audience}`,
+      `Generated: ${now}`,
+      `Chapters: ${chapters.length}`,
+      '',
+      ...chapters.map((ch, i) => [
+        `--- Chapter ${i + 1}: ${ch.title} ---`,
+        ch.narrative,
+        '',
+      ]).flat(),
+      `--- END OF BRIEFING ---`,
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `briefing-${audience.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [chapters, audience]);
+
   if (chapters.length === 0) {
     return (
       <div className="brief-view">
@@ -129,6 +154,8 @@ export function BriefView() {
           selectedEventId={highlightedId}
           onEventSelect={selectEvent}
           currentTime={currentTime}
+          flyToCenter={chapter?.center}
+          flyToZoom={chapter?.zoom}
         />
 
         {chapter && (
@@ -187,6 +214,7 @@ export function BriefView() {
           className="time-scrubber-btn"
           style={{ width: 'auto', padding: '0 var(--sp-3)', fontSize: 'var(--text-xs)' }}
           title="Export Report"
+          onClick={exportBrief}
         >
           Export
         </button>

@@ -34,6 +34,13 @@ export function AdminFeeds() {
     } catch { /* errors surfaced on next refetch */ }
   };
 
+  const fetchNow = async (id: string) => {
+    try {
+      await updateRssFeed(id, { lastFetched: new Date().toISOString() });
+      refetch();
+    } catch { /* errors surfaced on next refetch */ }
+  };
+
   const feedList = feeds ?? [];
   const enabledCount = feedList.filter(f => f.enabled).length;
   const totalArticles = feedList.reduce((s, f) => s + f.articleCount, 0);
@@ -138,7 +145,7 @@ export function AdminFeeds() {
                 <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{timeAgo(feed.lastFetched)}</td>
                 <td>
                   <div style={{ display: 'flex', gap: 4 }}>
-                    <button className="btn btn-small">Fetch now</button>
+                    <button className="btn btn-small" onClick={() => fetchNow(feed.id)}>Fetch now</button>
                     <button className="btn btn-small btn-danger" onClick={() => removeFeed(feed.id)}>Delete</button>
                   </div>
                 </td>
