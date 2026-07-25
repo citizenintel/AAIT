@@ -316,6 +316,16 @@ export function MapView() {
     map.setStyle(MAP_STYLES[activeStyle]!);
     map.triggerRepaint();
 
+    const showCanvas = () => {
+      requestAnimationFrame(() => {
+        canvas.style.opacity = '1';
+        setTimeout(() => { canvas.style.transition = ''; }, 300);
+      });
+    };
+
+    // Failsafe: always show canvas within 3s even if idle never fires
+    const failsafe = setTimeout(showCanvas, 3000);
+
     let tries = 0;
     const reAdd = () => {
       addMeasureLayers(map);
@@ -324,23 +334,11 @@ export function MapView() {
       if (is3D) enable3D(map);
       const applied = applyRoads(map, activeStyle, showRoadsRef.current);
       if (!applied && tries < 6) { tries += 1; map.once('idle', reAdd); return; }
-      const fadeIn = () => {
-        const allLoaded = Object.keys(map.getStyle()?.sources ?? {}).every(s => {
-          try { return map.isSourceLoaded(s); } catch { return true; }
-        });
-        if (allLoaded) {
-          requestAnimationFrame(() => {
-            canvas.style.opacity = '1';
-            setTimeout(() => { canvas.style.transition = ''; }, 300);
-          });
-        } else {
-          map.once('idle', fadeIn);
-        }
-      };
-      fadeIn();
+      clearTimeout(failsafe);
+      showCanvas();
     };
     map.once('idle', reAdd);
-    return () => { map.off('idle', reAdd); };
+    return () => { map.off('idle', reAdd); clearTimeout(failsafe); };
   }, [activeStyle, addMeasureLayers, updateMeasureGeometry, enable3D, disable3D, applyRoads]);
 
   // Roads toggle — apply immediately if the style is ready, otherwise the style
