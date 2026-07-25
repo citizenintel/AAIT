@@ -474,7 +474,7 @@ export function IntelligenceMap({
       });
     }
     if (map.getZoom() < 7) {
-      map.flyTo({ center: [28.92, -29.55], zoom: 9, pitch: 78, bearing: 18, duration: 2400, essential: true });
+      map.flyTo({ center: [18.45, -33.96], zoom: 11, pitch: 76, bearing: -30, duration: 2800, essential: true });
     } else {
       map.easeTo({ pitch: 78, duration: 1000 });
     }
