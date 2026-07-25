@@ -29,8 +29,8 @@ function satelliteStyle(): maplibregl.StyleSpecification {
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#0a1a2e' } },
-      { id: 'satellite-tiles', type: 'raster', source: 'esri-satellite' },
-      { id: 'label-tiles', type: 'raster', source: 'carto-labels' },
+      { id: 'satellite-tiles', type: 'raster', source: 'esri-satellite', paint: { 'raster-fade-duration': 300 } },
+      { id: 'label-tiles', type: 'raster', source: 'carto-labels', paint: { 'raster-fade-duration': 300 } },
     ],
   } satisfies maplibregl.StyleSpecification;
 }
@@ -55,7 +55,7 @@ const MAP_STYLES: Record<string, string | maplibregl.StyleSpecification> = {
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#d4c6a1' } },
-      { id: 'topo-tiles', type: 'raster', source: 'opentopomap' },
+      { id: 'topo-tiles', type: 'raster', source: 'opentopomap', paint: { 'raster-fade-duration': 300 } },
     ],
   } satisfies maplibregl.StyleSpecification,
   satellite: satelliteStyle(),
@@ -324,10 +324,20 @@ export function MapView() {
       if (is3D) enable3D(map);
       const applied = applyRoads(map, activeStyle, showRoadsRef.current);
       if (!applied && tries < 6) { tries += 1; map.once('idle', reAdd); return; }
-      requestAnimationFrame(() => {
-        canvas.style.opacity = '1';
-        setTimeout(() => { canvas.style.transition = ''; }, 300);
-      });
+      const fadeIn = () => {
+        const allLoaded = Object.keys(map.getStyle()?.sources ?? {}).every(s => {
+          try { return map.isSourceLoaded(s); } catch { return true; }
+        });
+        if (allLoaded) {
+          requestAnimationFrame(() => {
+            canvas.style.opacity = '1';
+            setTimeout(() => { canvas.style.transition = ''; }, 300);
+          });
+        } else {
+          map.once('idle', fadeIn);
+        }
+      };
+      fadeIn();
     };
     map.once('idle', reAdd);
     return () => { map.off('idle', reAdd); };
