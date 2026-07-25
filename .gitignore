@@ -14,6 +14,7 @@ coverage/
 apps/public-web/src/**/*.js
 apps/public-web/src/**/*.js.map
 apps/public-web/src/**/*.d.ts
+!apps/public-web/src/vite-env.d.ts
 apps/public-web/vite.config.js
 apps/public-web/vite.config.js.map
 apps/public-web/vite.config.d.ts
