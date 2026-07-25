@@ -96,6 +96,7 @@ export interface ModPermissions {
   reports: boolean;
   feeds: boolean;
   import: boolean;
+  exportPrint: boolean;
 }
 
 const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
@@ -106,6 +107,7 @@ const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
   reports: false,
   feeds: false,
   import: false,
+  exportPrint: false,
 };
 
 interface AuthUser {

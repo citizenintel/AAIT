@@ -2,6 +2,9 @@ import { useMemo, useState } from 'react';
 import { SEVERITY_META, MODULE_META, VERIFICATION_META } from '../../data/mock-incidents';
 import { fetchIncidents } from '@/lib/api/incidents';
 import { useQuery } from '@/lib/hooks/useQuery';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { useAppStore } from '@/stores/app-store';
+import { exportCsv, exportXls, exportDocx } from '@/lib/utils/report-export';
 
 const ALL = 'All';
 
@@ -25,6 +28,8 @@ function defaultCols(): Record<ColKey, boolean> {
 
 export function AdminReports() {
   const { data: incidents, loading, error } = useQuery(fetchIncidents, []);
+  const { user } = useAuth();
+  const modPermissions = useAppStore((s) => s.modPermissions);
 
   const [province, setProvince] = useState(ALL);
   const [moduleFilter, setModuleFilter] = useState(ALL);
@@ -34,6 +39,12 @@ export function AdminReports() {
   const [keyword, setKeyword] = useState('');
   const [includeSynthetic, setIncludeSynthetic] = useState(true);
   const [visibleCols, setVisibleCols] = useState<Record<ColKey, boolean>>(defaultCols);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  const isModerator = user?.role === 'moderator';
+  const isAdmin = user?.role === 'system_administrator';
+  const userPerms = isModerator && user?.email ? modPermissions[user.email] : null;
+  const canExport = isAdmin || (isModerator && userPerms?.exportPrint === true);
 
   const toggleCol = (key: ColKey) =>
     setVisibleCols((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -90,6 +101,27 @@ export function AdminReports() {
   if (keyword) scopeParts.push(`"${keyword}"`);
   const scopeLabel = scopeParts.length ? scopeParts.join(' / ') : 'All incidents';
 
+  const activeCols = COL_DEFS.filter(c => visibleCols[c.key]).map(c => c.key);
+
+  const exportMeta = { moduleMeta: MODULE_META, severityMeta: SEVERITY_META, verificationMeta: VERIFICATION_META };
+  const exportStats = {
+    total: rows.length,
+    critical: stats.bySeverity['critical'] ?? 0,
+    deceased: stats.deceased,
+    injured: stats.injured,
+    byModule: stats.byModule,
+    bySeverity: stats.bySeverity,
+  };
+
+  const handleExport = (format: 'csv' | 'xls' | 'docx') => {
+    setShowExportMenu(false);
+    switch (format) {
+      case 'csv': return exportCsv(rows, activeCols, exportMeta, scopeLabel);
+      case 'xls': return exportXls(rows, activeCols, exportMeta, exportStats, scopeLabel);
+      case 'docx': return exportDocx(rows, activeCols, exportMeta, exportStats, scopeLabel);
+    }
+  };
+
   if (loading) return <div className="admin-page"><p>Loading report data...</p></div>;
   if (error) return <div className="admin-page"><p className="error-text">Error loading data: {error}</p></div>;
 
@@ -97,7 +129,7 @@ export function AdminReports() {
     <div className="admin-page">
       <div className="admin-page-header no-print">
         <h1>Reports</h1>
-        <p>Generate a formatted incident report. Print it, or use your browser's print dialog to save as PDF.</p>
+        <p>Generate a formatted incident report. {canExport ? 'Print, export, or save as PDF.' : 'View report data below.'}</p>
       </div>
 
       <div className="admin-card no-print">
@@ -162,12 +194,84 @@ export function AdminReports() {
             <span className="toggle-label">Include synthetic test data</span>
           </label>
 
-          <button className="btn btn-primary" style={{ alignSelf: 'flex-end' }} onClick={() => window.print()}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: '-2px' }}>
-              <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" />
-            </svg>
-            Print / Save as PDF
-          </button>
+          {canExport && (
+            <div style={{ display: 'flex', gap: 6, alignSelf: 'flex-end', flexWrap: 'wrap' }}>
+              <button className="btn btn-primary" onClick={() => window.print()}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: '-2px' }}>
+                  <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" />
+                </svg>
+                Print / PDF
+              </button>
+              <div style={{ position: 'relative' }}>
+                <button className="btn btn-secondary" onClick={() => setShowExportMenu(!showExportMenu)}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: '-2px' }}>
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                  </svg>
+                  Export
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 4, verticalAlign: '-1px' }}>
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+                {showExportMenu && (
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: 4, minWidth: 180,
+                    background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.3)', zIndex: 50, overflow: 'hidden',
+                  }}>
+                    <button
+                      className="export-menu-item"
+                      onClick={() => handleExport('csv')}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13, textAlign: 'left' }}
+                      onMouseOver={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                      onMouseOut={(e) => (e.currentTarget.style.background = 'none')}
+                    >
+                      <span style={{ width: 32, height: 20, background: '#38a169', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 9, fontWeight: 700, letterSpacing: 0.5 }}>CSV</span>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>Comma-separated values</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Plain data, opens in any spreadsheet</div>
+                      </div>
+                    </button>
+                    <button
+                      className="export-menu-item"
+                      onClick={() => handleExport('xls')}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13, textAlign: 'left' }}
+                      onMouseOver={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                      onMouseOut={(e) => (e.currentTarget.style.background = 'none')}
+                    >
+                      <span style={{ width: 32, height: 20, background: '#2b6cb0', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 9, fontWeight: 700, letterSpacing: 0.5 }}>XLS</span>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>Excel spreadsheet</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Formatted table with summary stats</div>
+                      </div>
+                    </button>
+                    <button
+                      className="export-menu-item"
+                      onClick={() => handleExport('docx')}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13, textAlign: 'left' }}
+                      onMouseOver={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                      onMouseOut={(e) => (e.currentTarget.style.background = 'none')}
+                    >
+                      <span style={{ width: 32, height: 20, background: '#5a67d8', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 9, fontWeight: 700, letterSpacing: 0.5 }}>DOC</span>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>Word document</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Full report with branding and tables</div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!canExport && (
+            <div style={{ alignSelf: 'flex-end', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 6, border: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4, verticalAlign: '-2px' }}>
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0110 0v4" />
+              </svg>
+              Print &amp; export is a premium feature
+            </div>
+          )}
         </div>
 
         <div style={{ marginTop: 16 }}>

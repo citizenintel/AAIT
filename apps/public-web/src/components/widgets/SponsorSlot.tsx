@@ -105,6 +105,40 @@ const PROMO_CARDS: PromoCard[] = [
   },
 ];
 
+const HERO_IMAGES = [
+  { src: `${import.meta.env.BASE_URL}brand/hero-farm.jpg`, alt: 'Alt Afrikaner Incident Tracker — aerial farm view with incident pins' },
+  { src: `${import.meta.env.BASE_URL}brand/hero-command.jpg`, alt: 'Alt Afrikaner Incident Tracker — command center with SA incident map' },
+];
+
+function SlotHeroImage({ slot }: { slot: number }) {
+  const hero = HERO_IMAGES[(slot - 1) % HERO_IMAGES.length]!;
+
+  return (
+    <div
+      className="sponsor-slot hero-image-slot"
+      style={{
+        borderRadius: 8,
+        overflow: 'hidden',
+        position: 'relative',
+        border: '1px solid #c9a84c33',
+      }}
+    >
+      <img
+        src={hero.src}
+        alt={hero.alt}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          display: 'block',
+          minHeight: 120,
+        }}
+        loading="lazy"
+      />
+    </div>
+  );
+}
+
 function SlotPromoCard({ slot }: { slot: number }) {
   const { incidents } = useIncidentData();
   const card = PROMO_CARDS[(slot - 1) % PROMO_CARDS.length]!;
@@ -236,7 +270,11 @@ export function SponsorSlot({ slot }: { slot: 1 | 2 | 3 | 4 | 5 | 6 }) {
   const { campaigns } = useIncidentData();
   const campaign = campaigns.find((c) => c.placement === `slot-${slot}` && c.status === 'active');
 
-  if (!sponsorsEnabled || !campaign) {
+  if (!sponsorsEnabled) {
+    return <SlotHeroImage slot={slot} />;
+  }
+
+  if (!campaign) {
     return <SlotPromoCard slot={slot} />;
   }
 

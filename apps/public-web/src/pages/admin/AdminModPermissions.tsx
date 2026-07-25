@@ -10,6 +10,7 @@ const PERMISSION_LABELS: { key: keyof ModPermissions; label: string; desc: strin
   { key: 'reports', label: 'Reports', desc: 'Generate and print reports' },
   { key: 'feeds', label: 'News Feeds', desc: 'View feed sources and articles' },
   { key: 'import', label: 'Import Data', desc: 'Access the data import tool' },
+  { key: 'exportPrint', label: 'Print & Export', desc: 'Print reports and export as CSV, XLS, DOCX' },
 ];
 
 export function AdminModPermissions() {
