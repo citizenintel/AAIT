@@ -33,7 +33,7 @@ import '@/styles/widgets.css';
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
       <Routes>
         <Route path="/" element={<IncidentDataProvider><AppShell /></IncidentDataProvider>} />
         <Route path="/login" element={<LoginPage />} />

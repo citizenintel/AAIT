@@ -682,7 +682,7 @@ export function IntelligenceMap({
           `<span>${escapeHtml(String(p.town))}, ${escapeHtml(String(p.province))}</span>` +
           `</div>` +
           casualtyHtml +
-          `<div style="margin-top:8px"><a href="/incident/${escapeHtml(String(p.id))}" style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600">View full details →</a></div>` +
+          `<div style="margin-top:8px"><a href="${import.meta.env.BASE_URL}incident/${escapeHtml(String(p.id))}" style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600">View full details →</a></div>` +
           `</div>`,
         )
         .addTo(map);
