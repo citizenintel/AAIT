@@ -26,6 +26,7 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const { isAuthenticated, user, signOut } = useAuth();
   const modPermissions = useAppStore((s) => s.modPermissions);
+  const modEnabled = useAppStore((s) => s.modEnabled);
 
   useEffect(() => {
     if (!isAuthenticated) navigate('/login');
@@ -34,15 +35,18 @@ export function AdminLayout() {
   if (!isAuthenticated) return null;
 
   const isModerator = user?.role === 'moderator';
-  const userPerms = isModerator && user?.email ? modPermissions[user.email] : null;
+  const isModActive = isModerator && user?.email ? modEnabled[user.email] !== false : true;
+  const userPerms = isModerator && user?.email && isModActive ? modPermissions[user.email] : null;
 
   const visibleNav = isModerator
-    ? NAV_ITEMS.filter(item => {
-        if (item.adminOnly) return false;
-        if (item.modPermKey && userPerms) return userPerms[item.modPermKey];
-        if (item.modPermKey && !userPerms) return item.modPermKey === 'dashboard' || item.modPermKey === 'ticker';
-        return false;
-      })
+    ? isModActive
+      ? NAV_ITEMS.filter(item => {
+          if (item.adminOnly) return false;
+          if (item.modPermKey && userPerms) return userPerms[item.modPermKey];
+          if (item.modPermKey && !userPerms) return item.modPermKey === 'dashboard' || item.modPermKey === 'ticker';
+          return false;
+        })
+      : []
     : NAV_ITEMS;
 
   return (

@@ -255,7 +255,9 @@ interface AppStore {
 
   // --- Moderator permissions ---
   modPermissions: Record<string, ModPermissions>;
+  modEnabled: Record<string, boolean>;
   setModPermission: (email: string, key: keyof ModPermissions, value: boolean) => void;
+  setModEnabled: (email: string, enabled: boolean) => void;
   addModerator: (email: string) => void;
   removeModerator: (email: string) => void;
 
@@ -518,15 +520,23 @@ export const useAppStore = create<AppStore>()(
     modPermissions: {
       'mod.demo@example.com': { ...DEFAULT_MOD_PERMISSIONS },
     },
+    modEnabled: {
+      'mod.demo@example.com': true,
+    },
     setModPermission: (email, key, value) => set((s) => {
       if (!s.modPermissions[email]) s.modPermissions[email] = { ...DEFAULT_MOD_PERMISSIONS };
       s.modPermissions[email]![key] = value;
     }),
+    setModEnabled: (email, enabled) => set((s) => {
+      s.modEnabled[email] = enabled;
+    }),
     addModerator: (email) => set((s) => {
       if (!s.modPermissions[email]) s.modPermissions[email] = { ...DEFAULT_MOD_PERMISSIONS };
+      if (s.modEnabled[email] === undefined) s.modEnabled[email] = true;
     }),
     removeModerator: (email) => set((s) => {
       delete s.modPermissions[email];
+      delete s.modEnabled[email];
     }),
 
     // --- Feed freshness ---
