@@ -10,78 +10,51 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 jobs:
   build:
     name: Build & Typecheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: apps/public-web/package-lock.json
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm ci
-        working-directory: apps/public-web
+        run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: npx tsc -b --noEmit
-        working-directory: apps/public-web
+        run: pnpm typecheck
 
       - name: Build
-        run: npm run build
-        working-directory: apps/public-web
+        run: pnpm build
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: apps/public-web/dist
-          retention-days: 7
+      - name: Copy index.html to 404.html for SPA routing
+        run: cp apps/public-web/dist/index.html apps/public-web/dist/404.html
 
-  deploy-preview:
-    name: Deploy Preview
-    needs: build
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      deployments: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: dist
           path: apps/public-web/dist
 
-      - name: Deploy to Cloudflare Pages (Preview)
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy apps/public-web/dist --project-name=intelligence-twin --branch=${{ github.head_ref }}
-
-  deploy-production:
-    name: Deploy Production
+  deploy:
+    name: Deploy to GitHub Pages
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      deployments: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: apps/public-web/dist
-
-      - name: Deploy to Cloudflare Pages (Production)
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy apps/public-web/dist --project-name=intelligence-twin --branch=main
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

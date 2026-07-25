@@ -4,6 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 
 export default defineConfig({
+  base: process.env.GITHUB_ACTIONS ? '/AAIT/' : '/',
   plugins: [
     react(),
     VitePWA({
@@ -46,9 +47,6 @@ export default defineConfig({
     target: 'es2022',
   },
   optimizeDeps: {
-    esbuildOptions: {
-      target: 'es2022',
-    },
     exclude: ['@duckdb/duckdb-wasm', 'maplibre-gl'],
   },
   worker: {
