@@ -84,6 +84,7 @@ const FALLBACK_DARK_STYLE: maplibregl.StyleSpecification = {
       paint: {
         'raster-saturation': -0.8,
         'raster-brightness-max': 0.35,
+        'raster-fade-duration': 300,
       },
     },
   ],
@@ -116,8 +117,8 @@ function satelliteStyle(): maplibregl.StyleSpecification {
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#0a1a2e' } },
-      { id: 'satellite-tiles', type: 'raster', source: 'esri-satellite' },
-      { id: 'label-tiles', type: 'raster', source: 'carto-labels' },
+      { id: 'satellite-tiles', type: 'raster', source: 'esri-satellite', paint: { 'raster-fade-duration': 300 } },
+      { id: 'label-tiles', type: 'raster', source: 'carto-labels', paint: { 'raster-fade-duration': 300 } },
     ],
   } satisfies maplibregl.StyleSpecification;
 }
@@ -142,7 +143,7 @@ const MAP_STYLES: Record<string, string | maplibregl.StyleSpecification> = {
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#d4c6a1' } },
-      { id: 'topo-tiles', type: 'raster', source: 'opentopomap' },
+      { id: 'topo-tiles', type: 'raster', source: 'opentopomap', paint: { 'raster-fade-duration': 300 } },
     ],
   } satisfies maplibregl.StyleSpecification,
   satellite: satelliteStyle(),
@@ -560,14 +561,25 @@ export function IntelligenceMap({
 
     // If the remote style fails, switch to the fallback inline style
     let styleLoadFailed = false;
+    const switchToFallback = () => {
+      if (styleLoadFailed) return;
+      styleLoadFailed = true;
+      map.setStyle(FALLBACK_DARK_STYLE);
+    };
     map.on('error', (e: maplibregl.ErrorEvent) => {
-      if (!styleLoadFailed && (e as any).error?.message?.includes('style')) {
-        styleLoadFailed = true;
-        map.setStyle(FALLBACK_DARK_STYLE);
+      const msg = (e as any).error?.message ?? '';
+      if (!styleLoadFailed && (msg.includes('style') || msg.includes('fetch') || msg.includes('Failed') || msg.includes('HTTP'))) {
+        switchToFallback();
       }
     });
 
+    // Failsafe: if style hasn't loaded after 10s, switch to fallback
+    const styleFallbackTimer = setTimeout(() => {
+      if (!map.isStyleLoaded()) switchToFallback();
+    }, 10_000);
+
     map.on('load', () => {
+      clearTimeout(styleFallbackTimer);
       addSourceAndLayer(map);
       addMeasureLayers(map);
       tryAddDeckOverlay(map);
@@ -704,6 +716,7 @@ export function IntelligenceMap({
     ro.observe(containerRef.current);
 
     return () => {
+      clearTimeout(styleFallbackTimer);
       ro.disconnect();
       if (popupRef.current) popupRef.current.remove();
       map.remove();
@@ -798,7 +811,19 @@ export function IntelligenceMap({
       });
     };
     map.once('idle', reAdd);
-    return () => { map.off('idle', reAdd); };
+
+    // Failsafe: if idle never fires within 4s, force canvas visible
+    const failsafe = setTimeout(() => {
+      if (canvas.style.opacity !== '1') {
+        canvas.style.opacity = '1';
+        canvas.style.transition = '';
+        addSourceAndLayer(map);
+        addMeasureLayers(map);
+        if (is3D) enable3D(map);
+      }
+    }, 4000);
+
+    return () => { map.off('idle', reAdd); clearTimeout(failsafe); };
   }, [activeStyle, addSourceAndLayer, addMeasureLayers, updateMeasureGeometry, enable3D, disable3D, applyRoads]);
 
   // ------------------------------------------------------------------

@@ -122,6 +122,7 @@ export function MapView() {
   const showRoadsRef = useRef(showRoads);
   showRoadsRef.current = showRoads;
   const [show3DHint, setShow3DHint] = useState(false);
+  const didMount = useRef(false);
 
   const filters = useAppStore((s) => s.filters);
   const setSelectedIncident = useAppStore((s) => s.setSelectedIncident);
@@ -306,6 +307,13 @@ export function MapView() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+
+    // Skip on mount — the map constructor already set the initial style
+    if (!didMount.current) {
+      didMount.current = true;
+      return;
+    }
+
     const is3D = activeStyle === '3d';
     if (!is3D) disable3D(map);
 
@@ -323,7 +331,6 @@ export function MapView() {
       });
     };
 
-    // Failsafe: always show canvas within 3s even if idle never fires
     const failsafe = setTimeout(showCanvas, 3000);
 
     let tries = 0;
