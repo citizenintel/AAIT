@@ -88,6 +88,26 @@ export interface TickerConfig {
   fontColor: 'white' | 'green' | 'yellow' | 'red';
 }
 
+export interface ModPermissions {
+  dashboard: boolean;
+  ticker: boolean;
+  incidents: boolean;
+  submissions: boolean;
+  reports: boolean;
+  feeds: boolean;
+  import: boolean;
+}
+
+const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
+  dashboard: true,
+  ticker: true,
+  incidents: false,
+  submissions: false,
+  reports: false,
+  feeds: false,
+  import: false,
+};
+
 interface AuthUser {
   id: string;
   email: string;
@@ -230,6 +250,17 @@ interface AppStore {
   dismissAlert: (id: string) => void;
   dismissAllAlerts: (ids: string[]) => void;
   clearDismissedAlerts: () => void;
+
+  // --- Moderator permissions ---
+  modPermissions: Record<string, ModPermissions>;
+  setModPermission: (email: string, key: keyof ModPermissions, value: boolean) => void;
+  addModerator: (email: string) => void;
+  removeModerator: (email: string) => void;
+
+  // --- Feed freshness ---
+  feedLastRefresh: Record<string, number>;
+  markFeedRefreshed: (feedId: string) => void;
+  cleanStaleFeeds: () => string[];
 
   // --- Hydration ---
   hydrate: () => Promise<void>;
@@ -480,6 +511,42 @@ export const useAppStore = create<AppStore>()(
     dismissAlert: (id) => set((s) => { s.dismissedAlertIds[id] = true; }),
     dismissAllAlerts: (ids) => set((s) => { for (const id of ids) s.dismissedAlertIds[id] = true; }),
     clearDismissedAlerts: () => set((s) => { s.dismissedAlertIds = {}; }),
+
+    // --- Moderator permissions ---
+    modPermissions: {
+      'mod.demo@example.com': { ...DEFAULT_MOD_PERMISSIONS },
+    },
+    setModPermission: (email, key, value) => set((s) => {
+      if (!s.modPermissions[email]) s.modPermissions[email] = { ...DEFAULT_MOD_PERMISSIONS };
+      s.modPermissions[email]![key] = value;
+    }),
+    addModerator: (email) => set((s) => {
+      if (!s.modPermissions[email]) s.modPermissions[email] = { ...DEFAULT_MOD_PERMISSIONS };
+    }),
+    removeModerator: (email) => set((s) => {
+      delete s.modPermissions[email];
+    }),
+
+    // --- Feed freshness ---
+    feedLastRefresh: {},
+    markFeedRefreshed: (feedId) => set((s) => {
+      s.feedLastRefresh[feedId] = Date.now();
+    }),
+    cleanStaleFeeds: () => {
+      const now = Date.now();
+      const FOUR_HOURS = 4 * 60 * 60 * 1000;
+      const stale: string[] = [];
+      const state = get();
+      for (const [feedId, ts] of Object.entries(state.feedLastRefresh)) {
+        if (now - ts > FOUR_HOURS) stale.push(feedId);
+      }
+      if (stale.length > 0) {
+        set((s) => {
+          for (const id of stale) delete s.feedLastRefresh[id];
+        });
+      }
+      return stale;
+    },
 
     // --- Hydration ---
     hydrate: async () => {

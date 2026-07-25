@@ -16,6 +16,7 @@ import { AdminSubscriptions } from '@/pages/admin/AdminSubscriptions';
 import { AdminSynthetic } from '@/pages/admin/AdminSynthetic';
 import { AdminSettings } from '@/pages/admin/AdminSettings';
 import { AdminSecurity } from '@/pages/admin/AdminSecurity';
+import { AdminModPermissions } from '@/pages/admin/AdminModPermissions';
 import { LoginPage } from '@/pages/LoginPage';
 import { IncidentPage } from '@/pages/IncidentPage';
 import { AboutPage } from '@/pages/AboutPage';
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="subscriptions" element={<AdminSubscriptions />} />
           <Route path="synthetic" element={<AdminSynthetic />} />
           <Route path="security" element={<AdminSecurity />} />
+          <Route path="mod-permissions" element={<AdminModPermissions />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
