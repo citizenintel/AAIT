@@ -24,8 +24,8 @@ export default defineConfig({
         ],
       },
       manifest: {
-        name: 'Intelligence Twin',
-        short_name: 'IntelTwin',
+        name: 'AAIT Incident Tracker',
+        short_name: 'AAIT',
         theme_color: '#111113',
         background_color: '#111113',
         display: 'standalone',

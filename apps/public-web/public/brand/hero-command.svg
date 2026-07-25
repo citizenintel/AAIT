@@ -61,8 +61,8 @@
   <!-- Scanning line -->
   <line x1="0" y1="200" x2="800" y2="200" stroke="#c9a84c" stroke-width="0.5" opacity="0.1"/>
   <!-- Brand text -->
-  <text x="400" y="340" text-anchor="middle" fill="#c9a84c" font-family="system-ui,sans-serif" font-size="18" font-weight="700" letter-spacing="0.15em" opacity="0.9">INTELLIGENCE TWIN</text>
-  <text x="400" y="362" text-anchor="middle" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="10" letter-spacing="0.1em" opacity="0.7">COMMAND CENTER — SOUTH AFRICA INCIDENT MAP</text>
+  <text x="400" y="340" text-anchor="middle" fill="#c9a84c" font-family="system-ui,sans-serif" font-size="18" font-weight="700" letter-spacing="0.15em" opacity="0.9">AAIT</text>
+  <text x="400" y="362" text-anchor="middle" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="10" letter-spacing="0.1em" opacity="0.7">INCIDENT TRACKER — COMMAND CENTER</text>
   <!-- Corner brackets -->
   <path d="M20,20 L20,40 M20,20 L40,20" stroke="#c9a84c" stroke-width="1" opacity="0.4"/>
   <path d="M780,20 L780,40 M780,20 L760,20" stroke="#c9a84c" stroke-width="1" opacity="0.4"/>

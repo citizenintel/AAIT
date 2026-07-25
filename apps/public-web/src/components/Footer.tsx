@@ -21,7 +21,7 @@ export function Footer() {
         <span className="site-footer-note">Synthetic test data · not an official or emergency service</span>
       </div>
       <div className="site-footer-right">
-        <span className="site-footer-copy">© {new Date().getFullYear()} Intelligence Twin</span>
+        <span className="site-footer-copy">© {new Date().getFullYear()} AAIT Incident Tracker</span>
         <button className="site-footer-disclaimer" onClick={() => setOpen(true)}>Disclaimer</button>
       </div>
 
@@ -40,7 +40,7 @@ function DisclaimerModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="modal-body disclaimer-body">
           <p className="disclaimer-lead">
-            By accessing or using the Intelligence Twin (the &ldquo;Platform&rdquo;) you acknowledge that you have read,
+            By accessing or using the AAIT Incident Tracker (the &ldquo;Platform&rdquo;) you acknowledge that you have read,
             understood and agreed to the terms below. If you do not agree, do not use the Platform.
           </p>
 

@@ -3,6 +3,7 @@ import { useAppStore } from '../../store/app-store';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
 import { MODULE_META } from '../../data/mock-incidents';
 import { type SponsorAd } from '../../data/mock-sponsors';
+import { getActiveImages } from '../../lib/services/hero-images';
 
 function SponsorIcon({ icon, color, size = 28 }: { icon: SponsorAd['icon']; color: string; size?: number }) {
   const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
@@ -58,7 +59,7 @@ const PROMO_CARDS: PromoCard[] = [
     icon: 'radar',
     accent: '#c9a84c',
     badge: 'INTELLIGENCE',
-    title: 'Intelligence Twin',
+    title: 'AAIT Incident Tracker',
     body: 'Real-time incident tracking across South Africa. Verified, cross-referenced, bias-assessed. Not what you think happened — what actually did.',
     footnote: 'Independent. Data-driven. No agenda.',
   },
@@ -105,13 +106,10 @@ const PROMO_CARDS: PromoCard[] = [
   },
 ];
 
-const HERO_IMAGES = [
-  { src: `${import.meta.env.BASE_URL}brand/hero-farm.svg`, alt: 'Intelligence Twin — farm and rural incident monitoring' },
-  { src: `${import.meta.env.BASE_URL}brand/hero-command.svg`, alt: 'Intelligence Twin — command center with SA incident map' },
-];
-
-function SlotHeroImage({ slot }: { slot: number }) {
-  const hero = HERO_IMAGES[(slot - 1) % HERO_IMAGES.length]!;
+function SlotImage({ slot, category }: { slot: number; category: 'hero' | 'ad' }) {
+  const images = useMemo(() => getActiveImages(category), [category]);
+  if (images.length === 0) return null;
+  const img = images[(slot - 1) % images.length]!;
 
   return (
     <div
@@ -124,8 +122,8 @@ function SlotHeroImage({ slot }: { slot: number }) {
       }}
     >
       <img
-        src={hero.src}
-        alt={hero.alt}
+        src={img.src}
+        alt={img.alt}
         style={{
           width: '100%',
           height: '100%',
@@ -271,7 +269,12 @@ export function SponsorSlot({ slot }: { slot: 1 | 2 | 3 | 4 | 5 | 6 }) {
   const campaign = campaigns.find((c) => c.placement === `slot-${slot}` && c.status === 'active');
 
   if (!sponsorsEnabled) {
-    return <SlotHeroImage slot={slot} />;
+    return <SlotImage slot={slot} category="hero" />;
+  }
+
+  const adImages = getActiveImages('ad');
+  if (!campaign && adImages.length > 0) {
+    return <SlotImage slot={slot} category="ad" />;
   }
 
   if (!campaign) {

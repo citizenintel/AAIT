@@ -290,7 +290,7 @@ export function AdminReports() {
       <div className="report-document">
         <div className="report-doc-header">
           <div>
-            <div className="report-doc-brand">Intelligence Twin</div>
+            <div className="report-doc-brand">AAIT Incident Tracker</div>
             <h2 className="report-doc-title">Incident Report</h2>
           </div>
           <div className="report-doc-meta">
@@ -360,7 +360,7 @@ export function AdminReports() {
         </div>
 
         <div className="report-doc-footer">
-          Intelligence Twin &middot; Mapped. Sourced. Reviewed. &middot; This report contains synthetic test data unless stated otherwise. Not for distribution.
+          AAIT Incident Tracker &middot; Mapped. Sourced. Reviewed. &middot; This report contains synthetic test data unless stated otherwise. Not for distribution.
         </div>
       </div>
     </div>

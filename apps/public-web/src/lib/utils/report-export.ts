@@ -123,7 +123,7 @@ export function exportXls(
   .sev { display: inline-block; padding: 2px 8px; border-radius: 4px; color: #fff; font-size: 9pt; font-weight: bold; }
 </style></head><body>
 
-<div class="brand">Intelligence Twin</div>
+<div class="brand">AAIT Incident Tracker</div>
 <div class="subtitle">Incident Report</div>
 <div class="meta">Generated: ${new Date().toLocaleString('en-ZA', { dateStyle: 'long', timeStyle: 'short' })} &bull; Scope: ${scope} &bull; Records: ${stats.total}</div>
 
@@ -156,7 +156,7 @@ export function exportXls(
   }
 
   html += `</tbody></table>
-<br><div class="meta">Intelligence Twin &middot; Mapped. Sourced. Reviewed. &middot; This report may contain synthetic test data.</div>
+<br><div class="meta">AAIT Incident Tracker &middot; Mapped. Sourced. Reviewed. &middot; This report may contain synthetic test data.</div>
 </body></html>`;
 
   triggerDownload(new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' }), `AAIT-Report-${timestamp()}.xls`);
@@ -203,7 +203,7 @@ export function exportDocx(
 </style></head><body>
 
 <div class="header">
-  <div class="brand">Intelligence Twin</div>
+  <div class="brand">AAIT Incident Tracker</div>
   <div class="subtitle">Incident Report</div>
   <div class="meta">
     Generated: ${new Date().toLocaleString('en-ZA', { dateStyle: 'long', timeStyle: 'short' })}<br>
@@ -256,7 +256,7 @@ ${Object.entries(stats.bySeverity).map(([s, n]) => `<div style="display:flex;jus
   html += `</tbody></table>
 
 <div class="footer">
-  Intelligence Twin &middot; Mapped. Sourced. Reviewed.<br>
+  AAIT Incident Tracker &middot; Mapped. Sourced. Reviewed.<br>
   This report may contain synthetic test data unless stated otherwise. Not for distribution.
 </div>
 

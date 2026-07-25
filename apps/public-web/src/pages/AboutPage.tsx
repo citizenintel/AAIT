@@ -16,12 +16,12 @@ export function AboutPage() {
             Back to map
           </button>
 
-          <h1>About Intelligence Twin</h1>
+          <h1>About AAIT Incident Tracker</h1>
 
           <section>
             <h2>Mission</h2>
             <p>
-              Intelligence Twin is a map-first, evidence-led situational awareness platform
+              AAIT Incident Tracker is a map-first, evidence-led situational awareness platform
               for South Africa. We track, verify, and visualise incidents that mainstream reporting often
               undercounts, fragments, or ignores — from farm attacks to infrastructure failures, civil unrest
               to environmental events.

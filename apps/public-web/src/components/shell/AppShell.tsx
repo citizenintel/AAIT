@@ -118,7 +118,7 @@ export function AppShell() {
       <header className="app-header">
         <div className="app-header-brand">
           <span className="app-header-freshness" data-health={overallHealth} />
-          <span className="app-header-name">Intelligence Twin</span>
+          <span className="app-header-name">AAIT</span>
         </div>
 
         <button

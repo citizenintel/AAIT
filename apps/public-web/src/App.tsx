@@ -18,6 +18,7 @@ import { AdminSettings } from '@/pages/admin/AdminSettings';
 import { AdminSecurity } from '@/pages/admin/AdminSecurity';
 import { AdminModPermissions } from '@/pages/admin/AdminModPermissions';
 import { AdminBackupRestore } from '@/pages/admin/AdminBackupRestore';
+import { AdminHeroImages } from '@/pages/admin/AdminHeroImages';
 import { LoginPage } from '@/pages/LoginPage';
 import { IncidentPage } from '@/pages/IncidentPage';
 import { AboutPage } from '@/pages/AboutPage';
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="security" element={<AdminSecurity />} />
           <Route path="mod-permissions" element={<AdminModPermissions />} />
           <Route path="backup" element={<AdminBackupRestore />} />
+          <Route path="images" element={<AdminHeroImages />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

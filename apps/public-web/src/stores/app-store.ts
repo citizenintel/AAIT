@@ -496,7 +496,7 @@ export const useAppStore = create<AppStore>()(
     ticker: {
       enabled: true,
       mode: 'rss',
-      customText: 'Intelligence Twin — live situational awareness for South Africa\nAll incidents currently shown are synthetic test data\nReport an incident from the map toolbar',
+      customText: 'AAIT Incident Tracker — live situational awareness for South Africa\nAll incidents currently shown are synthetic test data\nReport an incident from the map toolbar',
       rssFeedId: null,
       direction: 'rtl',
       speedSeconds: 45,

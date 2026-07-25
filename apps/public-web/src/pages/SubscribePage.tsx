@@ -93,7 +93,7 @@ export function SubscribePage() {
       <TopBar />
       <div className="page-content" style={{ overflowY: 'auto' }}>
         <div className="subscribe-hero">
-          <h1>Subscribe to Intelligence Twin</h1>
+          <h1>Subscribe to AAIT Incident Tracker</h1>
           <p>Access premium intelligence data, analytical breakdowns, and exportable reports. Choose the plan that fits your needs — from free public access to full professional intelligence.</p>
         </div>
 
@@ -128,7 +128,7 @@ export function SubscribePage() {
             <div className="admin-card" style={{ textAlign: 'center' }}>
               <h2 style={{ marginTop: 0 }}>PayPal checkout</h2>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
-                You will be redirected to PayPal to complete your payment securely. Intelligence Twin never sees or stores your payment details.
+                You will be redirected to PayPal to complete your payment securely. AAIT Incident Tracker never sees or stores your payment details.
               </p>
               {PAYPAL_CLIENT_ID ? (
                 <PayPalButton tier={chosenTier} onSuccess={() => setPaymentComplete(true)} />
@@ -150,7 +150,7 @@ export function SubscribePage() {
         )}
 
         <div className="subscribe-disclaimer">
-          <strong>Subscription terms.</strong> Fees are in ZAR, non-refundable except as required by the Consumer Protection Act 68 of 2008. Subscriptions renew automatically; cancel any time before renewal. Payments are processed by PayPal &mdash; Intelligence Twin does not store your payment credentials. Data is provided &ldquo;as is&rdquo; for research purposes; AI-generated analytics must be independently verified before consequential use. Redistribution, scraping or bulk export of subscription data is prohibited. Intelligence Twin may modify pricing or benefits with 30 days&rsquo; notice. By subscribing you agree to these terms and the full <a href="#" onClick={(e) => { e.preventDefault(); document.querySelector('.site-footer-disclaimer')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); }} style={{ color: 'var(--accent)' }}>Disclaimer &amp; Terms of Use</a>.
+          <strong>Subscription terms.</strong> Fees are in ZAR, non-refundable except as required by the Consumer Protection Act 68 of 2008. Subscriptions renew automatically; cancel any time before renewal. Payments are processed by PayPal &mdash; AAIT Incident Tracker does not store your payment credentials. Data is provided &ldquo;as is&rdquo; for research purposes; AI-generated analytics must be independently verified before consequential use. Redistribution, scraping or bulk export of subscription data is prohibited. AAIT Incident Tracker may modify pricing or benefits with 30 days&rsquo; notice. By subscribing you agree to these terms and the full <a href="#" onClick={(e) => { e.preventDefault(); document.querySelector('.site-footer-disclaimer')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); }} style={{ color: 'var(--accent)' }}>Disclaimer &amp; Terms of Use</a>.
         </div>
       </div>
       <Footer />

@@ -1,4 +1,4 @@
-name: Deploy Intelligence Twin
+name: Deploy AAIT Incident Tracker
 
 on:
   push:

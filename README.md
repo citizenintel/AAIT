@@ -1,4 +1,4 @@
-# Intelligence Twin — Incident Tracker
+# AAIT — Incident Tracker
 
 Map-first, evidence-led citizen-intelligence platform for South Africa. Tracks incidents across six modules: Farm & Rural, Unrest Watch, Bias Monitor, Infrastructure, Natural Events, and Traffic.
 
