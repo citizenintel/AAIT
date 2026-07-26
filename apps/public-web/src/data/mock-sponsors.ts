@@ -1,11 +1,13 @@
+import type { SlotKey } from '../lib/content-slots';
+
 export type AdDuration = '24h' | '48h' | '7d' | '30d' | 'custom';
 
 export interface SponsorAd {
   id: string;
   name: string;
-  slot: 1 | 2 | 3 | 4 | 5 | 6;
+  slot: SlotKey;
   enabled: boolean;
-  size: 'premium' | 'banner' | 'standard' | 'compact';
+  size: 'premium' | 'standard' | 'compact';
   tagline: string;
   description?: string;
   websiteUrl: string;
@@ -40,18 +42,15 @@ export const DURATION_PRICES: Record<AdDuration, number> = {
 
 export const SIZE_PRICES: Record<string, number> = {
   premium: 3,
-  banner: 2,
   standard: 1,
   compact: 0.5,
 };
 
-export const SLOT_LABELS: Record<number, string> = {
-  1: 'Dashboard A',
-  2: 'Sidebar Premium',
-  3: 'Sidebar B',
-  4: 'Dashboard B',
-  5: 'Bottom Banner L',
-  6: 'Bottom Banner R',
+export const SLOT_LABELS: Record<SlotKey, string> = {
+  'slot-1': 'Dashboard A',
+  'slot-2': 'Sidebar Premium',
+  'slot-3': 'Sidebar B',
+  'slot-4': 'Dashboard B',
 };
 
 function rollingDate(daysAgo: number): string {
@@ -65,7 +64,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
     id: 'sp-001',
     name: 'SecureGuard SA',
-    slot: 1,
+    slot: 'slot-1',
     enabled: true,
     size: 'standard',
     tagline: '24/7 Farm & Rural Security',
@@ -85,7 +84,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
     id: 'sp-005',
     name: 'FarmWatch Alert',
-    slot: 2,
+    slot: 'slot-2',
     enabled: true,
     size: 'premium',
     tagline: 'Real-time farm security alerts straight to your phone',
@@ -105,7 +104,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
     id: 'sp-003',
     name: 'AgriShield Insurance',
-    slot: 3,
+    slot: 'slot-3',
     enabled: true,
     size: 'standard',
     tagline: 'Protecting South African Farmers Since 1998',
@@ -124,7 +123,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
     id: 'sp-004',
     name: 'CyberVault',
-    slot: 4,
+    slot: 'slot-4',
     enabled: true,
     size: 'standard',
     tagline: 'Data Security & Backup Solutions',
@@ -139,43 +138,5 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
     impressions: 890,
     clicks: 23,
     paidZAR: 499,
-  },
-  {
-    id: 'sp-002',
-    name: 'Praxcil',
-    slot: 5,
-    enabled: true,
-    size: 'banner',
-    tagline: 'This site was designed by Praxcil',
-    websiteUrl: 'https://praxcil.com',
-    bgColor: '#1a1a2e',
-    textColor: '#e2e8f0',
-    accentColor: '#c9a84c',
-    icon: 'web',
-    duration: '30d',
-    startedAt: rollingDate(20),
-    expiresAt: rollingExpiry(10),
-    impressions: 12800,
-    clicks: 342,
-    paidZAR: 2998,
-  },
-  {
-    id: 'sp-006',
-    name: 'SafeRoute SA',
-    slot: 6,
-    enabled: true,
-    size: 'premium',
-    tagline: 'Navigate safely — live incident-aware routing for South Africa',
-    websiteUrl: 'https://saferoute-demo.co.za',
-    bgColor: '#1e2a1e',
-    textColor: '#e2e8f0',
-    accentColor: '#68d391',
-    icon: 'lock',
-    duration: '30d',
-    startedAt: rollingDate(20),
-    expiresAt: rollingExpiry(10),
-    impressions: 5400,
-    clicks: 156,
-    paidZAR: 2998,
   },
 ];

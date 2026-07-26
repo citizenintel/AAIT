@@ -243,15 +243,15 @@ interface AppStore {
   ticker: TickerConfig;
   updateTicker: (patch: Partial<TickerConfig>) => void;
 
-  // --- Sponsors ---
+  // --- Content slots ---
   sponsorsEnabled: boolean;
   setSponsorsEnabled: (enabled: boolean) => void;
-  placeholderEnabled: boolean;
-  setPlaceholderEnabled: (enabled: boolean) => void;
-  infographicsEnabled: boolean;
-  setInfographicsEnabled: (enabled: boolean) => void;
+  globalInfographicFallback: boolean;
+  setGlobalInfographicFallback: (enabled: boolean) => void;
   enabledInfographicTypes: string[];
   setEnabledInfographicTypes: (types: string[]) => void;
+  slotAssignments: Record<string, { slotKey: string; assetId: string | null; campaignId: string | null; mode: string }>;
+  setSlotMode: (slotKey: string, mode: string) => void;
 
   // --- Dismissed alerts (legacy) ---
   dismissedAlertIds: Record<string, true>;
@@ -512,15 +512,29 @@ export const useAppStore = create<AppStore>()(
     },
     updateTicker: (patch) => set((s) => { Object.assign(s.ticker, patch); }),
 
-    // --- Sponsors ---
+    // --- Content slots ---
     sponsorsEnabled: (() => { try { const v = localStorage.getItem('aait_sponsors_enabled'); return v === null ? true : v === 'true'; } catch { return true; } })(),
     setSponsorsEnabled: (enabled) => set((s) => { s.sponsorsEnabled = enabled; try { localStorage.setItem('aait_sponsors_enabled', String(enabled)); } catch { /* private browsing */ } }),
-    placeholderEnabled: (() => { try { const v = localStorage.getItem('aait_placeholder_enabled'); return v === null ? true : v === 'true'; } catch { return true; } })(),
-    setPlaceholderEnabled: (enabled) => set((s) => { s.placeholderEnabled = enabled; try { localStorage.setItem('aait_placeholder_enabled', String(enabled)); } catch {} }),
-    infographicsEnabled: (() => { try { const v = localStorage.getItem('aait_infographics_enabled'); return v === null ? false : v === 'true'; } catch { return false; } })(),
-    setInfographicsEnabled: (enabled) => set((s) => { s.infographicsEnabled = enabled; try { localStorage.setItem('aait_infographics_enabled', String(enabled)); } catch {} }),
+    globalInfographicFallback: (() => { try { const v = localStorage.getItem('aait_infographic_fallback'); return v === null ? true : v === 'true'; } catch { return true; } })(),
+    setGlobalInfographicFallback: (enabled) => set((s) => { s.globalInfographicFallback = enabled; try { localStorage.setItem('aait_infographic_fallback', String(enabled)); } catch {} }),
     enabledInfographicTypes: (() => { try { const v = localStorage.getItem('aait_infographic_types'); return v ? JSON.parse(v) : ['severity', 'module', 'province', 'trend', 'casualties', 'stats']; } catch { return ['severity', 'module', 'province', 'trend', 'casualties', 'stats']; } })(),
     setEnabledInfographicTypes: (types) => set((s) => { s.enabledInfographicTypes = types; try { localStorage.setItem('aait_infographic_types', JSON.stringify(types)); } catch {} }),
+    slotAssignments: (() => {
+      const defaults: Record<string, { slotKey: string; assetId: string | null; campaignId: string | null; mode: string }> = {
+        'slot-1': { slotKey: 'slot-1', assetId: null, campaignId: null, mode: 'auto' },
+        'slot-2': { slotKey: 'slot-2', assetId: null, campaignId: null, mode: 'auto' },
+        'slot-3': { slotKey: 'slot-3', assetId: null, campaignId: null, mode: 'auto' },
+        'slot-4': { slotKey: 'slot-4', assetId: null, campaignId: null, mode: 'auto' },
+      };
+      try { const v = localStorage.getItem('aait_slot_assignments'); if (v) return JSON.parse(v); } catch {}
+      return defaults;
+    })(),
+    setSlotMode: (slotKey, mode) => set((s) => {
+      if (s.slotAssignments[slotKey]) {
+        s.slotAssignments[slotKey]!.mode = mode;
+        try { localStorage.setItem('aait_slot_assignments', JSON.stringify(s.slotAssignments)); } catch {}
+      }
+    }),
 
     // --- Dismissed alerts (legacy) ---
     dismissedAlertIds: {},

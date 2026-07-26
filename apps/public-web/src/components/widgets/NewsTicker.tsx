@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react';
 import { MOCK_NEWS, sourceDomain } from '../../data/mock-news';
 import { MODULE_META } from '../../data/mock-incidents';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
-import { SponsorSlot } from './SponsorSlot';
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -116,14 +115,6 @@ export function NewsTicker() {
         <div className="widget-news-footer">
           Synthetic feed — {MOCK_NEWS.length} articles from {new Set(MOCK_NEWS.map(n => n.source)).size} sources
         </div>
-      </div>
-
-      <div className="bottom-panel-ad">
-        <SponsorSlot slot={5} />
-      </div>
-
-      <div className="bottom-panel-ad">
-        <SponsorSlot slot={6} />
       </div>
 
       <RecentActivity />

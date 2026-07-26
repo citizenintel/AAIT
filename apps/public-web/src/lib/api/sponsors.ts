@@ -96,7 +96,7 @@ export async function fetchActiveCampaigns(): Promise<CampaignRow[]> {
       sponsor_id: a.id,
       name: a.name,
       size: a.size,
-      placement: `slot-${a.slot}`,
+      placement: a.slot,
       status: 'active',
       starts_at: a.startedAt,
       ends_at: a.expiresAt,
@@ -144,7 +144,7 @@ export async function updateCampaignStatus(id: string, status: string): Promise<
   if (error) throw new Error(error.message);
 }
 
-export async function createMockCampaign(name: string, tagline: string, size: string, slot: number, websiteUrl?: string, imageUrl?: string): Promise<SponsorAd> {
+export async function createMockCampaign(name: string, tagline: string, size: string, slot: string, websiteUrl?: string, imageUrl?: string): Promise<SponsorAd> {
   const now = new Date();
   const expires = new Date(now.getTime() + 604800000);
   const ad: SponsorAd = {
@@ -193,7 +193,7 @@ function mockToRows(): SponsorRow[] {
       sponsor_id: a.id,
       name: a.name,
       size: a.size,
-      placement: `slot-${a.slot}`,
+      placement: a.slot,
       status: a.enabled ? 'active' : 'paused',
       starts_at: a.startedAt,
       ends_at: a.expiresAt,
