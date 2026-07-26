@@ -506,9 +506,9 @@ export const useAppStore = create<AppStore>()(
     },
     updateTicker: (patch) => set((s) => { Object.assign(s.ticker, patch); }),
 
-    // --- Sponsors (legacy) ---
-    sponsorsEnabled: true,
-    setSponsorsEnabled: (enabled) => set((s) => { s.sponsorsEnabled = enabled; }),
+    // --- Sponsors ---
+    sponsorsEnabled: (() => { try { const v = localStorage.getItem('aait_sponsors_enabled'); return v === null ? true : v === 'true'; } catch { return true; } })(),
+    setSponsorsEnabled: (enabled) => set((s) => { s.sponsorsEnabled = enabled; try { localStorage.setItem('aait_sponsors_enabled', String(enabled)); } catch { /* private browsing */ } }),
 
     // --- Dismissed alerts (legacy) ---
     dismissedAlertIds: {},

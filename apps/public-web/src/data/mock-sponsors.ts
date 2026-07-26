@@ -9,6 +9,7 @@ export interface SponsorAd {
   tagline: string;
   description?: string;
   websiteUrl: string;
+  imageUrl?: string;
   bgColor: string;
   textColor: string;
   accentColor: string;

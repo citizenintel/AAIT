@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useAppStore } from '../../store/app-store';
-import { fetchSponsors, updateCampaignStatus, createMockCampaign } from '@/lib/api/sponsors';
+import { fetchSponsors, updateCampaignStatus, createMockCampaign, saveCampaigns, saveAdminAds, getStoredAdminAds, type CampaignRow } from '@/lib/api/sponsors';
 import { useQuery, useMutation } from '@/lib/hooks/useQuery';
 import {
   DURATION_LABELS,
@@ -41,6 +41,33 @@ function calcPrice(duration: AdDuration, size: string): number {
   return Math.round(base * mult);
 }
 
+function syncToFrontendDirect(adsList: SponsorAd[]) {
+  saveAdminAds(adsList);
+  const now = Date.now();
+  const campaigns: CampaignRow[] = adsList.map(a => {
+    const expired = new Date(a.expiresAt).getTime() <= now;
+    const status = !a.enabled ? 'paused' : expired ? 'expired' : 'active';
+    return {
+      id: a.id,
+      sponsor_id: a.id,
+      name: a.name,
+      size: a.size,
+      placement: `slot-${a.slot}`,
+      status,
+      starts_at: a.startedAt,
+      ends_at: a.expiresAt,
+      display_name: a.name,
+      tagline: a.tagline,
+      link_url: a.websiteUrl,
+      logo_path: null,
+      image_url: a.imageUrl,
+      impressions: a.impressions,
+      clicks: a.clicks,
+    };
+  });
+  saveCampaigns(campaigns);
+}
+
 export function AdminSponsors() {
   const { data: sponsors, loading, error, refetch } = useQuery(fetchSponsors);
   const statusMutation = useMutation(updateCampaignStatus);
@@ -78,15 +105,20 @@ export function AdminSponsors() {
     return result;
   }, [sponsors]);
 
-  const [ads, setAds] = useState<SponsorAd[]>([]);
-  // Sync API data into local state when it arrives
+  const [ads, setAds] = useState<SponsorAd[]>(() => {
+    const stored = getStoredAdminAds();
+    return stored ?? [];
+  });
+  // Sync API data into local state when it arrives (only if no stored ads exist)
   if (initialAds.length > 0 && ads.length === 0) {
     setAds(initialAds);
+    syncToFrontendDirect(initialAds);
   }
 
   const [editId, setEditId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newSponsor, setNewSponsor] = useState({ name: '', tagline: '', size: 'standard' as string });
+  const [newSponsor, setNewSponsor] = useState({ name: '', tagline: '', size: 'standard' as string, websiteUrl: '', imageUrl: '' });
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const sponsorsEnabled = useAppStore((s) => s.sponsorsEnabled);
   const setSponsorsEnabled = useAppStore((s) => s.setSponsorsEnabled);
 
@@ -99,59 +131,74 @@ export function AdminSponsors() {
     const ad = ads.find((a) => a.id === id);
     if (!ad) return;
     const newStatus = ad.enabled ? 'paused' : 'active';
-    // Optimistic local update
-    setAds((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a))
-    );
+    const updated = ads.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a));
+    setAds(updated);
+    syncToFrontend(updated);
     try {
       await statusMutation.execute(id, newStatus);
     } catch {
-      // Revert on failure
-      setAds((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, enabled: ad.enabled } : a))
-      );
+      const reverted = ads.map((a) => (a.id === id ? { ...a, enabled: ad.enabled } : a));
+      setAds(reverted);
+      syncToFrontend(reverted);
     }
   };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
+    if (file.size > 5 * 1024 * 1024) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setNewSponsor(s => ({ ...s, imageUrl: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const syncToFrontend = syncToFrontendDirect;
 
   const addSponsor = async () => {
     if (!newSponsor.name.trim()) return;
     const usedSlots = new Set(ads.map(a => a.slot));
     const freeSlot = ([1, 2, 3, 4, 5, 6] as const).find(s => !usedSlots.has(s)) ?? 1;
     try {
-      const ad = await createMockCampaign(newSponsor.name.trim(), newSponsor.tagline.trim(), newSponsor.size, freeSlot);
-      setAds(prev => [...prev, ad]);
+      const ad = await createMockCampaign(newSponsor.name.trim(), newSponsor.tagline.trim(), newSponsor.size, freeSlot, newSponsor.websiteUrl.trim(), newSponsor.imageUrl || undefined);
+      const updated = [...ads, ad];
+      setAds(updated);
+      syncToFrontend(updated);
     } catch { /* production: DB insert */ }
-    setNewSponsor({ name: '', tagline: '', size: 'standard' });
+    setNewSponsor({ name: '', tagline: '', size: 'standard', websiteUrl: '', imageUrl: '' });
     setShowAddForm(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const setDuration = (id: string, duration: AdDuration) => {
-    setAds((prev) =>
-      prev.map((a) => {
-        if (a.id !== id) return a;
-        const now = new Date().toISOString();
-        const ms =
-          duration === '24h' ? 86400000
-          : duration === '48h' ? 172800000
-          : duration === '7d' ? 604800000
-          : duration === '30d' ? 2592000000
-          : 604800000;
-        return {
-          ...a,
-          duration,
-          startedAt: now,
-          expiresAt: new Date(Date.now() + ms).toISOString(),
-          paidZAR: calcPrice(duration, a.size),
-        };
-      })
-    );
+    const updated = ads.map((a) => {
+      if (a.id !== id) return a;
+      const now = new Date().toISOString();
+      const ms =
+        duration === '24h' ? 86400000
+        : duration === '48h' ? 172800000
+        : duration === '7d' ? 604800000
+        : duration === '30d' ? 2592000000
+        : 604800000;
+      return {
+        ...a,
+        duration,
+        startedAt: now,
+        expiresAt: new Date(Date.now() + ms).toISOString(),
+        paidZAR: calcPrice(duration, a.size),
+      };
+    });
+    setAds(updated);
+    syncToFrontend(updated);
   };
 
   return (
     <div className="admin-page">
       <div className="admin-page-header">
-        <h1>Sponsors</h1>
-        <p>Manage sponsor campaigns across 6 slots — 2 sidebar, 2 dashboard, 2 bottom banners.</p>
+        <h1>Ad Manager</h1>
+        <p>Manage ad campaigns across 6 slots — 2 sidebar, 2 dashboard, 2 bottom banners.</p>
       </div>
 
       {loading && <div className="import-msg" style={{ marginBottom: 16 }}>Loading sponsors…</div>}
@@ -204,51 +251,92 @@ export function AdminSponsors() {
         </div>
 
         {showAddForm && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap' }}>
-            <div>
-              <label className="form-label" style={{ marginBottom: 2 }}>Name</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Sponsor name"
-                value={newSponsor.name}
-                onChange={e => setNewSponsor(s => ({ ...s, name: e.target.value }))}
-                style={{ width: 180, fontSize: 13 }}
-              />
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 8, padding: 16, marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 12 }}>
+              <div>
+                <label className="form-label" style={{ marginBottom: 2 }}>Name</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Sponsor name"
+                  value={newSponsor.name}
+                  onChange={e => setNewSponsor(s => ({ ...s, name: e.target.value }))}
+                  style={{ width: 180, fontSize: 13 }}
+                />
+              </div>
+              <div>
+                <label className="form-label" style={{ marginBottom: 2 }}>Tagline</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Short tagline"
+                  value={newSponsor.tagline}
+                  onChange={e => setNewSponsor(s => ({ ...s, tagline: e.target.value }))}
+                  style={{ width: 200, fontSize: 13 }}
+                />
+              </div>
+              <div>
+                <label className="form-label" style={{ marginBottom: 2 }}>Website URL</label>
+                <input
+                  type="url"
+                  className="form-input"
+                  placeholder="https://example.com"
+                  value={newSponsor.websiteUrl}
+                  onChange={e => setNewSponsor(s => ({ ...s, websiteUrl: e.target.value }))}
+                  style={{ width: 200, fontSize: 13 }}
+                />
+              </div>
+              <div>
+                <label className="form-label" style={{ marginBottom: 2 }}>Size / Package</label>
+                <select
+                  className="form-input"
+                  value={newSponsor.size}
+                  onChange={e => setNewSponsor(s => ({ ...s, size: e.target.value }))}
+                  style={{ width: 130, fontSize: 13 }}
+                >
+                  <option value="compact">Compact</option>
+                  <option value="standard">Standard</option>
+                  <option value="banner">Banner</option>
+                  <option value="premium">Premium</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="form-label" style={{ marginBottom: 2 }}>Tagline</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Short tagline"
-                value={newSponsor.tagline}
-                onChange={e => setNewSponsor(s => ({ ...s, tagline: e.target.value }))}
-                style={{ width: 200, fontSize: 13 }}
-              />
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+              <div>
+                <label className="form-label" style={{ marginBottom: 2 }}>Ad Image (max 5MB)</label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  style={{ fontSize: 12 }}
+                />
+              </div>
+              {newSponsor.imageUrl && (
+                <div style={{ position: 'relative' }}>
+                  <img
+                    src={newSponsor.imageUrl}
+                    alt="Preview"
+                    style={{ width: 60, height: 40, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border-color)' }}
+                  />
+                  <button
+                    onClick={() => { setNewSponsor(s => ({ ...s, imageUrl: '' })); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                    style={{ position: 'absolute', top: -6, right: -6, width: 16, height: 16, borderRadius: '50%', background: '#e53e3e', color: '#fff', border: 'none', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >×</button>
+                </div>
+              )}
             </div>
-            <div>
-              <label className="form-label" style={{ marginBottom: 2 }}>Size</label>
-              <select
-                className="form-input"
-                value={newSponsor.size}
-                onChange={e => setNewSponsor(s => ({ ...s, size: e.target.value }))}
-                style={{ width: 130, fontSize: 13 }}
-              >
-                <option value="compact">Compact</option>
-                <option value="standard">Standard</option>
-                <option value="banner">Banner</option>
-                <option value="premium">Premium</option>
-              </select>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary" onClick={addSponsor} disabled={!newSponsor.name.trim()}>Create Campaign</button>
+              <button className="btn btn-secondary" onClick={() => { setShowAddForm(false); setNewSponsor({ name: '', tagline: '', size: 'standard', websiteUrl: '', imageUrl: '' }); }}>Cancel</button>
             </div>
-            <button className="btn btn-primary" onClick={addSponsor} disabled={!newSponsor.name.trim()}>Create</button>
-            <button className="btn btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
           </div>
         )}
 
         <table className="admin-table">
           <thead>
             <tr>
+              <th>Image</th>
               <th>Sponsor</th>
               <th>Slot / Size</th>
               <th>Status</th>
@@ -269,6 +357,13 @@ export function AdminSponsors() {
 
               return (
                 <tr key={ad.id} style={{ opacity: isExpired ? 0.6 : 1 }}>
+                  <td>
+                    {ad.imageUrl ? (
+                      <img src={ad.imageUrl} alt={ad.name} style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border-color)' }} />
+                    ) : (
+                      <div style={{ width: 48, height: 32, borderRadius: 4, background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: 'var(--text-muted)' }}>No img</div>
+                    )}
+                  </td>
                   <td className="td-title">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       {ad.name}
@@ -371,7 +466,7 @@ export function AdminSponsors() {
       </div>
 
       <div className="admin-card">
-        <h2>Sponsor rules</h2>
+        <h2>Ad rules</h2>
         <ul className="admin-rules">
           <li>Maximum <strong>6 active sponsors</strong> across 6 slots (enforced by database trigger)</li>
           <li><strong>4 size tiers</strong>: Premium (×3), Banner (×2), Standard (×1), Compact (×0.5)</li>

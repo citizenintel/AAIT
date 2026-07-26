@@ -286,6 +286,7 @@ export function SponsorSlot({ slot }: { slot: 1 | 2 | 3 | 4 | 5 | 6 }) {
     tagline: campaign.tagline ?? '',
     description: undefined as string | undefined,
     websiteUrl: campaign.link_url ?? '',
+    imageUrl: campaign.image_url ?? '',
     size: campaign.size as SponsorAd['size'],
     bgColor: '#1a2332',
     textColor: '#e2e8f0',
@@ -293,20 +294,29 @@ export function SponsorSlot({ slot }: { slot: 1 | 2 | 3 | 4 | 5 | 6 }) {
     icon: 'shield' as SponsorAd['icon'],
   };
 
+  const handleClick = () => {
+    if (ad.websiteUrl) window.open(ad.websiteUrl, '_blank', 'noopener,noreferrer');
+  };
+
   if (ad.size === 'banner') {
     return (
       <div
         className="sponsor-slot banner"
-        style={{ background: ad.bgColor, borderColor: ad.accentColor }}
-        title={`Sponsor: ${ad.name} — ${ad.websiteUrl}`}
+        style={{ background: ad.bgColor, borderColor: ad.accentColor, cursor: ad.websiteUrl ? 'pointer' : 'default' }}
+        title={`Sponsor: ${ad.name}${ad.websiteUrl ? ` — ${ad.websiteUrl}` : ''}`}
+        onClick={handleClick}
       >
-        <SponsorIcon icon={ad.icon} color={ad.accentColor} size={20} />
+        {ad.imageUrl ? (
+          <img src={ad.imageUrl} alt={ad.name} style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
+        ) : (
+          <SponsorIcon icon={ad.icon} color={ad.accentColor} size={20} />
+        )}
         <div className="sponsor-banner-text">
           <span className="sponsor-slot-name" style={{ color: ad.accentColor }}>{ad.name}</span>
           <span className="sponsor-slot-tagline" style={{ color: ad.textColor }}>{ad.tagline}</span>
         </div>
         <div className="sponsor-slot-badge">
-          <span className="demo-tag">DEMO</span>
+          <span className="demo-tag">AD</span>
         </div>
       </div>
     );
@@ -316,13 +326,21 @@ export function SponsorSlot({ slot }: { slot: 1 | 2 | 3 | 4 | 5 | 6 }) {
     return (
       <div
         className="sponsor-slot premium"
-        style={{ background: ad.bgColor, borderColor: ad.accentColor }}
-        title={`Sponsor: ${ad.name} — ${ad.websiteUrl}`}
+        style={{ background: ad.bgColor, borderColor: ad.accentColor, cursor: ad.websiteUrl ? 'pointer' : 'default' }}
+        title={`Sponsor: ${ad.name}${ad.websiteUrl ? ` — ${ad.websiteUrl}` : ''}`}
+        onClick={handleClick}
       >
-        <div className="sponsor-premium-header">
-          <SponsorIcon icon={ad.icon} color={ad.accentColor} size={24} />
-          <div className="sponsor-slot-name" style={{ color: ad.accentColor }}>{ad.name}</div>
-        </div>
+        {ad.imageUrl ? (
+          <div style={{ width: '100%', marginBottom: 8, borderRadius: 4, overflow: 'hidden' }}>
+            <img src={ad.imageUrl} alt={ad.name} style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }} />
+          </div>
+        ) : (
+          <div className="sponsor-premium-header">
+            <SponsorIcon icon={ad.icon} color={ad.accentColor} size={24} />
+            <div className="sponsor-slot-name" style={{ color: ad.accentColor }}>{ad.name}</div>
+          </div>
+        )}
+        {ad.imageUrl && <div className="sponsor-slot-name" style={{ color: ad.accentColor, marginBottom: 2 }}>{ad.name}</div>}
         <div className="sponsor-slot-tagline" style={{ color: ad.textColor }}>{ad.tagline}</div>
         {ad.description && (
           <div className="sponsor-premium-desc" style={{ color: ad.textColor }}>{ad.description}</div>
@@ -332,7 +350,7 @@ export function SponsorSlot({ slot }: { slot: 1 | 2 | 3 | 4 | 5 | 6 }) {
             Visit Website →
           </div>
           <div className="sponsor-slot-badge">
-            <span className="demo-tag">DEMO</span>
+            <span className="demo-tag">AD</span>
             <span className="sponsor-label">Premium Sponsor</span>
           </div>
         </div>
@@ -343,18 +361,23 @@ export function SponsorSlot({ slot }: { slot: 1 | 2 | 3 | 4 | 5 | 6 }) {
   return (
     <div
       className="sponsor-slot"
-      style={{ background: ad.bgColor, borderColor: ad.accentColor }}
-      title={`Sponsor: ${ad.name} — ${ad.websiteUrl}`}
+      style={{ background: ad.bgColor, borderColor: ad.accentColor, cursor: ad.websiteUrl ? 'pointer' : 'default' }}
+      title={`Sponsor: ${ad.name}${ad.websiteUrl ? ` — ${ad.websiteUrl}` : ''}`}
+      onClick={handleClick}
     >
       <div className="sponsor-slot-inner">
-        <SponsorIcon icon={ad.icon} color={ad.accentColor} />
+        {ad.imageUrl ? (
+          <img src={ad.imageUrl} alt={ad.name} style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
+        ) : (
+          <SponsorIcon icon={ad.icon} color={ad.accentColor} />
+        )}
         <div className="sponsor-slot-text">
           <div className="sponsor-slot-name" style={{ color: ad.accentColor }}>{ad.name}</div>
           <div className="sponsor-slot-tagline" style={{ color: ad.textColor }}>{ad.tagline}</div>
         </div>
       </div>
       <div className="sponsor-slot-badge">
-        <span className="demo-tag">DEMO</span>
+        <span className="demo-tag">AD</span>
         <span className="sponsor-label">Sponsored</span>
       </div>
     </div>
