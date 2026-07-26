@@ -75,8 +75,23 @@ export function saveAdminAds(ads: SponsorAd[]): void {
 
 export async function fetchActiveCampaigns(): Promise<CampaignRow[]> {
   if (!isSupabaseConfigured()) {
-    const ads = getStoredAdminAds() ?? MOCK_SPONSOR_ADS;
-    return ads.filter(a => a.enabled).map(a => ({
+    let ads = getStoredAdminAds();
+    if (ads) {
+      const now = Date.now();
+      let refreshed = false;
+      ads = ads.map(a => {
+        if (a.enabled && new Date(a.expiresAt).getTime() <= now) {
+          refreshed = true;
+          const durationMs: Record<string, number> = { '24h': 86400000, '48h': 172800000, '7d': 604800000, '30d': 2592000000 };
+          const ms = durationMs[a.duration] ?? 604800000;
+          return { ...a, startedAt: new Date().toISOString(), expiresAt: new Date(now + ms).toISOString() };
+        }
+        return a;
+      });
+      if (refreshed) saveAdminAds(ads);
+    }
+    const source = ads ?? MOCK_SPONSOR_ADS;
+    return source.filter(a => a.enabled).map(a => ({
       id: a.id,
       sponsor_id: a.id,
       name: a.name,

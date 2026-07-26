@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAppStore } from '../../store/app-store';
 import { fetchSponsors, updateCampaignStatus, createMockCampaign, saveCampaigns, saveAdminAds, getStoredAdminAds, type CampaignRow } from '@/lib/api/sponsors';
 import { useQuery, useMutation } from '@/lib/hooks/useQuery';
@@ -294,12 +294,48 @@ export function AdminSponsors() {
     syncToFrontendDirect(initialAds);
   }
 
+  useEffect(() => {
+    const stored = getStoredAdminAds();
+    if (!stored || stored.length === 0) return;
+    const now = Date.now();
+    let refreshed = false;
+    const result = stored.map(a => {
+      if (a.enabled && new Date(a.expiresAt).getTime() <= now) {
+        refreshed = true;
+        const durationMs: Record<string, number> = { '24h': 86400000, '48h': 172800000, '7d': 604800000, '30d': 2592000000 };
+        const ms = durationMs[a.duration] ?? 604800000;
+        return { ...a, startedAt: new Date().toISOString(), expiresAt: new Date(now + ms).toISOString() };
+      }
+      return a;
+    });
+    if (refreshed) {
+      setAds(result);
+      syncToFrontendDirect(result);
+    }
+  }, []);
+
   const [editId, setEditId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newSponsor, setNewSponsor] = useState({ name: '', tagline: '', size: 'standard' as string, websiteUrl: '', imageUrl: '' });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [imagePickerId, setImagePickerId] = useState<string | null>(null);
+  const adImages = useMemo(() => getConfig('ad'), []);
   const sponsorsEnabled = useAppStore((s) => s.sponsorsEnabled);
   const setSponsorsEnabled = useAppStore((s) => s.setSponsorsEnabled);
+
+  const assignImage = (adId: string, imageUrl: string) => {
+    const updated = ads.map(a => a.id === adId ? { ...a, imageUrl } : a);
+    setAds(updated);
+    syncToFrontend(updated);
+    setImagePickerId(null);
+  };
+
+  const clearImage = (adId: string) => {
+    const updated = ads.map(a => a.id === adId ? { ...a, imageUrl: undefined } : a);
+    setAds(updated);
+    syncToFrontend(updated);
+    setImagePickerId(null);
+  };
 
   const activeCount = ads.filter((a) => a.enabled && getStatus(a) === 'active').length;
   const totalRevenue = ads.reduce((sum, a) => sum + a.paidZAR, 0);
@@ -537,11 +573,53 @@ export function AdminSponsors() {
               return (
                 <tr key={ad.id} style={{ opacity: isExpired ? 0.6 : 1 }}>
                   <td>
-                    {ad.imageUrl ? (
-                      <img src={ad.imageUrl} alt={ad.name} style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border-color)' }} />
-                    ) : (
-                      <div style={{ width: 48, height: 32, borderRadius: 4, background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: 'var(--text-muted)' }}>No img</div>
-                    )}
+                    <div style={{ position: 'relative' }}>
+                      <div
+                        onClick={() => setImagePickerId(imagePickerId === ad.id ? null : ad.id)}
+                        style={{ cursor: 'pointer' }}
+                        title="Click to assign image"
+                      >
+                        {ad.imageUrl ? (
+                          <img src={ad.imageUrl} alt={ad.name} style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--accent)' }} />
+                        ) : (
+                          <div style={{ width: 48, height: 32, borderRadius: 4, background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: 'var(--text-muted)', border: '1px dashed var(--border-subtle)' }}>+ img</div>
+                        )}
+                      </div>
+                      {imagePickerId === ad.id && (
+                        <div style={{ position: 'absolute', top: 36, left: 0, zIndex: 50, background: 'var(--bg-elevated)', border: '1px solid var(--border-strong)', borderRadius: 8, padding: 8, minWidth: 200, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Assign ad image</div>
+                          {adImages.length === 0 ? (
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '8px 0' }}>No ad images uploaded yet</div>
+                          ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+                              {adImages.map(img => {
+                                const thumb = getThumbnail(img);
+                                return thumb ? (
+                                  <img
+                                    key={img.id}
+                                    src={thumb}
+                                    alt={img.label}
+                                    title={img.label}
+                                    onClick={() => assignImage(ad.id, thumb)}
+                                    style={{ width: '100%', height: 40, objectFit: 'cover', borderRadius: 4, cursor: 'pointer', border: '1px solid var(--border-subtle)', transition: 'border-color 0.15s' }}
+                                    onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                                    onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
+                                  />
+                                ) : null;
+                              })}
+                            </div>
+                          )}
+                          {ad.imageUrl && (
+                            <button
+                              onClick={() => clearImage(ad.id)}
+                              style={{ marginTop: 6, width: '100%', fontSize: 10, padding: '4px 0', background: '#c5303020', color: '#c53030', border: '1px solid #c5303040', borderRadius: 4, cursor: 'pointer' }}
+                            >
+                              Remove image
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td className="td-title">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
