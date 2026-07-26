@@ -54,6 +54,13 @@ export const SLOT_LABELS: Record<number, string> = {
   6: 'Bottom Banner R',
 };
 
+function rollingDate(daysAgo: number): string {
+  return new Date(Date.now() - daysAgo * 86400000).toISOString();
+}
+function rollingExpiry(daysFromNow: number): string {
+  return new Date(Date.now() + daysFromNow * 86400000).toISOString();
+}
+
 export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
     id: 'sp-001',
@@ -69,8 +76,8 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
     accentColor: '#e53e3e',
     icon: 'shield',
     duration: '7d',
-    startedAt: '2026-07-18T08:00:00Z',
-    expiresAt: '2026-07-25T08:00:00Z',
+    startedAt: rollingDate(3),
+    expiresAt: rollingExpiry(4),
     impressions: 3420,
     clicks: 87,
     paidZAR: 499,
@@ -89,8 +96,8 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
     accentColor: '#ed8936',
     icon: 'shield',
     duration: '30d',
-    startedAt: '2026-07-01T00:00:00Z',
-    expiresAt: '2026-07-31T00:00:00Z',
+    startedAt: rollingDate(20),
+    expiresAt: rollingExpiry(10),
     impressions: 14200,
     clicks: 412,
     paidZAR: 4497,
@@ -108,8 +115,8 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
     accentColor: '#48bb78',
     icon: 'farm',
     duration: '7d',
-    startedAt: '2026-07-20T12:00:00Z',
-    expiresAt: '2026-07-27T12:00:00Z',
+    startedAt: rollingDate(2),
+    expiresAt: rollingExpiry(5),
     impressions: 1560,
     clicks: 41,
     paidZAR: 499,
@@ -119,19 +126,19 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
     name: 'CyberVault',
     slot: 4,
     enabled: true,
-    size: 'compact',
+    size: 'standard',
     tagline: 'Data Security & Backup Solutions',
     websiteUrl: 'https://cybervault-demo.co.za',
     bgColor: '#1e1e2e',
     textColor: '#e2e8f0',
     accentColor: '#4299e1',
     icon: 'lock',
-    duration: '48h',
-    startedAt: '2026-07-21T06:00:00Z',
-    expiresAt: '2026-07-23T06:00:00Z',
+    duration: '7d',
+    startedAt: rollingDate(1),
+    expiresAt: rollingExpiry(6),
     impressions: 890,
     clicks: 23,
-    paidZAR: 90,
+    paidZAR: 499,
   },
   {
     id: 'sp-002',
@@ -146,8 +153,8 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
     accentColor: '#c9a84c',
     icon: 'web',
     duration: '30d',
-    startedAt: '2026-07-01T00:00:00Z',
-    expiresAt: '2026-07-31T00:00:00Z',
+    startedAt: rollingDate(20),
+    expiresAt: rollingExpiry(10),
     impressions: 12800,
     clicks: 342,
     paidZAR: 2998,
@@ -165,8 +172,8 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
     accentColor: '#68d391',
     icon: 'lock',
     duration: '30d',
-    startedAt: '2026-07-01T00:00:00Z',
-    expiresAt: '2026-07-31T00:00:00Z',
+    startedAt: rollingDate(20),
+    expiresAt: rollingExpiry(10),
     impressions: 5400,
     clicks: 156,
     paidZAR: 2998,

@@ -461,10 +461,13 @@
   border: 1px solid;
   border-left-width: 3px;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
   flex-shrink: 0;
 }
-.sponsor-slot:hover { opacity: 0.85; }
+.sponsor-slot:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
 .sponsor-slot-inner { display: flex; gap: 10px; align-items: flex-start; }
 .sponsor-slot-text { flex: 1; min-width: 0; }
 .sponsor-slot-name { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
@@ -510,9 +513,9 @@
   font-weight: 600;
   letter-spacing: 0.03em;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: background 0.2s ease, opacity 0.15s;
 }
-.sponsor-premium-cta:hover { opacity: 0.7; }
+.sponsor-premium-cta:hover { background: rgba(255,255,255,0.08); }
 
 .layer-group {
   border-bottom: 1px solid var(--border);
