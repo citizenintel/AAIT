@@ -18,6 +18,14 @@ import {
 } from '@/lib/services/hero-images';
 
 const SIZE_LABELS: Record<string, string> = { premium: 'Premium', banner: 'Banner', standard: 'Standard', compact: 'Compact' };
+const INFOGRAPHIC_LABEL_MAP: Record<string, string> = {
+  severity: 'Severity breakdown',
+  module: 'Module breakdown',
+  province: 'Province bar chart',
+  trend: '14-day trend line',
+  casualties: 'Casualties summary',
+  stats: 'Live statistics',
+};
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   active: { bg: '#38a16922', color: '#38a169' },
   paused: { bg: '#d69e2e22', color: '#d69e2e' },
@@ -202,8 +210,8 @@ function ImageGrid({ category, label, description }: { category: SlotCategory; l
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: 11 }}>No preview</div>
                 )}
                 <div style={{ position: 'absolute', top: 6, left: 6, width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{idx + 1}</div>
-                <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 6px', borderRadius: 3, background: img.type === 'builtin' ? '#3182ce30' : '#c9a84c30', color: img.type === 'builtin' ? '#63b3ed' : '#c9a84c', fontSize: 9, fontWeight: 600, textTransform: 'uppercase' }}>
-                  {img.type === 'builtin' ? 'Built-in' : 'Uploaded'}
+                <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 6px', borderRadius: 3, background: '#c9a84c30', color: '#c9a84c', fontSize: 9, fontWeight: 600, textTransform: 'uppercase' }}>
+                  Uploaded
                 </div>
               </div>
               <div style={{ padding: '8px 10px' }}>
@@ -223,7 +231,7 @@ function ImageGrid({ category, label, description }: { category: SlotCategory; l
                   </button>
                   <button onClick={() => moveUp(img.id)} disabled={idx === 0} title="Move up" style={{ padding: '4px 6px', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 4, cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.3 : 1, color: 'var(--text-secondary)', fontSize: 11 }}>&#9650;</button>
                   <button onClick={() => moveDown(img.id)} disabled={idx === images.length - 1} title="Move down" style={{ padding: '4px 6px', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 4, cursor: idx === images.length - 1 ? 'default' : 'pointer', opacity: idx === images.length - 1 ? 0.3 : 1, color: 'var(--text-secondary)', fontSize: 11 }}>&#9660;</button>
-                  {img.type === 'uploaded' && (
+                  {(
                     confirmDelete === img.id ? (
                       <div style={{ display: 'flex', gap: 2 }}>
                         <button onClick={() => handleDelete(img.id)} style={{ fontSize: 10, padding: '4px 8px', background: '#c53030', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Confirm</button>
@@ -333,6 +341,12 @@ export function AdminSponsors() {
   const slotFileRef = useRef<HTMLInputElement>(null);
   const sponsorsEnabled = useAppStore((s) => s.sponsorsEnabled);
   const setSponsorsEnabled = useAppStore((s) => s.setSponsorsEnabled);
+  const placeholderEnabled = useAppStore((s) => s.placeholderEnabled);
+  const setPlaceholderEnabled = useAppStore((s) => s.setPlaceholderEnabled);
+  const infographicsEnabled = useAppStore((s) => s.infographicsEnabled);
+  const setInfographicsEnabled = useAppStore((s) => s.setInfographicsEnabled);
+  const enabledInfographicTypes = useAppStore((s) => s.enabledInfographicTypes);
+  const setEnabledInfographicTypes = useAppStore((s) => s.setEnabledInfographicTypes);
 
   const assignImageToSlot = useCallback((slot: number, imageId: string) => {
     const img = adImages.find(i => i.id === imageId);
@@ -507,7 +521,7 @@ export function AdminSponsors() {
           </label>
         </div>
         <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 0 }}>
-          When ON, sponsor ads appear in 6 slots (2 sidebar, 2 dashboard, 2 bottom banners). When OFF, those slots show incident data visualizations instead.
+          When ON, paid campaigns fill their assigned slots. Empty slots fall back to placeholder images or infographics (configured below). When OFF, all slots use the fallback content.
         </p>
       </div>
 
@@ -883,7 +897,7 @@ export function AdminSponsors() {
           <li><strong>4 size tiers</strong>: Premium (×3), Banner (×2), Standard (×1), Compact (×0.5)</li>
           <li><strong>6 placement zones</strong>: 2 sidebar, 2 dashboard, 2 bottom banners</li>
           <li><strong>Timed durations</strong>: 24h, 48h, 7 days, 1 month, or custom — clock starts on activation, auto-expires</li>
-          <li>When a sponsor expires or is paused, the slot <strong>reverts to data visualizations</strong></li>
+          <li>When a sponsor expires or is paused, the slot <strong>falls back to placeholder images or infographics</strong> (configured above)</li>
           <li>Each sponsor is <strong>independently pausable/disableable</strong></li>
           <li>Impressions tracked as <strong>aggregates only</strong> — no individual user tracking</li>
           <li>Sponsor conflicts checked against incident content — sponsors are never displayed alongside incidents involving their organisation</li>
