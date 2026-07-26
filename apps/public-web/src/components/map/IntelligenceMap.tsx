@@ -52,49 +52,10 @@ const EVENT_TYPE_COLORS: Record<EventType, string> = {
   other: '#6366f1',
 };
 
-// ---------------------------------------------------------------------------
-// Fallback dark style (inline, no network dependency)
-// ---------------------------------------------------------------------------
-
-const FALLBACK_DARK_STYLE: maplibregl.StyleSpecification = {
-  version: 8 as const,
-  sources: {
-    'osm-raster': {
-      type: 'raster',
-      tiles: [
-        'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      ],
-      tileSize: 256,
-      attribution: '&copy; OpenStreetMap contributors',
-      maxzoom: 19,
-    },
-  },
-  layers: [
-    {
-      id: 'bg',
-      type: 'background',
-      paint: { 'background-color': '#111113' },
-    },
-    {
-      id: 'osm-tiles',
-      type: 'raster',
-      source: 'osm-raster',
-      paint: {
-        'raster-saturation': -0.8,
-        'raster-brightness-max': 0.35,
-        'raster-fade-duration': 300,
-      },
-    },
-  ],
-};
 
 // ---------------------------------------------------------------------------
-// Map styles
+// Map styles — all inline (no remote style JSON fetches)
 // ---------------------------------------------------------------------------
-
-const DARK_STYLE_URL = 'https://tiles.openfreemap.org/styles/dark';
 
 function satelliteStyle(): maplibregl.StyleSpecification {
   return {
@@ -123,9 +84,43 @@ function satelliteStyle(): maplibregl.StyleSpecification {
   } satisfies maplibregl.StyleSpecification;
 }
 
-const MAP_STYLES: Record<string, string | maplibregl.StyleSpecification> = {
-  standard: DARK_STYLE_URL,
-  light: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+const DARK_STYLE: maplibregl.StyleSpecification = {
+  version: 8 as const,
+  sources: {
+    'carto-dark': {
+      type: 'raster',
+      tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
+      tileSize: 256,
+      attribution: '&copy; CARTO &copy; OpenStreetMap contributors',
+      maxzoom: 18,
+    },
+  },
+  layers: [
+    { id: 'bg', type: 'background', paint: { 'background-color': '#111113' } },
+    { id: 'dark-tiles', type: 'raster', source: 'carto-dark', paint: { 'raster-fade-duration': 300 } },
+  ],
+};
+
+const LIGHT_STYLE: maplibregl.StyleSpecification = {
+  version: 8 as const,
+  sources: {
+    'carto-light': {
+      type: 'raster',
+      tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'],
+      tileSize: 256,
+      attribution: '&copy; CARTO &copy; OpenStreetMap contributors',
+      maxzoom: 18,
+    },
+  },
+  layers: [
+    { id: 'bg', type: 'background', paint: { 'background-color': '#f2efe9' } },
+    { id: 'light-tiles', type: 'raster', source: 'carto-light', paint: { 'raster-fade-duration': 300 } },
+  ],
+};
+
+const MAP_STYLES: Record<string, maplibregl.StyleSpecification> = {
+  standard: DARK_STYLE,
+  light: LIGHT_STYLE,
   terrain: {
     version: 8 as const,
     sources: {
@@ -550,7 +545,7 @@ export function IntelligenceMap({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: DARK_STYLE_URL,
+      style: DARK_STYLE,
       center: [25.5, -28.0],
       zoom: 5.5,
       minZoom: 3,
@@ -559,30 +554,7 @@ export function IntelligenceMap({
       attributionControl: false,
     });
 
-    // If the remote style fails on INITIAL load only, switch to fallback.
-    // Once the first style loads, this handler is disabled so it can't
-    // interfere with user-initiated style switches (terrain, satellite, etc).
-    let initialLoadDone = false;
-    map.on('error', (e: maplibregl.ErrorEvent) => {
-      if (initialLoadDone) return;
-      const msg = (e as any).error?.message ?? '';
-      if (msg.includes('style') || msg.includes('Style')) {
-        initialLoadDone = true;
-        map.setStyle(FALLBACK_DARK_STYLE);
-      }
-    });
-
-    // Failsafe: if style hasn't loaded after 10s, switch to fallback
-    const styleFallbackTimer = setTimeout(() => {
-      if (!initialLoadDone && !map.isStyleLoaded()) {
-        initialLoadDone = true;
-        map.setStyle(FALLBACK_DARK_STYLE);
-      }
-    }, 10_000);
-
     map.on('load', () => {
-      initialLoadDone = true;
-      clearTimeout(styleFallbackTimer);
       addSourceAndLayer(map);
       addMeasureLayers(map);
       tryAddDeckOverlay(map);
@@ -719,7 +691,6 @@ export function IntelligenceMap({
     ro.observe(containerRef.current);
 
     return () => {
-      clearTimeout(styleFallbackTimer);
       ro.disconnect();
       if (popupRef.current) popupRef.current.remove();
       map.remove();
