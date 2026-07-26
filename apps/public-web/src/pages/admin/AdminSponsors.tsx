@@ -774,11 +774,77 @@ export function AdminSponsors() {
         </div>
       </div>
 
-      <ImageGrid
-        category="hero"
-        label="Placeholder Images (Sponsors OFF)"
-        description="Shown in ALL slots when the ad toggle is OFF. Branding images — AAIT farm scenes, command center, etc."
-      />
+      {/* --- Empty Slot Fallback --- */}
+      <div style={{ marginTop: 32, marginBottom: 24 }}>
+        <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#e2e8f0' }}>Empty Slot Fallback</h3>
+        <p style={{ margin: '0 0 16px', fontSize: 12, color: '#8a94a6' }}>
+          What shows in slots without a paid campaign. Priority: Paid Ad → Placeholder Image → Infographic → Promo Card.
+        </p>
+
+        {/* Placeholder Images toggle + upload */}
+        <div style={{ border: '1px solid #2d3748', borderRadius: 8, padding: 14, marginBottom: 12, background: '#1a2332' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0' }}>Placeholder Images</div>
+              <div style={{ fontSize: 10, color: '#8a94a6' }}>Uploaded images fill empty slots when enabled.</div>
+            </div>
+            <label className="toggle-switch">
+              <input type="checkbox" checked={placeholderEnabled} onChange={e => setPlaceholderEnabled(e.target.checked)} />
+              <span className="toggle-slider" />
+              <span className="toggle-label" style={{ fontSize: 10 }}>{placeholderEnabled ? 'ON' : 'OFF'}</span>
+            </label>
+          </div>
+          {placeholderEnabled && (
+            <ImageGrid
+              category="hero"
+              label="Placeholder Images"
+              description="Upload images here. They rotate across empty ad slots when no paid campaign is assigned."
+            />
+          )}
+        </div>
+
+        {/* Infographics toggle + type selection */}
+        <div style={{ border: '1px solid #2d3748', borderRadius: 8, padding: 14, background: '#1a2332' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: infographicsEnabled ? 10 : 0 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0' }}>Infographics</div>
+              <div style={{ fontSize: 10, color: '#8a94a6' }}>Data visualizations fill empty slots (lower priority than placeholders).</div>
+            </div>
+            <label className="toggle-switch">
+              <input type="checkbox" checked={infographicsEnabled} onChange={e => setInfographicsEnabled(e.target.checked)} />
+              <span className="toggle-slider" />
+              <span className="toggle-label" style={{ fontSize: 10 }}>{infographicsEnabled ? 'ON' : 'OFF'}</span>
+            </label>
+          </div>
+          {infographicsEnabled && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              {Object.entries(INFOGRAPHIC_LABEL_MAP).map(([key, label]) => {
+                const checked = enabledInfographicTypes.includes(key);
+                return (
+                  <label key={key} style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px',
+                    borderRadius: 6, background: checked ? '#38a16915' : '#0d1117',
+                    border: `1px solid ${checked ? '#38a16944' : '#2d3748'}`, cursor: 'pointer', fontSize: 10, color: '#e2e8f0',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        const next = checked
+                          ? enabledInfographicTypes.filter(t => t !== key)
+                          : [...enabledInfographicTypes, key];
+                        setEnabledInfographicTypes(next);
+                      }}
+                      style={{ accentColor: '#38a169' }}
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="admin-note" style={{ marginBottom: 20 }}>
         <strong>Storage:</strong> {formatBytes(getStorageUsage().used)} used across {getStorageUsage().items} items.

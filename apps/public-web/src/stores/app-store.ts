@@ -243,9 +243,15 @@ interface AppStore {
   ticker: TickerConfig;
   updateTicker: (patch: Partial<TickerConfig>) => void;
 
-  // --- Sponsors (legacy) ---
+  // --- Sponsors ---
   sponsorsEnabled: boolean;
   setSponsorsEnabled: (enabled: boolean) => void;
+  placeholderEnabled: boolean;
+  setPlaceholderEnabled: (enabled: boolean) => void;
+  infographicsEnabled: boolean;
+  setInfographicsEnabled: (enabled: boolean) => void;
+  enabledInfographicTypes: string[];
+  setEnabledInfographicTypes: (types: string[]) => void;
 
   // --- Dismissed alerts (legacy) ---
   dismissedAlertIds: Record<string, true>;
@@ -509,6 +515,12 @@ export const useAppStore = create<AppStore>()(
     // --- Sponsors ---
     sponsorsEnabled: (() => { try { const v = localStorage.getItem('aait_sponsors_enabled'); return v === null ? true : v === 'true'; } catch { return true; } })(),
     setSponsorsEnabled: (enabled) => set((s) => { s.sponsorsEnabled = enabled; try { localStorage.setItem('aait_sponsors_enabled', String(enabled)); } catch { /* private browsing */ } }),
+    placeholderEnabled: (() => { try { const v = localStorage.getItem('aait_placeholder_enabled'); return v === null ? true : v === 'true'; } catch { return true; } })(),
+    setPlaceholderEnabled: (enabled) => set((s) => { s.placeholderEnabled = enabled; try { localStorage.setItem('aait_placeholder_enabled', String(enabled)); } catch {} }),
+    infographicsEnabled: (() => { try { const v = localStorage.getItem('aait_infographics_enabled'); return v === null ? false : v === 'true'; } catch { return false; } })(),
+    setInfographicsEnabled: (enabled) => set((s) => { s.infographicsEnabled = enabled; try { localStorage.setItem('aait_infographics_enabled', String(enabled)); } catch {} }),
+    enabledInfographicTypes: (() => { try { const v = localStorage.getItem('aait_infographic_types'); return v ? JSON.parse(v) : ['severity', 'module', 'province', 'trend', 'casualties', 'stats']; } catch { return ['severity', 'module', 'province', 'trend', 'casualties', 'stats']; } })(),
+    setEnabledInfographicTypes: (types) => set((s) => { s.enabledInfographicTypes = types; try { localStorage.setItem('aait_infographic_types', JSON.stringify(types)); } catch {} }),
 
     // --- Dismissed alerts (legacy) ---
     dismissedAlertIds: {},
