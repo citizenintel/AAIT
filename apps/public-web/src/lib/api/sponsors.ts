@@ -75,13 +75,8 @@ export function saveAdminAds(ads: SponsorAd[]): void {
 
 export async function fetchActiveCampaigns(): Promise<CampaignRow[]> {
   if (!isSupabaseConfigured()) {
-    const stored = getStoredCampaigns();
-    if (stored.length > 0) {
-      return stored.filter(c => c.status === 'active');
-    }
     const ads = getStoredAdminAds() ?? MOCK_SPONSOR_ADS;
-    const now = Date.now();
-    return ads.filter(a => a.enabled && new Date(a.expiresAt).getTime() > now).map(a => ({
+    return ads.filter(a => a.enabled).map(a => ({
       id: a.id,
       sponsor_id: a.id,
       name: a.name,

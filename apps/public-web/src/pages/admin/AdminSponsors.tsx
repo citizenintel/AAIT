@@ -90,9 +90,13 @@ function ImageGrid({ category, label, description }: { category: SlotCategory; l
 
   const refresh = useCallback(() => setImages(getConfig(category)), [category]);
 
+  const MAX_AD_IMAGES = 6;
+  const atLimit = category === 'ad' && images.length >= MAX_AD_IMAGES;
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (atLimit) { setError(`Maximum ${MAX_AD_IMAGES} ad images (one per slot). Remove one before uploading.`); return; }
     setError('');
     setUploading(true);
     try {
@@ -159,8 +163,8 @@ function ImageGrid({ category, label, description }: { category: SlotCategory; l
         </div>
         <div>
           <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUpload} />
-          <button className="btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading} style={{ fontSize: 12, padding: '6px 14px' }}>
-            {uploading ? 'Uploading...' : '+ Upload image'}
+          <button className="btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading || atLimit} style={{ fontSize: 12, padding: '6px 14px' }}>
+            {uploading ? 'Uploading...' : atLimit ? `Limit (${MAX_AD_IMAGES})` : '+ Upload image'}
           </button>
         </div>
       </div>
@@ -269,7 +273,20 @@ export function AdminSponsors() {
 
   const [ads, setAds] = useState<SponsorAd[]>(() => {
     const stored = getStoredAdminAds();
-    return stored ?? [];
+    if (!stored) return [];
+    const now = Date.now();
+    let refreshed = false;
+    const result = stored.map(a => {
+      if (a.enabled && new Date(a.expiresAt).getTime() <= now) {
+        refreshed = true;
+        const durationMs: Record<string, number> = { '24h': 86400000, '48h': 172800000, '7d': 604800000, '30d': 2592000000 };
+        const ms = durationMs[a.duration] ?? 604800000;
+        return { ...a, startedAt: new Date().toISOString(), expiresAt: new Date(now + ms).toISOString() };
+      }
+      return a;
+    });
+    if (refreshed) syncToFrontendDirect(result);
+    return result;
   });
   // Sync API data into local state when it arrives (only if no stored ads exist)
   if (initialAds.length > 0 && ads.length === 0) {
