@@ -7,6 +7,7 @@ import {
   DURATION_PRICES,
   SIZE_PRICES,
   SLOT_LABELS,
+  MOCK_SPONSOR_ADS,
   type SponsorAd,
   type AdDuration,
 } from '../../data/mock-sponsors';
@@ -71,6 +72,14 @@ function syncToFrontendDirect(adsList: SponsorAd[]) {
     };
   });
   saveCampaigns(campaigns);
+}
+
+const SLOT_MAP_KEY = 'aait_ad_slot_map';
+function getSlotMap(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(SLOT_MAP_KEY) || '{}'); } catch { return {}; }
+}
+function saveSlotMap(map: Record<string, number>) {
+  localStorage.setItem(SLOT_MAP_KEY, JSON.stringify(map));
 }
 
 function formatBytes(bytes: number): string {
@@ -318,23 +327,66 @@ export function AdminSponsors() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newSponsor, setNewSponsor] = useState({ name: '', tagline: '', size: 'standard' as string, websiteUrl: '', imageUrl: '' });
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [imagePickerId, setImagePickerId] = useState<string | null>(null);
-  const adImages = useMemo(() => getConfig('ad'), []);
+  const [adImages, setAdImages] = useState(() => getConfig('ad'));
+  const refreshAdImages = useCallback(() => setAdImages(getConfig('ad')), []);
+  const [uploadingSlot, setUploadingSlot] = useState<number | null>(null);
+  const slotFileRef = useRef<HTMLInputElement>(null);
   const sponsorsEnabled = useAppStore((s) => s.sponsorsEnabled);
   const setSponsorsEnabled = useAppStore((s) => s.setSponsorsEnabled);
 
-  const assignImage = (adId: string, imageUrl: string) => {
-    const updated = ads.map(a => a.id === adId ? { ...a, imageUrl } : a);
+  const assignImageToSlot = useCallback((slot: number, imageId: string) => {
+    const img = adImages.find(i => i.id === imageId);
+    if (!img) return;
+    const imageUrl = getThumbnail(img);
+    if (!imageUrl) return;
+    const map = getSlotMap();
+    for (const [id, s] of Object.entries(map)) {
+      if (id === imageId || s === slot) delete map[id];
+    }
+    map[imageId] = slot;
+    saveSlotMap(map);
+    const updated = ads.map(a => a.slot === slot ? { ...a, imageUrl } : a);
     setAds(updated);
-    syncToFrontend(updated);
-    setImagePickerId(null);
+    syncToFrontendDirect(updated);
+  }, [ads, adImages]);
+
+  const clearSlotImage = useCallback((slot: number) => {
+    const map = getSlotMap();
+    for (const [id, s] of Object.entries(map)) {
+      if (s === slot) delete map[id];
+    }
+    saveSlotMap(map);
+    const updated = ads.map(a => a.slot === slot ? { ...a, imageUrl: undefined } : a);
+    setAds(updated);
+    syncToFrontendDirect(updated);
+  }, [ads]);
+
+  const handleSlotUploadClick = (slot: number) => {
+    setUploadingSlot(slot);
+    slotFileRef.current?.click();
   };
 
-  const clearImage = (adId: string) => {
-    const updated = ads.map(a => a.id === adId ? { ...a, imageUrl: undefined } : a);
-    setAds(updated);
-    syncToFrontend(updated);
-    setImagePickerId(null);
+  const handleSlotFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || uploadingSlot === null) return;
+    try {
+      const img = await uploadImage(file, 'ad');
+      refreshAdImages();
+      const imageUrl = getThumbnail(img);
+      if (imageUrl) {
+        const map = getSlotMap();
+        for (const [id, s] of Object.entries(map)) {
+          if (s === uploadingSlot) delete map[id];
+        }
+        map[img.id] = uploadingSlot;
+        saveSlotMap(map);
+        const updated = ads.map(a => a.slot === uploadingSlot ? { ...a, imageUrl } : a);
+        setAds(updated);
+        syncToFrontendDirect(updated);
+      }
+    } catch { /* */ }
+    setUploadingSlot(null);
+    if (slotFileRef.current) slotFileRef.current.value = '';
   };
 
   const activeCount = ads.filter((a) => a.enabled && getStatus(a) === 'active').length;
@@ -573,53 +625,11 @@ export function AdminSponsors() {
               return (
                 <tr key={ad.id} style={{ opacity: isExpired ? 0.6 : 1 }}>
                   <td>
-                    <div style={{ position: 'relative' }}>
-                      <div
-                        onClick={() => setImagePickerId(imagePickerId === ad.id ? null : ad.id)}
-                        style={{ cursor: 'pointer' }}
-                        title="Click to assign image"
-                      >
-                        {ad.imageUrl ? (
-                          <img src={ad.imageUrl} alt={ad.name} style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--accent)' }} />
-                        ) : (
-                          <div style={{ width: 48, height: 32, borderRadius: 4, background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: 'var(--text-muted)', border: '1px dashed var(--border-subtle)' }}>+ img</div>
-                        )}
-                      </div>
-                      {imagePickerId === ad.id && (
-                        <div style={{ position: 'absolute', top: 36, left: 0, zIndex: 50, background: 'var(--bg-elevated)', border: '1px solid var(--border-strong)', borderRadius: 8, padding: 8, minWidth: 200, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
-                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Assign ad image</div>
-                          {adImages.length === 0 ? (
-                            <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '8px 0' }}>No ad images uploaded yet</div>
-                          ) : (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
-                              {adImages.map(img => {
-                                const thumb = getThumbnail(img);
-                                return thumb ? (
-                                  <img
-                                    key={img.id}
-                                    src={thumb}
-                                    alt={img.label}
-                                    title={img.label}
-                                    onClick={() => assignImage(ad.id, thumb)}
-                                    style={{ width: '100%', height: 40, objectFit: 'cover', borderRadius: 4, cursor: 'pointer', border: '1px solid var(--border-subtle)', transition: 'border-color 0.15s' }}
-                                    onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-                                    onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
-                                  />
-                                ) : null;
-                              })}
-                            </div>
-                          )}
-                          {ad.imageUrl && (
-                            <button
-                              onClick={() => clearImage(ad.id)}
-                              style={{ marginTop: 6, width: '100%', fontSize: 10, padding: '4px 0', background: '#c5303020', color: '#c53030', border: '1px solid #c5303040', borderRadius: 4, cursor: 'pointer' }}
-                            >
-                              Remove image
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                    {ad.imageUrl ? (
+                      <img src={ad.imageUrl} alt={ad.name} style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--accent)' }} />
+                    ) : (
+                      <div style={{ width: 48, height: 32, borderRadius: 4, background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: 'var(--text-muted)', border: '1px dashed var(--border-subtle)' }}>—</div>
+                    )}
                   </td>
                   <td className="td-title">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -697,11 +707,72 @@ export function AdminSponsors() {
         </table>
       </div>
 
-      <ImageGrid
-        category="ad"
-        label="Paid Ad Images"
-        description="Shown in empty ad slots when sponsors are ON but no paid campaign is assigned. Rotate through available slots."
-      />
+      {/* --- Slot Creatives Grid --- */}
+      <div style={{ marginTop: 32, marginBottom: 24 }}>
+        <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#e2e8f0' }}>Slot Creatives</h3>
+        <p style={{ margin: '0 0 16px', fontSize: 12, color: '#8a94a6' }}>
+          Assign uploaded ad images to each placement slot. The image shown here is what appears on the frontend.
+        </p>
+        <input type="file" ref={slotFileRef} accept="image/*" style={{ display: 'none' }} onChange={handleSlotFileChange} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+          {([1, 2, 3, 4, 5, 6] as const).map(slot => {
+            const ad = ads.find(a => a.slot === slot);
+            const slotMap = getSlotMap();
+            const assignedImageId = Object.entries(slotMap).find(([, s]) => s === slot)?.[0];
+            const assignedImg = assignedImageId ? adImages.find(i => i.id === assignedImageId) : undefined;
+            const thumbUrl = assignedImg ? getThumbnail(assignedImg) : ad?.imageUrl;
+            return (
+              <div key={slot} style={{
+                border: '1px solid #2d3748', borderRadius: 8, padding: 12,
+                background: '#1a2332', display: 'flex', flexDirection: 'column', gap: 8,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#c9a84c' }}>Slot {slot}</span>
+                  <span style={{ fontSize: 10, color: '#8a94a6' }}>{SLOT_LABELS[slot]}</span>
+                </div>
+                {ad && <span style={{ fontSize: 10, color: '#a0aec0' }}>{ad.name}</span>}
+                <div style={{
+                  width: '100%', aspectRatio: '16/9', borderRadius: 6, overflow: 'hidden',
+                  background: '#0d1117', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: thumbUrl ? '2px solid #38a16966' : '2px dashed #2d3748',
+                }}>
+                  {thumbUrl ? (
+                    <img src={thumbUrl} alt={`Slot ${slot}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <span style={{ fontSize: 11, color: '#4a5568' }}>No image</span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <select
+                    style={{ flex: 1, fontSize: 10, padding: '4px 6px', borderRadius: 4, background: '#0d1117', color: '#e2e8f0', border: '1px solid #2d3748' }}
+                    value={assignedImageId || ''}
+                    onChange={e => { if (e.target.value) assignImageToSlot(slot, e.target.value); else clearSlotImage(slot); }}
+                  >
+                    <option value="">— none —</option>
+                    {adImages.map(img => (
+                      <option key={img.id} value={img.id}>{img.label || img.alt || img.id.slice(0, 8)}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => handleSlotUploadClick(slot)}
+                    style={{ fontSize: 10, padding: '4px 8px', borderRadius: 4, background: '#2d3748', color: '#e2e8f0', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    Upload
+                  </button>
+                  {thumbUrl && (
+                    <button
+                      onClick={() => clearSlotImage(slot)}
+                      style={{ fontSize: 10, padding: '4px 8px', borderRadius: 4, background: '#e5393522', color: '#e53935', border: 'none', cursor: 'pointer' }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       <ImageGrid
         category="hero"

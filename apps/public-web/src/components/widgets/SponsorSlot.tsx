@@ -298,6 +298,50 @@ export function SponsorSlot({ slot }: { slot: 1 | 2 | 3 | 4 | 5 | 6 }) {
     if (ad.websiteUrl) window.open(ad.websiteUrl, '_blank', 'noopener,noreferrer');
   };
 
+  if (ad.imageUrl) {
+    return (
+      <div
+        className="sponsor-slot"
+        style={{
+          borderRadius: 8,
+          overflow: 'hidden',
+          position: 'relative',
+          border: '1px solid #c9a84c33',
+          cursor: ad.websiteUrl ? 'pointer' : 'default',
+        }}
+        title={`Sponsor: ${ad.name}${ad.websiteUrl ? ` — ${ad.websiteUrl}` : ''}`}
+        onClick={handleClick}
+      >
+        <img
+          src={ad.imageUrl}
+          alt={ad.name}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: 'block',
+            minHeight: 120,
+          }}
+          loading="lazy"
+        />
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: '6px 10px',
+          background: 'linear-gradient(transparent, rgba(0,0,0,0.75))',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-end',
+        }}>
+          <span style={{ fontSize: 10, color: '#e2e8f0', fontWeight: 600 }}>{ad.name}</span>
+          <span className="demo-tag" style={{ fontSize: 7 }}>AD</span>
+        </div>
+      </div>
+    );
+  }
+
   if (ad.size === 'banner') {
     return (
       <div
