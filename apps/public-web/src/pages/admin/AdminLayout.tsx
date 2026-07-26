@@ -9,7 +9,6 @@ const NAV_ITEMS: { to: string; label: string; icon: string; end?: true; modPermK
   { to: '/admin/incidents', label: 'Incidents', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', modPermKey: 'incidents' },
   { to: '/admin/submissions', label: 'Submissions', icon: 'M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z', modPermKey: 'submissions' },
   { to: '/admin/sponsors', label: 'Ad Manager', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2zM14 8h.01', adminOnly: true },
-  { to: '/admin/images', label: 'Image Manager', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z', adminOnly: true },
   { to: '/admin/widgets', label: 'Widgets', icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z', adminOnly: true },
   { to: '/admin/feeds', label: 'News Feeds', icon: 'M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z', modPermKey: 'feeds' },
   { to: '/admin/ticker', label: 'Live Ticker', icon: 'M3 8h18M3 8l2 8a2 2 0 002 2h10a2 2 0 002-2l2-8M8 12h8', modPermKey: 'ticker' },
