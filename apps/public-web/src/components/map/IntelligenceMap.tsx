@@ -559,26 +559,29 @@ export function IntelligenceMap({
       attributionControl: false,
     });
 
-    // If the remote style fails, switch to the fallback inline style
-    let styleLoadFailed = false;
-    const switchToFallback = () => {
-      if (styleLoadFailed) return;
-      styleLoadFailed = true;
-      map.setStyle(FALLBACK_DARK_STYLE);
-    };
+    // If the remote style fails on INITIAL load only, switch to fallback.
+    // Once the first style loads, this handler is disabled so it can't
+    // interfere with user-initiated style switches (terrain, satellite, etc).
+    let initialLoadDone = false;
     map.on('error', (e: maplibregl.ErrorEvent) => {
+      if (initialLoadDone) return;
       const msg = (e as any).error?.message ?? '';
-      if (!styleLoadFailed && (msg.includes('style') || msg.includes('fetch') || msg.includes('Failed') || msg.includes('HTTP'))) {
-        switchToFallback();
+      if (msg.includes('style') || msg.includes('Style')) {
+        initialLoadDone = true;
+        map.setStyle(FALLBACK_DARK_STYLE);
       }
     });
 
     // Failsafe: if style hasn't loaded after 10s, switch to fallback
     const styleFallbackTimer = setTimeout(() => {
-      if (!map.isStyleLoaded()) switchToFallback();
+      if (!initialLoadDone && !map.isStyleLoaded()) {
+        initialLoadDone = true;
+        map.setStyle(FALLBACK_DARK_STYLE);
+      }
     }, 10_000);
 
     map.on('load', () => {
+      initialLoadDone = true;
       clearTimeout(styleFallbackTimer);
       addSourceAndLayer(map);
       addMeasureLayers(map);
