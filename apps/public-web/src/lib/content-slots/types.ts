@@ -1,6 +1,6 @@
-export const MAX_PUBLIC_CONTENT_SLOTS = 4;
+export const MAX_PUBLIC_CONTENT_SLOTS = 6;
 
-export type SlotKey = 'slot-1' | 'slot-2' | 'slot-3' | 'slot-4';
+export type SlotKey = 'slot-1' | 'slot-2' | 'slot-3' | 'slot-4' | 'slot-5' | 'slot-6';
 
 export type SlotMode = 'auto' | 'paid_ad' | 'infographic' | 'placeholder' | 'hidden';
 

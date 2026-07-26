@@ -525,6 +525,8 @@ export const useAppStore = create<AppStore>()(
         'slot-2': { slotKey: 'slot-2', assetId: null, campaignId: null, mode: 'auto' },
         'slot-3': { slotKey: 'slot-3', assetId: null, campaignId: null, mode: 'auto' },
         'slot-4': { slotKey: 'slot-4', assetId: null, campaignId: null, mode: 'auto' },
+        'slot-5': { slotKey: 'slot-5', assetId: null, campaignId: null, mode: 'auto' },
+        'slot-6': { slotKey: 'slot-6', assetId: null, campaignId: null, mode: 'auto' },
       };
       try { const v = localStorage.getItem('aait_slot_assignments'); if (v) return JSON.parse(v); } catch {}
       return defaults;

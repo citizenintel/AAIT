@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useAppStore } from '../../store/app-store';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
 import { MODULE_META } from '../../data/mock-incidents';
@@ -211,6 +211,38 @@ export const INFOGRAPHIC_LABELS: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Expand overlay — click any ad to see it large, centered over the map
+// ---------------------------------------------------------------------------
+
+function AdOverlay({ content, onClose }: { content: Extract<ResolvedContent, { type: 'paid_ad' }>; onClose: () => void }) {
+  return (
+    <div className="ad-overlay-backdrop" onClick={onClose}>
+      <div className="ad-overlay-content" onClick={e => e.stopPropagation()}>
+        <button className="ad-overlay-close" onClick={onClose}>&times;</button>
+        {content.imageUrl ? (
+          <div className="ad-overlay-image-wrap">
+            <img src={content.imageUrl} alt={content.displayName} />
+          </div>
+        ) : (
+          <div className="ad-overlay-text-wrap" style={{ background: content.bgColor, borderColor: content.accentColor }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: content.accentColor, marginBottom: 6 }}>{content.displayName}</div>
+            <div style={{ fontSize: 13, color: content.textColor, marginBottom: 12 }}>{content.tagline}</div>
+          </div>
+        )}
+        {content.linkUrl && (
+          <a href={content.linkUrl} target="_blank" rel="noopener noreferrer" className="ad-overlay-cta">
+            Visit Website &rarr;
+          </a>
+        )}
+        <div className="ad-overlay-sponsor-tag">
+          <span className="demo-tag">AD</span> {content.displayName}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Ad rendering sub-components
 // ---------------------------------------------------------------------------
 
@@ -225,14 +257,10 @@ function SponsorIcon({ icon, color, size = 28 }: { icon: string; color: string; 
   }
 }
 
-function RenderPaidAd({ content }: { content: Extract<ResolvedContent, { type: 'paid_ad' }> }) {
-  const handleClick = () => {
-    if (content.linkUrl) window.open(content.linkUrl, '_blank', 'noopener,noreferrer');
-  };
-
+function RenderPaidAd({ content, onExpand }: { content: Extract<ResolvedContent, { type: 'paid_ad' }>; onExpand: () => void }) {
   if (content.imageUrl) {
     return (
-      <div className="sponsor-slot" style={{ borderRadius: 8, overflow: 'hidden', position: 'relative', border: '1px solid #c9a84c33', cursor: content.linkUrl ? 'pointer' : 'default' }} title={`Sponsor: ${content.displayName}`} onClick={handleClick}>
+      <div className="sponsor-slot" style={{ borderRadius: 8, overflow: 'hidden', position: 'relative', border: '1px solid #c9a84c33', cursor: 'pointer' }} title={`Click to expand: ${content.displayName}`} onClick={onExpand}>
         <img src={content.imageUrl} alt={content.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', minHeight: 120 }} loading="lazy" />
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '6px 10px', background: 'linear-gradient(transparent, rgba(0,0,0,0.75))', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <span style={{ fontSize: 10, color: '#e2e8f0', fontWeight: 600 }}>{content.displayName}</span>
@@ -244,14 +272,14 @@ function RenderPaidAd({ content }: { content: Extract<ResolvedContent, { type: '
 
   if (content.size === 'premium') {
     return (
-      <div className="sponsor-slot premium" style={{ background: content.bgColor, borderColor: content.accentColor, cursor: content.linkUrl ? 'pointer' : 'default' }} title={`Sponsor: ${content.displayName}`} onClick={handleClick}>
+      <div className="sponsor-slot premium" style={{ background: content.bgColor, borderColor: content.accentColor, cursor: 'pointer' }} title={`Click to expand: ${content.displayName}`} onClick={onExpand}>
         <div className="sponsor-premium-header">
           <SponsorIcon icon={content.icon} color={content.accentColor} size={24} />
           <div className="sponsor-slot-name" style={{ color: content.accentColor }}>{content.displayName}</div>
         </div>
         <div className="sponsor-slot-tagline" style={{ color: content.textColor }}>{content.tagline}</div>
         <div className="sponsor-premium-footer">
-          <div className="sponsor-premium-cta" style={{ borderColor: content.accentColor, color: content.accentColor }}>Visit Website →</div>
+          <div className="sponsor-premium-cta" style={{ borderColor: content.accentColor, color: content.accentColor }}>View Details →</div>
           <div className="sponsor-slot-badge"><span className="demo-tag">AD</span><span className="sponsor-label">Premium Sponsor</span></div>
         </div>
       </div>
@@ -259,7 +287,7 @@ function RenderPaidAd({ content }: { content: Extract<ResolvedContent, { type: '
   }
 
   return (
-    <div className="sponsor-slot" style={{ background: content.bgColor, borderColor: content.accentColor, cursor: content.linkUrl ? 'pointer' : 'default' }} title={`Sponsor: ${content.displayName}`} onClick={handleClick}>
+    <div className="sponsor-slot" style={{ background: content.bgColor, borderColor: content.accentColor, cursor: 'pointer' }} title={`Click to expand: ${content.displayName}`} onClick={onExpand}>
       <div className="sponsor-slot-inner">
         <SponsorIcon icon={content.icon} color={content.accentColor} />
         <div className="sponsor-slot-text">
@@ -288,10 +316,11 @@ function RenderPlaceholder({ src, alt }: { src: string; alt: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// ManagedContentSlot — the single entry point for all 4 content placements
+// ManagedContentSlot — the single entry point for all 6 content placements
 // ---------------------------------------------------------------------------
 
 export function ManagedContentSlot({ slotKey }: { slotKey: SlotKey }) {
+  const [expanded, setExpanded] = useState(false);
   const globalDisplayEnabled = useAppStore((s) => s.sponsorsEnabled);
   const globalInfographicFallback = useAppStore((s) => s.globalInfographicFallback);
   const enabledInfographicTypes = useAppStore((s) => s.enabledInfographicTypes);
@@ -311,7 +340,12 @@ export function ManagedContentSlot({ slotKey }: { slotKey: SlotKey }) {
   if (resolved.type === 'hidden') return null;
 
   if (resolved.type === 'paid_ad') {
-    return <RenderPaidAd content={resolved} />;
+    return (
+      <>
+        <RenderPaidAd content={resolved} onExpand={() => setExpanded(true)} />
+        {expanded && <AdOverlay content={resolved} onClose={() => setExpanded(false)} />}
+      </>
+    );
   }
 
   if (resolved.type === 'infographic') {

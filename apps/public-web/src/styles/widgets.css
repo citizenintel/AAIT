@@ -151,10 +151,10 @@
 .widget-casualty-counts .deceased { color: #c53030; font-weight: 600; }
 .widget-casualty-counts .injured { color: #ed8936; font-weight: 600; }
 
-/* Bottom zone 5-column grid */
+/* Bottom zone 6-column grid */
 .bottom-zone-grid {
   display: grid;
-  grid-template-columns: 140px 3fr 2fr 2fr 200px;
+  grid-template-columns: 120px 2fr 2fr 2fr 2fr 180px;
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
   max-height: 180px;
@@ -346,6 +346,12 @@
   align-items: stretch;
   border-left: 1px solid var(--border);
   overflow: hidden;
+  padding: 6px;
+}
+.bottom-panel-ad .sponsor-slot {
+  flex: 1;
+  margin: 0;
+  min-height: 0;
 }
 .bottom-panel-ad .sponsor-slot.banner {
   margin: 0;
@@ -384,7 +390,7 @@
 @media (max-width: 900px) {
   .widget-zone-right { width: 240px; }
   .widget-zone-bottom { right: 240px; }
-  .bottom-zone-grid { grid-template-columns: 100px 3fr 2fr 2fr 160px; }
+  .bottom-zone-grid { grid-template-columns: 100px 2fr 2fr 2fr 2fr 140px; }
 }
 @media (max-width: 768px) {
   .widget-zone-right { display: none; }

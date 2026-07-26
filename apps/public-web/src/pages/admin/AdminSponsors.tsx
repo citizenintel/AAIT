@@ -206,12 +206,12 @@ function AssetLibrary() {
           No placeholder images. Upload one to get started.
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
           {assets.map(asset => {
             const thumb = getImageData(asset.id);
             return (
-              <div key={asset.id} style={{ border: `1px solid ${asset.enabled ? 'var(--accent)' : 'var(--border-subtle)'}`, borderRadius: 8, overflow: 'hidden', background: 'var(--bg-elevated)', opacity: asset.enabled ? 1 : 0.5 }}>
-                <div style={{ height: 100, background: '#0a0f1a', overflow: 'hidden' }}>
+              <div key={asset.id} style={{ border: `1px solid ${asset.enabled ? 'var(--accent)' : 'var(--border-subtle)'}`, borderRadius: 6, overflow: 'hidden', background: 'var(--bg-elevated)', opacity: asset.enabled ? 1 : 0.5 }}>
+                <div style={{ height: 40, background: '#0a0f1a', overflow: 'hidden' }}>
                   {thumb && <img src={thumb} alt={asset.alt} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
                 </div>
                 <div style={{ padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -454,7 +454,7 @@ export function AdminSponsors() {
         <div>
           <h1 style={{ margin: 0, fontSize: 22 }}>Content Manager</h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
-            4-slot content system — paid ads, placeholders, and infographics
+            6-slot content system — paid ads, placeholders, and infographics
           </p>
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 14px', background: sponsorsEnabled ? '#38a16915' : '#c5303015', border: `1px solid ${sponsorsEnabled ? '#38a16940' : '#c5303040'}`, borderRadius: 8 }}>
@@ -491,7 +491,7 @@ export function AdminSponsors() {
             Storage: {formatBytes(storage.used)} used ({storage.items} items)
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-            Max 4 content slots · Demo mode (localStorage)
+            Max 6 content slots · Demo mode (localStorage)
           </div>
         </div>
       </div>

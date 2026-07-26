@@ -38,6 +38,24 @@ export const SLOT_REGISTRY: SlotDefinition[] = [
     maxHeight: 200,
     fitMode: 'cover',
   },
+  {
+    key: 'slot-5',
+    label: 'Bottom Left',
+    location: 'Bottom zone — left ad panel',
+    aspectRatio: '16:9',
+    maxWidth: 400,
+    maxHeight: 180,
+    fitMode: 'cover',
+  },
+  {
+    key: 'slot-6',
+    label: 'Bottom Right',
+    location: 'Bottom zone — right ad panel',
+    aspectRatio: '16:9',
+    maxWidth: 400,
+    maxHeight: 180,
+    fitMode: 'cover',
+  },
 ];
 
 export const ALL_SLOT_KEYS: SlotKey[] = SLOT_REGISTRY.map(s => s.key);
