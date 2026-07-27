@@ -151,10 +151,10 @@
 .widget-casualty-counts .deceased { color: #c53030; font-weight: 600; }
 .widget-casualty-counts .injured { color: #ed8936; font-weight: 600; }
 
-/* Bottom zone 5-column grid */
+/* Bottom zone 3-column grid */
 .bottom-zone-grid {
   display: grid;
-  grid-template-columns: 120px 3fr 2fr 2fr 180px;
+  grid-template-columns: minmax(300px, 2fr) 3fr 180px;
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
   max-height: 180px;
@@ -162,13 +162,38 @@
 }
 .bottom-zone-grid.expanded { max-height: 360px; }
 
+/* Left infographics block — visually separated */
+.bottom-infographics-block {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 0;
+  border-right: 2px solid var(--border-strong);
+  background: var(--surface-1, #18181b);
+  overflow: hidden;
+}
+.bottom-infographics-content {
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+.bottom-infographics-content > * {
+  flex: 1;
+  min-width: 0;
+}
+.bottom-infographics-content .sponsor-slot {
+  min-height: unset;
+  max-height: 100%;
+}
+
 /* Left: LIVE panel */
 .bottom-panel-live {
   border-right: 1px solid var(--border);
-  padding: 10px 12px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
+  overflow: hidden;
 }
 .bottom-live-badge {
   display: flex;
@@ -184,20 +209,20 @@
 .bottom-live-stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 4px;
 }
 .bottom-live-stat {
   display: flex;
   flex-direction: column;
 }
 .bottom-live-stat-value {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text-primary);
-  line-height: 1.2;
+  line-height: 1.1;
 }
 .bottom-live-stat-label {
-  font-size: 9px;
+  font-size: 8px;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -390,12 +415,12 @@
 @media (max-width: 900px) {
   .widget-zone-right { width: 240px; bottom: 180px; }
   .widget-zone-bottom { right: 0; }
-  .bottom-zone-grid { grid-template-columns: 100px 3fr 2fr 2fr 140px; }
+  .bottom-zone-grid { grid-template-columns: minmax(240px, 2fr) 3fr 140px; }
 }
 @media (max-width: 768px) {
   .widget-zone-right { display: none; }
   .widget-zone-bottom { right: 0; }
   .widget-zone-top { display: none; }
   .bottom-zone-grid { grid-template-columns: 1fr; }
-  .bottom-panel-live, .bottom-panel-activity, .bottom-panel-ad { display: none; }
+  .bottom-infographics-block, .bottom-panel-activity { display: none; }
 }
