@@ -155,28 +155,49 @@
 .bottom-zone-grid {
   display: grid;
   grid-template-columns: 190px minmax(200px, 2fr) 3fr 180px;
-  background: var(--bg-surface);
+  gap: 0;
+  background: var(--surface-0, #111113);
   border-top: 1px solid var(--border);
   max-height: 180px;
   overflow: hidden;
 }
 .bottom-zone-grid.expanded { max-height: 360px; }
 
-/* Left: Infographics panel — standalone */
+/* Left: Infographics panel — standalone card */
 .bottom-infographics-panel {
-  background: var(--surface-1, #18181b);
-  border-right: 1px solid var(--border-strong);
+  background: var(--surface-2, #1f1f23);
+  border-right: 2px solid var(--surface-0, #111113);
   overflow: hidden;
+  position: relative;
+}
+.bottom-infographics-panel::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 0;
+  bottom: 6px;
+  width: 0;
+  border-right: 1px solid var(--border-strong);
 }
 
-/* Left-center: Ad panel — standalone */
+/* Left-center: Ad panel — standalone card */
 .bottom-ad-panel {
-  background: var(--surface-0, #111113);
-  border-right: 1px solid var(--border-strong);
-  padding: 10px 12px;
+  background: var(--surface-2, #1f1f23);
+  border-right: 2px solid var(--surface-0, #111113);
+  padding: 10px 14px;
   display: flex;
   align-items: center;
   overflow: hidden;
+  position: relative;
+}
+.bottom-ad-panel::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 0;
+  bottom: 6px;
+  width: 0;
+  border-right: 1px solid var(--border-strong);
 }
 .bottom-ad-panel > * {
   flex: 1;
@@ -185,8 +206,7 @@
 
 /* Left: LIVE panel */
 .bottom-panel-live {
-  border-right: 1px solid var(--border);
-  padding: 8px 10px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
