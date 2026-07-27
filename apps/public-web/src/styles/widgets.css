@@ -154,50 +154,37 @@
 /* Bottom zone 4-column grid */
 .bottom-zone-grid {
   display: grid;
-  grid-template-columns: 190px minmax(200px, 2fr) 3fr 180px;
+  grid-template-columns: 200px minmax(220px, 2fr) 3fr 180px;
   gap: 0;
-  background: var(--surface-0, #111113);
+  background: var(--bg-base, #0e0e10);
   border-top: 1px solid var(--border);
   max-height: 180px;
   overflow: hidden;
+  padding-left: 4px;
 }
 .bottom-zone-grid.expanded { max-height: 360px; }
 
 /* Left: Infographics panel — standalone card */
 .bottom-infographics-panel {
-  background: var(--surface-2, #1f1f23);
-  border-right: 2px solid var(--surface-0, #111113);
+  background: var(--bg-elevated, #232328);
+  border: 1px solid rgba(56, 161, 105, 0.35);
+  border-top: 3px solid #38a169;
+  border-radius: 0 0 4px 4px;
+  margin: 0 4px 4px 0;
   overflow: hidden;
-  position: relative;
-}
-.bottom-infographics-panel::after {
-  content: '';
-  position: absolute;
-  top: 6px;
-  right: 0;
-  bottom: 6px;
-  width: 0;
-  border-right: 1px solid var(--border-strong);
 }
 
 /* Left-center: Ad panel — standalone card */
 .bottom-ad-panel {
-  background: var(--surface-2, #1f1f23);
-  border-right: 2px solid var(--surface-0, #111113);
+  background: var(--bg-elevated, #232328);
+  border: 1px solid rgba(214, 158, 46, 0.35);
+  border-top: 3px solid #d69e2e;
+  border-radius: 0 0 4px 4px;
+  margin: 0 4px 4px 0;
   padding: 10px 14px;
   display: flex;
   align-items: center;
   overflow: hidden;
-  position: relative;
-}
-.bottom-ad-panel::after {
-  content: '';
-  position: absolute;
-  top: 6px;
-  right: 0;
-  bottom: 6px;
-  width: 0;
-  border-right: 1px solid var(--border-strong);
 }
 .bottom-ad-panel > * {
   flex: 1;
@@ -432,7 +419,7 @@
 @media (max-width: 900px) {
   .widget-zone-right { width: 240px; bottom: 180px; }
   .widget-zone-bottom { right: 0; }
-  .bottom-zone-grid { grid-template-columns: 150px minmax(160px, 2fr) 3fr 140px; }
+  .bottom-zone-grid { grid-template-columns: 160px minmax(180px, 2fr) 3fr 140px; }
 }
 @media (max-width: 768px) {
   .widget-zone-right { display: none; }
