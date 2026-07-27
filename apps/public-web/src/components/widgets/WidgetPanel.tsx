@@ -93,8 +93,7 @@ export function WidgetPanel() {
                 <div className="widget-card">
                   <WidgetRenderer id={w.id} />
                 </div>
-                {i === 1 && <ManagedContentSlot slotKey="slot-1" />}
-                {i === 3 && <ManagedContentSlot slotKey="slot-4" />}
+                {i === 3 && <ManagedContentSlot slotKey="right_dashboard_sponsor" />}
               </div>
             ))}
           </div>

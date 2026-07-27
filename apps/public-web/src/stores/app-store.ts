@@ -521,12 +521,10 @@ export const useAppStore = create<AppStore>()(
     setEnabledInfographicTypes: (types) => set((s) => { s.enabledInfographicTypes = types; try { localStorage.setItem('aait_infographic_types', JSON.stringify(types)); } catch {} }),
     slotAssignments: (() => {
       const defaults: Record<string, { slotKey: string; assetId: string | null; campaignId: string | null; mode: string }> = {
-        'slot-1': { slotKey: 'slot-1', assetId: null, campaignId: null, mode: 'auto' },
-        'slot-2': { slotKey: 'slot-2', assetId: null, campaignId: null, mode: 'auto' },
-        'slot-3': { slotKey: 'slot-3', assetId: null, campaignId: null, mode: 'auto' },
-        'slot-4': { slotKey: 'slot-4', assetId: null, campaignId: null, mode: 'auto' },
-        'slot-5': { slotKey: 'slot-5', assetId: null, campaignId: null, mode: 'auto' },
-        'slot-6': { slotKey: 'slot-6', assetId: null, campaignId: null, mode: 'auto' },
+        'layers_featured': { slotKey: 'layers_featured', assetId: null, campaignId: null, mode: 'auto' },
+        'layers_footer': { slotKey: 'layers_footer', assetId: null, campaignId: null, mode: 'auto' },
+        'right_dashboard_sponsor': { slotKey: 'right_dashboard_sponsor', assetId: null, campaignId: null, mode: 'auto' },
+        'bottom_intelligence_left': { slotKey: 'bottom_intelligence_left', assetId: null, campaignId: null, mode: 'auto' },
       };
       try { const v = localStorage.getItem('aait_slot_assignments'); if (v) return JSON.parse(v); } catch {}
       return defaults;

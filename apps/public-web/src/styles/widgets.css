@@ -29,7 +29,7 @@
   top: 0;
   right: 0;
   width: 280px;
-  bottom: 0;
+  bottom: 180px;
   z-index: 12;
   background: var(--bg-surface);
   border-left: 1px solid var(--border);
@@ -79,8 +79,8 @@
   position: absolute;
   bottom: 0;
   left: 0;
-  right: 280px;
-  z-index: 12;
+  right: 0;
+  z-index: 35;
   pointer-events: auto;
 }
 
@@ -151,10 +151,10 @@
 .widget-casualty-counts .deceased { color: #c53030; font-weight: 600; }
 .widget-casualty-counts .injured { color: #ed8936; font-weight: 600; }
 
-/* Bottom zone 6-column grid */
+/* Bottom zone 5-column grid */
 .bottom-zone-grid {
   display: grid;
-  grid-template-columns: 120px 2fr 2fr 2fr 2fr 180px;
+  grid-template-columns: 120px 3fr 2fr 2fr 180px;
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
   max-height: 180px;
@@ -388,9 +388,9 @@
 
 /* Responsive */
 @media (max-width: 900px) {
-  .widget-zone-right { width: 240px; }
-  .widget-zone-bottom { right: 240px; }
-  .bottom-zone-grid { grid-template-columns: 100px 2fr 2fr 2fr 2fr 140px; }
+  .widget-zone-right { width: 240px; bottom: 180px; }
+  .widget-zone-bottom { right: 0; }
+  .bottom-zone-grid { grid-template-columns: 100px 3fr 2fr 2fr 140px; }
 }
 @media (max-width: 768px) {
   .widget-zone-right { display: none; }

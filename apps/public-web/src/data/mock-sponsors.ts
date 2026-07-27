@@ -47,12 +47,10 @@ export const SIZE_PRICES: Record<string, number> = {
 };
 
 export const SLOT_LABELS: Record<SlotKey, string> = {
-  'slot-1': 'Dashboard A',
-  'slot-2': 'Sidebar Premium',
-  'slot-3': 'Sidebar B',
-  'slot-4': 'Dashboard B',
-  'slot-5': 'Bottom Left',
-  'slot-6': 'Bottom Right',
+  'layers_featured': 'Layers Panel · Featured',
+  'layers_footer': 'Layers Panel · Footer',
+  'right_dashboard_sponsor': 'Right Dashboard · Sponsor',
+  'bottom_intelligence_left': 'Bottom Bar · Left',
 };
 
 function rollingDate(daysAgo: number): string {
@@ -64,29 +62,9 @@ function rollingExpiry(daysFromNow: number): string {
 
 export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
-    id: 'sp-001',
-    name: 'SecureGuard SA',
-    slot: 'slot-1',
-    enabled: true,
-    size: 'standard',
-    tagline: '24/7 Farm & Rural Security',
-    description: 'Rapid response, perimeter monitoring and armed patrols for farms and smallholdings across South Africa.',
-    websiteUrl: 'https://secureguard-demo.co.za',
-    bgColor: '#1a2332',
-    textColor: '#e2e8f0',
-    accentColor: '#e53e3e',
-    icon: 'shield',
-    duration: '7d',
-    startedAt: rollingDate(3),
-    expiresAt: rollingExpiry(4),
-    impressions: 3420,
-    clicks: 87,
-    paidZAR: 499,
-  },
-  {
     id: 'sp-005',
     name: 'FarmWatch Alert',
-    slot: 'slot-2',
+    slot: 'layers_featured',
     enabled: true,
     size: 'premium',
     tagline: 'Real-time farm security alerts straight to your phone',
@@ -106,7 +84,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
     id: 'sp-003',
     name: 'AgriShield Insurance',
-    slot: 'slot-3',
+    slot: 'layers_footer',
     enabled: true,
     size: 'standard',
     tagline: 'Protecting South African Farmers Since 1998',
@@ -125,7 +103,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
     id: 'sp-004',
     name: 'CyberVault',
-    slot: 'slot-4',
+    slot: 'right_dashboard_sponsor',
     enabled: true,
     size: 'standard',
     tagline: 'Data Security & Backup Solutions',
@@ -144,7 +122,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
     id: 'sp-006',
     name: 'Veld Broadband',
-    slot: 'slot-5',
+    slot: 'bottom_intelligence_left',
     enabled: true,
     size: 'standard',
     tagline: 'Rural Connectivity — No Dead Zones',
@@ -158,25 +136,6 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
     expiresAt: rollingExpiry(25),
     impressions: 6720,
     clicks: 198,
-    paidZAR: 1499,
-  },
-  {
-    id: 'sp-007',
-    name: 'Boer & Burger Legal',
-    slot: 'slot-6',
-    enabled: true,
-    size: 'standard',
-    tagline: 'Farm Attack Legal Aid — 24/7 Hotline',
-    websiteUrl: 'https://boerburgerlegal-demo.co.za',
-    bgColor: '#1e2a1e',
-    textColor: '#e2e8f0',
-    accentColor: '#f6ad55',
-    icon: 'shield',
-    duration: '30d',
-    startedAt: rollingDate(8),
-    expiresAt: rollingExpiry(22),
-    impressions: 5100,
-    clicks: 156,
     paidZAR: 1499,
   },
 ];

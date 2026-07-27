@@ -86,7 +86,7 @@ export function NewsTicker() {
       <LivePanel />
 
       <div className="bottom-panel-ad">
-        <ManagedContentSlot slotKey="slot-5" />
+        <ManagedContentSlot slotKey="bottom_intelligence_left" />
       </div>
 
       <div className="bottom-panel-news">
@@ -120,10 +120,6 @@ export function NewsTicker() {
         <div className="widget-news-footer">
           Synthetic feed — {MOCK_NEWS.length} articles from {new Set(MOCK_NEWS.map(n => n.source)).size} sources
         </div>
-      </div>
-
-      <div className="bottom-panel-ad">
-        <ManagedContentSlot slotKey="slot-6" />
       </div>
 
       <RecentActivity />

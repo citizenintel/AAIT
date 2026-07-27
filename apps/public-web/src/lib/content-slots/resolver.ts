@@ -1,6 +1,7 @@
 import type { SlotKey, SlotAssignment, ResolvedContent } from './types';
 import type { CampaignRow } from '../api/sponsors';
 import { getEnabledAssetsByType, getImageData } from './asset-library';
+import { ALL_SLOT_KEYS } from './registry';
 
 export interface ResolverInput {
   assignment: SlotAssignment;
@@ -63,7 +64,7 @@ function resolvePaidAd(slotKey: SlotKey, campaigns: CampaignRow[]): ResolvedCont
 
 function resolveInfographic(slotKey: SlotKey, enabledTypes: string[]): ResolvedContent | null {
   if (enabledTypes.length === 0) return null;
-  const slotIndex = parseInt(slotKey.replace('slot-', '')) - 1;
+  const slotIndex = ALL_SLOT_KEYS.indexOf(slotKey as any);
   const infographicType = enabledTypes[slotIndex % enabledTypes.length]!;
   return { type: 'infographic', infographicType };
 }
@@ -71,7 +72,7 @@ function resolveInfographic(slotKey: SlotKey, enabledTypes: string[]): ResolvedC
 function resolvePlaceholder(slotKey: SlotKey): ResolvedContent | null {
   const assets = getEnabledAssetsByType('placeholder');
   if (assets.length === 0) return null;
-  const slotIndex = parseInt(slotKey.replace('slot-', '')) - 1;
+  const slotIndex = ALL_SLOT_KEYS.indexOf(slotKey as any);
   const asset = assets[slotIndex % assets.length]!;
   const src = getImageData(asset.id);
   if (!src) return null;

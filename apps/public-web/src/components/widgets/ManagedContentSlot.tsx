@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '../../store/app-store';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
 import { MODULE_META } from '../../data/mock-incidents';
@@ -215,10 +215,36 @@ export const INFOGRAPHIC_LABELS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 function AdOverlay({ content, onClose }: { content: Extract<ResolvedContent, { type: 'paid_ad' }>; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const previousFocus = useRef<Element | null>(null);
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') { onClose(); return; }
+    if (e.key === 'Tab' && dialogRef.current) {
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"])');
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  }, [onClose]);
+
+  useEffect(() => {
+    previousFocus.current = document.activeElement;
+    closeRef.current?.focus();
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      if (previousFocus.current instanceof HTMLElement) previousFocus.current.focus();
+    };
+  }, [handleKeyDown]);
+
   return (
-    <div className="ad-overlay-backdrop" onClick={onClose}>
-      <div className="ad-overlay-content" onClick={e => e.stopPropagation()}>
-        <button className="ad-overlay-close" onClick={onClose}>&times;</button>
+    <div className="ad-overlay-backdrop" onClick={onClose} role="presentation">
+      <div ref={dialogRef} className="ad-overlay-content" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`${content.displayName} — sponsored content`}>
+        <button ref={closeRef} className="ad-overlay-close" onClick={onClose} aria-label="Close">&times;</button>
         {content.imageUrl ? (
           <div className="ad-overlay-image-wrap">
             <img src={content.imageUrl} alt={content.displayName} />
@@ -316,7 +342,7 @@ function RenderPlaceholder({ src, alt }: { src: string; alt: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// ManagedContentSlot — the single entry point for all 6 content placements
+// ManagedContentSlot — the single entry point for all 4 content placements
 // ---------------------------------------------------------------------------
 
 export function ManagedContentSlot({ slotKey }: { slotKey: SlotKey }) {

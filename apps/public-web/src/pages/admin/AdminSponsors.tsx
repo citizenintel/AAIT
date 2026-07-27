@@ -296,7 +296,7 @@ function CampaignsTable() {
   const [newTagline, setNewTagline] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const [newSize, setNewSize] = useState<string>('standard');
-  const [newSlot, setNewSlot] = useState<SlotKey>('slot-1');
+  const [newSlot, setNewSlot] = useState<SlotKey>('layers_featured');
 
   const updateAds = useCallback((updated: SponsorAd[]) => {
     setAds(updated);
@@ -434,6 +434,101 @@ function CampaignsTable() {
 }
 
 // ---------------------------------------------------------------------------
+// Placement Map Wireframe
+// ---------------------------------------------------------------------------
+
+function PlacementMap({ ads }: { ads: SponsorAd[] }) {
+  const slotAssignments = useAppStore(s => s.slotAssignments);
+
+  function slotStatus(key: SlotKey): 'active' | 'empty' | 'hidden' {
+    const assignment = slotAssignments[key];
+    if (assignment?.mode === 'hidden') return 'hidden';
+    const campaign = ads.find(a => a.slot === key && a.enabled);
+    if (campaign && getStatus(campaign) === 'active') return 'active';
+    return 'empty';
+  }
+
+  const statusColor = (key: SlotKey) => {
+    const s = slotStatus(key);
+    if (s === 'active') return '#38a169';
+    if (s === 'hidden') return '#636366';
+    return '#d69e2e';
+  };
+
+  const statusBg = (key: SlotKey) => {
+    const s = slotStatus(key);
+    if (s === 'active') return '#38a16918';
+    if (s === 'hidden') return '#63636618';
+    return '#d69e2e18';
+  };
+
+  const slotBox = (key: SlotKey, label: string) => (
+    <div style={{ padding: '6px 10px', border: `2px solid ${statusColor(key)}`, borderRadius: 4, background: statusBg(key), fontSize: 9, fontWeight: 700, color: statusColor(key), textAlign: 'center', whiteSpace: 'nowrap' }}>
+      {label}
+      <div style={{ fontSize: 7, fontWeight: 400, opacity: 0.8, marginTop: 2, textTransform: 'uppercase' }}>{slotStatus(key)}</div>
+    </div>
+  );
+
+  return (
+    <div className="admin-card" style={{ marginBottom: 24, padding: 20 }}>
+      <h2 style={{ margin: '0 0 12px', fontSize: 14 }}>Placement Map</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr 140px', gridTemplateRows: '1fr 60px', gap: 8, height: 220, background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)', padding: 12 }}>
+        {/* Sidebar (Layers panel) */}
+        <div style={{ gridRow: '1 / 3', display: 'flex', flexDirection: 'column', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>LAYERS PANEL</div>
+          {slotBox('layers_featured', 'Featured')}
+          <div style={{ flex: 1 }} />
+          {slotBox('layers_footer', 'Footer')}
+        </div>
+        {/* Map area */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', borderRadius: 4, color: 'var(--text-muted)', fontSize: 11 }}>
+          MAP AREA
+        </div>
+        {/* Right dashboard */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>RIGHT PANEL</div>
+          <div style={{ flex: 1 }} />
+          {slotBox('right_dashboard_sponsor', 'Sponsor')}
+        </div>
+        {/* Bottom bar */}
+        <div style={{ gridColumn: '2 / 4', display: 'flex', alignItems: 'center', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
+          {slotBox('bottom_intelligence_left', 'Bottom Left')}
+          <div style={{ flex: 1, height: 16, background: 'var(--border-subtle)', borderRadius: 3 }} />
+          <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>News Feed</div>
+          <div style={{ flex: 1, height: 16, background: 'var(--border-subtle)', borderRadius: 3 }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Capacity Indicator
+// ---------------------------------------------------------------------------
+
+function CapacityIndicator({ ads }: { ads: SponsorAd[] }) {
+  const activeCount = ALL_SLOT_KEYS.filter(key => {
+    const campaign = ads.find(a => a.slot === key && a.enabled);
+    return campaign && getStatus(campaign) === 'active';
+  }).length;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>CAPACITY</div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        {ALL_SLOT_KEYS.map((key, i) => (
+          <div key={key} style={{ width: 24, height: 8, borderRadius: 2, background: i < activeCount ? '#38a169' : 'var(--border-subtle)' }} />
+        ))}
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: activeCount === 4 ? '#38a169' : 'var(--text-secondary)' }}>
+        {activeCount}/4
+      </div>
+      {activeCount === 4 && <span style={{ fontSize: 9, padding: '2px 6px', background: '#38a16920', color: '#38a169', borderRadius: 3, fontWeight: 700 }}>FULL</span>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Admin Page
 // ---------------------------------------------------------------------------
 
@@ -448,50 +543,56 @@ export function AdminSponsors() {
   }, []);
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto', padding: '24px 16px' }}>
+    <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22 }}>Content Manager</h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
-            6-slot content system — paid ads, placeholders, and infographics
+            4-slot content system — paid ads, placeholders, and infographics
           </p>
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 14px', background: sponsorsEnabled ? '#38a16915' : '#c5303015', border: `1px solid ${sponsorsEnabled ? '#38a16940' : '#c5303040'}`, borderRadius: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: sponsorsEnabled ? '#38a169' : '#c53030' }}>
-            Public display: {sponsorsEnabled ? 'ON' : 'OFF'}
-          </span>
-          <input type="checkbox" checked={sponsorsEnabled} onChange={e => setSponsorsEnabled(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
-        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <CapacityIndicator ads={ads} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 14px', background: sponsorsEnabled ? '#38a16915' : '#c5303015', border: `1px solid ${sponsorsEnabled ? '#38a16940' : '#c5303040'}`, borderRadius: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: sponsorsEnabled ? '#38a169' : '#c53030' }}>
+              Public display: {sponsorsEnabled ? 'ON' : 'OFF'}
+            </span>
+            <input type="checkbox" checked={sponsorsEnabled} onChange={e => setSponsorsEnabled(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+          </label>
+        </div>
       </div>
 
-      {/* 4-Slot Cards */}
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ margin: '0 0 12px', fontSize: 15 }}>Slot Overview</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-          {ALL_SLOT_KEYS.map(key => (
-            <SlotCard key={key} slotKey={key} ads={ads} />
-          ))}
+      {/* Placement Map + Slot Cards side by side */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
+        <PlacementMap ads={ads} />
+        <div>
+          <h2 style={{ margin: '0 0 12px', fontSize: 14 }}>Slot Controls</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {ALL_SLOT_KEYS.map(key => (
+              <SlotCard key={key} slotKey={key} ads={ads} />
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Campaigns */}
       <CampaignsTable />
 
-      {/* Asset Library */}
-      <AssetLibrary />
-
-      {/* Infographic Controls */}
-      <InfographicControls />
+      {/* Asset Library + Infographic side by side */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        <AssetLibrary />
+        <InfographicControls />
+      </div>
 
       {/* Storage & Info */}
-      <div className="admin-card" style={{ padding: 16 }}>
+      <div className="admin-card" style={{ padding: 16, marginTop: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             Storage: {formatBytes(storage.used)} used ({storage.items} items)
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-            Max 6 content slots · Demo mode (localStorage)
+            Max 4 content slots · Demo mode (localStorage)
           </div>
         </div>
       </div>

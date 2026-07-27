@@ -1,12 +1,12 @@
-export const MAX_PUBLIC_CONTENT_SLOTS = 6;
+export const MAX_PUBLIC_CONTENT_SLOTS = 4;
 
-export type SlotKey = 'slot-1' | 'slot-2' | 'slot-3' | 'slot-4' | 'slot-5' | 'slot-6';
+export type SlotKey = 'layers_featured' | 'layers_footer' | 'right_dashboard_sponsor' | 'bottom_intelligence_left';
 
 export type SlotMode = 'auto' | 'paid_ad' | 'infographic' | 'placeholder' | 'hidden';
 
 export type ContentType = 'paid_ad' | 'placeholder' | 'infographic';
 
-export type AspectRatio = '16:9' | '4:3' | '1:1' | 'fluid';
+export type AspectRatio = '16:9' | '4:3' | '1:1' | '3:1' | '5:1' | 'fluid';
 
 export type FitMode = 'cover' | 'contain' | 'fill';
 
