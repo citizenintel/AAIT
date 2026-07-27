@@ -83,11 +83,11 @@ export function NewsTicker() {
 
   return (
     <div className={`bottom-zone-grid${expanded ? ' expanded' : ''}`}>
-      <div className="bottom-infographics-block">
+      <div className="bottom-infographics-panel">
         <LivePanel />
-        <div className="bottom-infographics-content">
-          <ManagedContentSlot slotKey="bottom_intelligence_left" />
-        </div>
+      </div>
+      <div className="bottom-ad-panel">
+        <ManagedContentSlot slotKey="bottom_intelligence_left" />
       </div>
 
       <div className="bottom-panel-news">
