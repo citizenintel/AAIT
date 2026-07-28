@@ -406,6 +406,14 @@
   max-width: 120px;
 }
 
+/* Collapse bottom ad panel when slot is hidden */
+.bottom-ad-panel:has([data-visibility="hidden"]) {
+  display: none;
+}
+.bottom-zone-grid:has(.bottom-ad-panel [data-visibility="hidden"]) .bottom-panel-news {
+  grid-column: 2 / 4;
+}
+
 /* Responsive */
 @media (max-width: 900px) {
   :root { --right-rail-width: 240px; }

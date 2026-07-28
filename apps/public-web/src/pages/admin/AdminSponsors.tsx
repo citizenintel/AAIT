@@ -21,6 +21,9 @@ import {
   removeAsset,
   getStorageUsage,
   migrateFromLegacy,
+  seedTestData,
+  clearTestData,
+  isTestDataSeeded,
   type PlacementId,
   type ContentAsset,
 } from '@/lib/content-slots';
@@ -527,6 +530,41 @@ function CapacityIndicator({ ads }: { ads: SponsorAd[] }) {
 }
 
 // ---------------------------------------------------------------------------
+// Test Mode Controls
+// ---------------------------------------------------------------------------
+
+function TestModeControls() {
+  const [seeded, setSeeded] = useState(() => isTestDataSeeded());
+
+  const handleSeed = () => {
+    seedTestData();
+    setSeeded(true);
+    window.location.reload();
+  };
+
+  const handleClear = () => {
+    clearTestData();
+    setSeeded(false);
+    window.location.reload();
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: '#d69e2e15', border: '1px solid #d69e2e40', borderRadius: 8 }}>
+      <span style={{ fontSize: 10, fontWeight: 700, color: '#d69e2e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Test Mode</span>
+      {seeded ? (
+        <button onClick={handleClear} style={{ fontSize: 11, padding: '4px 10px', background: '#c5303018', border: '1px solid #c5303040', borderRadius: 4, color: '#c53030', cursor: 'pointer', fontWeight: 600 }}>
+          Clear test data
+        </button>
+      ) : (
+        <button onClick={handleSeed} style={{ fontSize: 11, padding: '4px 10px', background: '#38a16918', border: '1px solid #38a16940', borderRadius: 4, color: '#38a169', cursor: 'pointer', fontWeight: 600 }}>
+          Seed 4 test creatives
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Admin Page — §12: "SPONSOR & PLACEMENT MANAGER"
 // ---------------------------------------------------------------------------
 
@@ -550,8 +588,9 @@ export function AdminSponsors() {
             4 placements · Paid sponsors, platform fallback, and creative library
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <CapacityIndicator ads={ads} />
+          <TestModeControls />
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 14px', background: sponsorsEnabled ? '#38a16915' : '#c5303015', border: `1px solid ${sponsorsEnabled ? '#38a16940' : '#c5303040'}`, borderRadius: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: sponsorsEnabled ? '#38a169' : '#c53030' }}>
               Public sponsorship: {sponsorsEnabled ? 'ON' : 'OFF'}

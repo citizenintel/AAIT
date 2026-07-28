@@ -1,4 +1,5 @@
 import type { PlacementId, Sponsor, Campaign, Creative, Assignment } from '../lib/content-slots';
+import { TEST_CREATIVE_URIS } from '../lib/content-slots/test-creatives';
 
 // ---------------------------------------------------------------------------
 // §2 — Separated data model: Sponsor → Campaign → Creative → Assignment
@@ -254,6 +255,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
     tagline: 'Real-time farm security alerts straight to your phone',
     description: 'Instant push notifications for farm attacks, rural crime and security incidents in your area. Never be caught off guard.',
     websiteUrl: 'https://farmwatch-demo.co.za',
+    imageUrl: TEST_CREATIVE_URIS['GLANCE_RAIL_FEATURED'],
     bgColor: '#1a2332',
     textColor: '#e2e8f0',
     accentColor: '#ed8936',
@@ -273,6 +275,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
     size: 'standard',
     tagline: 'Protecting South African Farmers Since 1998',
     websiteUrl: 'https://agrishield-demo.co.za',
+    imageUrl: TEST_CREATIVE_URIS['LEFT_RAIL_COMPACT'],
     bgColor: '#1a2e1a',
     textColor: '#e2e8f0',
     accentColor: '#48bb78',
@@ -292,6 +295,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
     size: 'standard',
     tagline: 'Data Security & Backup Solutions',
     websiteUrl: 'https://cybervault-demo.co.za',
+    imageUrl: TEST_CREATIVE_URIS['RIGHT_DASHBOARD_RECTANGLE'],
     bgColor: '#1e1e2e',
     textColor: '#e2e8f0',
     accentColor: '#4299e1',
@@ -311,6 +315,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
     size: 'standard',
     tagline: 'Rural Connectivity — No Dead Zones',
     websiteUrl: 'https://veldbroadband-demo.co.za',
+    imageUrl: TEST_CREATIVE_URIS['BOTTOM_INTELLIGENCE_LEADERBOARD'],
     bgColor: '#1a2332',
     textColor: '#e2e8f0',
     accentColor: '#9f7aea',

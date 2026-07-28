@@ -17,3 +17,5 @@ export {
 export { getAssets, saveAssets, getAssetsByType, getEnabledAssetsByType, getImageData, uploadAsset, removeAsset, toggleAsset, getStorageUsage, migrateFromLegacy } from './asset-library';
 export { resolvePublicPlacement, resolveSlotContent } from './resolver';
 export type { PlacementContext, ResolverInput } from './resolver';
+export { TEST_CREATIVE_URIS, getTestCreativeUri, TEST_CREATIVE_SPECS } from './test-creatives';
+export { seedTestData, clearTestData, isTestDataSeeded } from './seed';
