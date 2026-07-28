@@ -122,10 +122,6 @@ export function NewsTicker() {
         <SponsorSlot slot={5} />
       </div>
 
-      <div className="bottom-panel-ad">
-        <SponsorSlot slot={6} />
-      </div>
-
       <RecentActivity />
     </div>
   );

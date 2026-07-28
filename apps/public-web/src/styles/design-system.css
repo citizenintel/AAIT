@@ -565,20 +565,21 @@ body {
   position: relative;
 }
 
-/* Glance: 2-column grid — priorities left, map right, health strip bottom */
+/* Glance: 2-column grid — priorities left (full height), map right, health strip bottom-right */
 .glance-view {
   display: grid;
   grid-template-columns: 380px 1fr;
   grid-template-rows: 1fr auto;
   grid-template-areas:
     "priorities map"
-    "health health";
+    "priorities health";
   height: 100%;
   overflow: hidden;
 }
 
 .glance-priorities {
   grid-area: priorities;
+  grid-row: 1 / -1;
   overflow-y: auto;
   border-right: 1px solid var(--border);
   padding: var(--sp-4);

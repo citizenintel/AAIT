@@ -78,7 +78,7 @@
 .widget-zone-bottom {
   position: absolute;
   bottom: 0;
-  left: 0;
+  left: 380px;
   right: 280px;
   z-index: 12;
   pointer-events: auto;
@@ -151,10 +151,10 @@
 .widget-casualty-counts .deceased { color: #c53030; font-weight: 600; }
 .widget-casualty-counts .injured { color: #ed8936; font-weight: 600; }
 
-/* Bottom zone 5-column grid */
+/* Bottom zone 4-column grid */
 .bottom-zone-grid {
   display: grid;
-  grid-template-columns: 140px 3fr 2fr 2fr 200px;
+  grid-template-columns: 100px 3fr 2fr 140px;
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
   max-height: 180px;
@@ -383,12 +383,12 @@
 /* Responsive */
 @media (max-width: 900px) {
   .widget-zone-right { width: 240px; }
-  .widget-zone-bottom { right: 240px; }
-  .bottom-zone-grid { grid-template-columns: 100px 3fr 2fr 2fr 160px; }
+  .widget-zone-bottom { left: 300px; right: 240px; }
+  .bottom-zone-grid { grid-template-columns: 80px 3fr 2fr 120px; }
 }
 @media (max-width: 768px) {
   .widget-zone-right { display: none; }
-  .widget-zone-bottom { right: 0; }
+  .widget-zone-bottom { left: 0; right: 0; }
   .widget-zone-top { display: none; }
   .bottom-zone-grid { grid-template-columns: 1fr; }
   .bottom-panel-live, .bottom-panel-activity, .bottom-panel-ad { display: none; }
