@@ -1,4 +1,4 @@
-import { useAppStore } from '../../store/app-store';
+import { useAppStore } from '@/stores/app-store';
 import { MOCK_RSS_FEEDS } from '../../data/mock-news';
 import { TickerBar } from '../../components/TickerBar';
 import { useAuth } from '@/lib/hooks/useAuth';

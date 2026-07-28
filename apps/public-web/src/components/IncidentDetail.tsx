@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { useAppStore } from '../store/app-store';
+import { useAppStore } from '@/stores/app-store';
 import { SEVERITY_META, VERIFICATION_META, MODULE_META } from '../data/mock-incidents';
 import { useIncidentData } from '@/lib/hooks/useIncidentData';
 

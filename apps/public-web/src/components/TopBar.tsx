@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAppStore } from '../store/app-store';
+import { useAppStore } from '@/stores/app-store';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useIncidentData } from '@/lib/hooks/useIncidentData';
 

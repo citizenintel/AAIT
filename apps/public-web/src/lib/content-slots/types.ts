@@ -36,7 +36,7 @@ export type AssignmentStatus = 'DRAFT' | 'SCHEDULED' | 'ACTIVE' | 'PAUSED' | 'EX
 // Image fitting — §9
 // ---------------------------------------------------------------------------
 
-export type FitMode = 'cover' | 'contain' | 'smart_crop';
+export type FitMode = 'cover' | 'contain' | 'manual-crop' | 'adaptive';
 
 export type AspectRatio = '6:5' | '32:5' | '364:45' | 'fluid';
 
@@ -182,6 +182,7 @@ export interface ResolvedSponsor {
   fitMode: FitMode;
   focalX: number;
   focalY: number;
+  backgroundColor: string;
 }
 
 export interface ResolvedFallback {

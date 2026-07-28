@@ -1,7 +1,6 @@
 import type { PlacementDefinition, PlacementId } from './types';
 import { MAX_PUBLIC_PLACEMENTS } from './types';
 
-// §3 — Four stable placement definitions
 export const PLACEMENT_REGISTRY: PlacementDefinition[] = [
   {
     id: 'GLANCE_RAIL_FEATURED',
@@ -41,12 +40,10 @@ export const PLACEMENT_REGISTRY: PlacementDefinition[] = [
   },
 ];
 
-// Legacy alias
 export const SLOT_REGISTRY = PLACEMENT_REGISTRY;
 
 export const ALL_PLACEMENT_IDS: PlacementId[] = PLACEMENT_REGISTRY.map(p => p.id);
 
-// Legacy alias
 export const ALL_SLOT_KEYS = ALL_PLACEMENT_IDS;
 
 export function getPlacementDefinition(id: PlacementId): PlacementDefinition {
@@ -55,8 +52,13 @@ export function getPlacementDefinition(id: PlacementId): PlacementDefinition {
   return def;
 }
 
-// Legacy alias
 export const getSlotDefinition = getPlacementDefinition;
+
+export function getAspectRatioCss(id: PlacementId): string {
+  const def = getPlacementDefinition(id);
+  const [w, h] = def.aspectRatio.split(':').map(Number);
+  return `${w} / ${h}`;
+}
 
 if (PLACEMENT_REGISTRY.length !== MAX_PUBLIC_PLACEMENTS) {
   throw new Error(`Registry must contain exactly ${MAX_PUBLIC_PLACEMENTS} placements`);

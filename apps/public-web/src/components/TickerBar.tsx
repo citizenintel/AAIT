@@ -1,4 +1,4 @@
-import { useAppStore } from '../store/app-store';
+import { useAppStore } from '@/stores/app-store';
 import { MOCK_NEWS, MOCK_RSS_FEEDS, sourceDomain } from '../data/mock-news';
 
 /**

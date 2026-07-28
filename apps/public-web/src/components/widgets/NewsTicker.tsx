@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { MOCK_NEWS, sourceDomain } from '../../data/mock-news';
 import { MODULE_META } from '../../data/mock-incidents';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
-import { ManagedContentSlot } from './ManagedContentSlot';
+import { ManagedContentSlot, useResolvedContentSlot } from './ManagedContentSlot';
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -78,6 +78,8 @@ function RecentActivity() {
 
 export function NewsTicker() {
   const [expanded, setExpanded] = useState(false);
+  const bottomSlot = useResolvedContentSlot('BOTTOM_INTELLIGENCE_LEADERBOARD');
+  const bottomVisible = bottomSlot.type !== 'hidden';
 
   const news = MOCK_NEWS.slice(0, expanded ? 12 : 4);
 
@@ -86,9 +88,11 @@ export function NewsTicker() {
       <div className="bottom-infographics-panel">
         <LivePanel />
       </div>
-      <div className="bottom-ad-panel">
-        <ManagedContentSlot slotKey="BOTTOM_INTELLIGENCE_LEADERBOARD" />
-      </div>
+      {bottomVisible && (
+        <div className="bottom-ad-panel">
+          <ManagedContentSlot slotKey="BOTTOM_INTELLIGENCE_LEADERBOARD" resolved={bottomSlot} />
+        </div>
+      )}
 
       <div className="bottom-panel-news">
         <div className="widget-news-header">

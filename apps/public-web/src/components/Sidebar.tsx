@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useAppStore } from '../store/app-store';
+import { useAppStore } from '@/stores/app-store';
 import { MODULE_META } from '../data/mock-incidents';
 import { useIncidentData } from '@/lib/hooks/useIncidentData';
 import type { ModuleKey } from '../data/types';

@@ -1,5 +1,5 @@
 import { MOCK_INCIDENTS, MODULE_META, SEVERITY_META } from '../../data/mock-incidents';
-import { useAppStore } from '../../store/app-store';
+import { useAppStore } from '@/stores/app-store';
 
 export function AdminSynthetic() {
   const showSynthetic = useAppStore((s) => s.filters.showSynthetic);

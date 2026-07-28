@@ -1,5 +1,5 @@
 import { useState, useMemo, Fragment } from 'react';
-import { useAppStore } from '../../store/app-store';
+import { useAppStore } from '@/stores/app-store';
 import { fetchSubmissions, updateSubmissionStatus, summariseWithAI } from '@/lib/api/submissions';
 import { useQuery, useMutation } from '@/lib/hooks/useQuery';
 import type { SubmissionSummary } from '../../data/mock-submissions';

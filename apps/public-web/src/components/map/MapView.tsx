@@ -3,7 +3,7 @@ import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '@/lib/maplibre-setup';
 import { SEVERITY_META, VERIFICATION_META, MODULE_META, type MockIncident } from '../../data/mock-incidents';
-import { useAppStore } from '../../store/app-store';
+import { useAppStore } from '@/stores/app-store';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
 
 // Satellite imagery + place labels. Reused for the flat "Satellite" view and as the

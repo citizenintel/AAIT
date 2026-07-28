@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
-import { useAppStore } from '../../store/app-store';
+import { useAppStore } from '@/stores/app-store';
 import { saveAdminAds, getStoredAdminAds, saveCampaigns, createMockCampaign, type CampaignRow } from '@/lib/api/sponsors';
 import {
   DURATION_LABELS,

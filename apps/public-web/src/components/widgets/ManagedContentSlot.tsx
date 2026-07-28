@@ -1,9 +1,32 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { useAppStore } from '../../store/app-store';
+import { useAppStore } from '@/stores/app-store';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
 import { MODULE_META } from '../../data/mock-incidents';
 import { resolveSlotContent } from '../../lib/content-slots';
-import type { SlotKey, ResolvedContent } from '../../lib/content-slots';
+import { getPlacementDefinition, getAspectRatioCss } from '../../lib/content-slots/registry';
+import type { SlotKey, ResolvedContent, PlacementId } from '../../lib/content-slots';
+
+// ---------------------------------------------------------------------------
+// useResolvedContentSlot — shared hook so parents can know before rendering
+// ---------------------------------------------------------------------------
+
+export function useResolvedContentSlot(slotKey: SlotKey) {
+  const globalDisplayEnabled = useAppStore((s) => s.sponsorsEnabled);
+  const globalInfographicFallback = useAppStore((s) => s.globalInfographicFallback);
+  const enabledInfographicTypes = useAppStore((s) => s.enabledInfographicTypes);
+  const slotAssignments = useAppStore((s) => s.slotAssignments);
+  const { campaigns } = useIncidentData();
+
+  const assignment = slotAssignments[slotKey] ?? { slotKey, assetId: null, campaignId: null, mode: 'auto' as const };
+
+  return useMemo(() => resolveSlotContent({
+    assignment: assignment as import('../../lib/content-slots').SlotAssignment,
+    campaigns,
+    globalInfographicFallback,
+    globalDisplayEnabled,
+    enabledInfographicTypes,
+  }), [assignment, campaigns, globalInfographicFallback, globalDisplayEnabled, enabledInfographicTypes]);
+}
 
 // ---------------------------------------------------------------------------
 // Mini infographic widgets
@@ -269,6 +292,63 @@ function AdOverlay({ content, onClose }: { content: Extract<ResolvedContent, { t
 }
 
 // ---------------------------------------------------------------------------
+// SponsorFrame — placement-aware container with correct aspect ratio
+// ---------------------------------------------------------------------------
+
+function SponsorFrame({ slotKey, children }: { slotKey: PlacementId; children: React.ReactNode }) {
+  const def = getPlacementDefinition(slotKey);
+  const ratio = getAspectRatioCss(slotKey);
+  const maxW = def.referenceWidth;
+
+  return (
+    <div
+      className="sponsor-frame"
+      data-slot={slotKey}
+      style={{
+        position: 'relative',
+        width: '100%',
+        maxWidth: maxW,
+        aspectRatio: ratio,
+        minWidth: 0,
+        minHeight: 0,
+        overflow: 'hidden',
+        borderRadius: 6,
+        background: 'var(--bg-elevated, #111827)',
+        border: '1px solid #c9a84c33',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SponsorCreative — renders the image with correct fit mode
+// ---------------------------------------------------------------------------
+
+function SponsorCreative({ content, slotKey }: { content: Extract<ResolvedContent, { type: 'sponsor' }>; slotKey: PlacementId }) {
+  const fit = content.fitMode === 'contain' ? 'contain' : 'cover';
+  const pos = `${content.focalX}% ${content.focalY}%`;
+  const bg = content.fitMode === 'contain' ? (content.backgroundColor || '#000') : undefined;
+
+  return (
+    <img
+      src={content.imageUrl}
+      alt={content.displayName}
+      style={{
+        display: 'block',
+        width: '100%',
+        height: '100%',
+        objectFit: fit,
+        objectPosition: pos,
+        backgroundColor: bg,
+      }}
+      loading="lazy"
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Ad rendering sub-components
 // ---------------------------------------------------------------------------
 
@@ -283,16 +363,18 @@ function SponsorIcon({ icon, color, size = 28 }: { icon: string; color: string; 
   }
 }
 
-function RenderPaidAd({ content, onExpand }: { content: Extract<ResolvedContent, { type: 'sponsor' }>; onExpand: () => void }) {
+function RenderPaidAd({ content, slotKey, onExpand }: { content: Extract<ResolvedContent, { type: 'sponsor' }>; slotKey: PlacementId; onExpand: () => void }) {
   if (content.imageUrl) {
     return (
-      <div className="sponsor-slot" style={{ borderRadius: 8, overflow: 'hidden', position: 'relative', border: '1px solid #c9a84c33', cursor: 'pointer' }} title={`Click to expand: ${content.displayName}`} onClick={onExpand}>
-        <img src={content.imageUrl} alt={content.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', minHeight: 120 }} loading="lazy" />
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '6px 10px', background: 'linear-gradient(transparent, rgba(0,0,0,0.75))', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-          <span style={{ fontSize: 10, color: '#e2e8f0', fontWeight: 600 }}>{content.displayName}</span>
-          <span className="demo-tag" style={{ fontSize: 7 }}>AD</span>
+      <SponsorFrame slotKey={slotKey}>
+        <div style={{ width: '100%', height: '100%', cursor: 'pointer', position: 'relative' }} title={`Click to expand: ${content.displayName}`} onClick={onExpand}>
+          <SponsorCreative content={content} slotKey={slotKey} />
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '6px 10px', background: 'linear-gradient(transparent, rgba(0,0,0,0.75))', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+            <span style={{ fontSize: 10, color: '#e2e8f0', fontWeight: 600 }}>{content.displayName}</span>
+            <span className="demo-tag" style={{ fontSize: 7 }}>AD</span>
+          </div>
         </div>
-      </div>
+      </SponsorFrame>
     );
   }
 
@@ -333,11 +415,12 @@ function RenderInfographic({ infographicType }: { infographicType: string }) {
   return <Component incidents={incidents} />;
 }
 
-function RenderPlaceholder({ src, alt }: { src: string; alt: string }) {
+function RenderPlaceholder({ src, alt, slotKey }: { src: string; alt: string; slotKey: PlacementId }) {
+  const fit = 'contain';
   return (
-    <div className="sponsor-slot hero-image-slot" style={{ borderRadius: 8, overflow: 'hidden', position: 'relative', border: '1px solid #c9a84c33' }}>
-      <img src={src} alt={alt} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', minHeight: 120 }} loading="lazy" />
-    </div>
+    <SponsorFrame slotKey={slotKey}>
+      <img src={src} alt={alt} style={{ width: '100%', height: '100%', objectFit: fit, display: 'block' }} loading="lazy" />
+    </SponsorFrame>
   );
 }
 
@@ -345,26 +428,13 @@ function RenderPlaceholder({ src, alt }: { src: string; alt: string }) {
 // ManagedContentSlot — the single entry point for all 4 content placements
 // ---------------------------------------------------------------------------
 
-export function ManagedContentSlot({ slotKey }: { slotKey: SlotKey }) {
+export function ManagedContentSlot({ slotKey, resolved: preResolved }: { slotKey: SlotKey; resolved?: ResolvedContent }) {
   const [expanded, setExpanded] = useState(false);
-  const globalDisplayEnabled = useAppStore((s) => s.sponsorsEnabled);
-  const globalInfographicFallback = useAppStore((s) => s.globalInfographicFallback);
-  const enabledInfographicTypes = useAppStore((s) => s.enabledInfographicTypes);
-  const slotAssignments = useAppStore((s) => s.slotAssignments);
-  const { campaigns } = useIncidentData();
-
-  const assignment = slotAssignments[slotKey] ?? { slotKey, assetId: null, campaignId: null, mode: 'auto' as const };
-
-  const resolved = useMemo(() => resolveSlotContent({
-    assignment: assignment as import('../../lib/content-slots').SlotAssignment,
-    campaigns,
-    globalInfographicFallback,
-    globalDisplayEnabled,
-    enabledInfographicTypes,
-  }), [assignment, campaigns, globalInfographicFallback, globalDisplayEnabled, enabledInfographicTypes]);
+  const hookResolved = useResolvedContentSlot(slotKey);
+  const resolved = preResolved ?? hookResolved;
 
   if (resolved.type === 'hidden') {
-    return <div data-sponsor-slot={slotKey} data-render-type="hidden" data-visibility="hidden" />;
+    return null;
   }
 
   const renderType = resolved.type;
@@ -373,14 +443,14 @@ export function ManagedContentSlot({ slotKey }: { slotKey: SlotKey }) {
   if (resolved.type === 'sponsor') {
     inner = (
       <>
-        <RenderPaidAd content={resolved} onExpand={() => setExpanded(true)} />
+        <RenderPaidAd content={resolved} slotKey={slotKey} onExpand={() => setExpanded(true)} />
         {expanded && <AdOverlay content={resolved} onClose={() => setExpanded(false)} />}
       </>
     );
   } else if (resolved.type === 'infographic') {
     inner = <RenderInfographic infographicType={resolved.infographicType} />;
   } else if (resolved.type === 'placeholder') {
-    inner = <RenderPlaceholder src={resolved.src} alt={resolved.alt} />;
+    inner = <RenderPlaceholder src={resolved.src} alt={resolved.alt} slotKey={slotKey} />;
   }
 
   return (

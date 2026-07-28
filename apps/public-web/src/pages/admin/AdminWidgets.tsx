@@ -1,4 +1,4 @@
-import { useAppStore, type WidgetId } from '../../store/app-store';
+import { useAppStore, type WidgetId } from '@/stores/app-store';
 
 const WIDGET_LABELS: Record<WidgetId, { label: string; description: string }> = {
   stats_bar: { label: 'Stats bar', description: 'Top bar showing total incidents, critical, deceased, injured, verified, provinces' },

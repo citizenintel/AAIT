@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useAppStore, type WidgetId } from '../../store/app-store';
+import { useAppStore, type WidgetId } from '@/stores/app-store';
 import { MODULE_META, SEVERITY_META, VERIFICATION_META } from '../../data/mock-incidents';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
 import { PieChart } from './PieChart';
@@ -8,7 +8,7 @@ import { StatsBar } from './StatsBar';
 import { NewsTicker } from './NewsTicker';
 import { CasualtiesCard } from './CasualtiesCard';
 import { ProvinceBar } from './ProvinceBar';
-import { ManagedContentSlot } from './ManagedContentSlot';
+import { ManagedContentSlot, useResolvedContentSlot } from './ManagedContentSlot';
 
 function WidgetRenderer({ id }: { id: WidgetId }) {
   const { incidents } = useIncidentData();
@@ -88,14 +88,12 @@ export function WidgetPanel() {
             <button className="widget-zone-close" onClick={() => setWidgetPanelOpen(false)} title="Hide dashboard">×</button>
           </div>
           <div className="widget-zone-scroll">
-            {rightWidgets.map((w, i) => (
-              <div key={w.id}>
-                <div className="widget-card">
-                  <WidgetRenderer id={w.id} />
-                </div>
-                {i === 3 && <ManagedContentSlot slotKey="RIGHT_DASHBOARD_RECTANGLE" />}
+            {rightWidgets.map((w) => (
+              <div key={w.id} className="widget-card">
+                <WidgetRenderer id={w.id} />
               </div>
             ))}
+            <ManagedContentSlot slotKey="RIGHT_DASHBOARD_RECTANGLE" />
           </div>
         </div>
       )}

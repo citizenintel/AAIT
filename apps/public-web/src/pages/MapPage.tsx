@@ -5,7 +5,7 @@ import { IncidentDetail } from '../components/IncidentDetail';
 import { WidgetPanel } from '../components/widgets/WidgetPanel';
 import { TickerBar } from '../components/TickerBar';
 import { Footer } from '../components/Footer';
-import { useAppStore } from '../store/app-store';
+import { useAppStore } from '@/stores/app-store';
 
 export function MapPage() {
   const selectedId = useAppStore((s) => s.ui.selectedIncidentId);

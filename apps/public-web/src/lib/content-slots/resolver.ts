@@ -143,6 +143,7 @@ function resolveSponsor(
     fitMode: 'cover',
     focalX: 50,
     focalY: 50,
+    backgroundColor: '#000000',
   };
 }
 
