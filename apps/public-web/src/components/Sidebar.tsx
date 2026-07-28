@@ -3,7 +3,6 @@ import { useAppStore } from '../store/app-store';
 import { MODULE_META } from '../data/mock-incidents';
 import { useIncidentData } from '@/lib/hooks/useIncidentData';
 import type { ModuleKey } from '../data/types';
-import { ManagedContentSlot } from './widgets/ManagedContentSlot';
 
 interface LayerItem {
   id: string;
@@ -205,8 +204,6 @@ export function Sidebar() {
         </div>
       )}
 
-      <ManagedContentSlot slotKey="LEFT_RAIL_FEATURED" />
-
       <div className="sidebar-summary">
         <div className="sidebar-summary-title">The Last 24 Hours</div>
         <div className="summary-grid">
@@ -249,8 +246,6 @@ export function Sidebar() {
           </div>
         )}
       </div>
-
-      <ManagedContentSlot slotKey="LEFT_RAIL_COMPACT" />
 
       <div className="sidebar-footer-note">
         <strong>Mapped. Sourced. Reviewed.</strong> What the statistics refuse to count.

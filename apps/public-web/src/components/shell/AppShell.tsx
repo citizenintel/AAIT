@@ -9,7 +9,6 @@ import { BriefView } from '@/components/brief/BriefView';
 import { CommandPalette } from '@/components/shared/CommandPalette';
 import { TickerBar } from '@/components/TickerBar';
 import { Sidebar } from '@/components/Sidebar';
-import { WidgetPanel } from '@/components/widgets/WidgetPanel';
 import { fetchEvents } from '@/lib/api/events';
 import { fetchAssets } from '@/lib/api/assets';
 import type { InterfaceLevel, RenderingTier } from '@/types/ontology';
@@ -249,7 +248,6 @@ export function AppShell() {
           {interfaceLevel === 'investigate' && <InvestigateView />}
           {interfaceLevel === 'brief' && <BriefView />}
         </div>
-        {interfaceLevel === 'glance' && <WidgetPanel />}
       </div>
 
       {commandPaletteOpen && <CommandPalette />}

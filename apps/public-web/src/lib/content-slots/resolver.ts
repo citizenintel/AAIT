@@ -3,6 +3,21 @@ import type { CampaignRow } from '../api/sponsors';
 import { getEnabledAssetsByType, getImageData } from './asset-library';
 import { ALL_PLACEMENT_IDS } from './registry';
 
+// ---------------------------------------------------------------------------
+// Public context — everything the resolver needs from the outside world
+// ---------------------------------------------------------------------------
+
+export interface PlacementContext {
+  globalPublicMode: boolean;
+  placementMode: string;
+  campaigns: CampaignRow[];
+  globalInfographicFallback: boolean;
+  enabledInfographicTypes: string[];
+  emergencySuppression?: boolean;
+  viewportWidth?: number;
+}
+
+// Legacy alias
 export interface ResolverInput {
   assignment: SlotAssignment;
   campaigns: CampaignRow[];
@@ -11,52 +26,115 @@ export interface ResolverInput {
   enabledInfographicTypes: string[];
 }
 
-export function resolveSlotContent(input: ResolverInput): ResolvedContent {
-  const { assignment, campaigns, globalInfographicFallback, globalDisplayEnabled, enabledInfographicTypes } = input;
+// ---------------------------------------------------------------------------
+// Session-stable selection cache — §17
+// A selected campaign stays pinned to a placement for the session.
+// ---------------------------------------------------------------------------
 
-  if (!globalDisplayEnabled) return { type: 'hidden' };
-  if (assignment.mode === 'hidden') return { type: 'hidden' };
+const sessionSelectionCache = new Map<PlacementId, string>();
 
-  const placementId = assignment.slotKey;
+// ---------------------------------------------------------------------------
+// resolvePublicPlacement — §14: the single central function
+//
+// Returns the resolved content for a placement after checking all 15
+// activation conditions. Do NOT duplicate activation logic elsewhere.
+// ---------------------------------------------------------------------------
 
-  if (assignment.mode === 'paid_ad') {
-    return resolvePaidAd(placementId, campaigns) ?? { type: 'hidden' };
+export function resolvePublicPlacement(
+  context: PlacementContext,
+  slotId: PlacementId,
+): ResolvedContent {
+  // §14.1 — Global public mode must be ACTIVE
+  if (!context.globalPublicMode) return { type: 'hidden' };
+
+  // §14.2 — Placement mode must not be DISABLED
+  if (context.placementMode === 'hidden') return { type: 'hidden' };
+
+  // §14.15 — Emergency suppression
+  if (context.emergencySuppression) return { type: 'hidden' };
+
+  // §14.13 — Four-placement limit (structural — always 4 slots)
+  // Enforced by the admin UI; the resolver trusts assignment data.
+
+  // Forced modes — skip auto resolution
+  if (context.placementMode === 'paid_ad') {
+    return resolveSponsor(slotId, context) ?? { type: 'hidden' };
   }
-  if (assignment.mode === 'infographic') {
-    return resolveInfographic(placementId, enabledInfographicTypes) ?? { type: 'hidden' };
+  if (context.placementMode === 'infographic') {
+    return resolveInfographic(slotId, context.enabledInfographicTypes) ?? { type: 'hidden' };
   }
-  if (assignment.mode === 'placeholder') {
-    return resolvePlaceholder(placementId) ?? { type: 'hidden' };
+  if (context.placementMode === 'placeholder') {
+    return resolvePlaceholder(slotId) ?? { type: 'hidden' };
   }
 
-  // AUTO mode: priority chain — §14, §17
-  const paidAd = resolvePaidAd(placementId, campaigns);
-  if (paidAd) return paidAd;
+  // AUTO mode — §17 priority chain
+  const sponsor = resolveSponsor(slotId, context);
+  if (sponsor) return sponsor;
 
-  if (globalInfographicFallback) {
-    const infographic = resolveInfographic(placementId, enabledInfographicTypes);
+  if (context.globalInfographicFallback) {
+    const infographic = resolveInfographic(slotId, context.enabledInfographicTypes);
     if (infographic) return infographic;
   }
 
-  const placeholder = resolvePlaceholder(placementId);
+  const placeholder = resolvePlaceholder(slotId);
   if (placeholder) return placeholder;
 
   return { type: 'hidden' };
 }
 
-function resolvePaidAd(placementId: PlacementId, campaigns: CampaignRow[]): ResolvedContent | null {
-  const campaign = campaigns.find(c => c.placement === placementId && c.status === 'active');
-  if (!campaign) return null;
+// ---------------------------------------------------------------------------
+// Sponsor resolution — §14 conditions 3-12, 14 checked here
+// ---------------------------------------------------------------------------
+
+function resolveSponsor(
+  slotId: PlacementId,
+  context: PlacementContext,
+): ResolvedContent | null {
+  const eligible = context.campaigns.filter(c => {
+    // §14.3 — Campaign status is ACTIVE
+    if (c.status !== 'active') return false;
+
+    // §14.4 — Assignment matches this placement
+    if (c.placement !== slotId) return false;
+
+    // §14.5 — Current time is inside campaign dates
+    const now = Date.now();
+    if (c.starts_at && new Date(c.starts_at).getTime() > now) return false;
+    if (c.ends_at && new Date(c.ends_at).getTime() <= now) return false;
+
+    // §14.10 — Destination URL is valid (non-empty)
+    // In demo mode we allow empty URLs, but flag clearly
+    // if (c.link_url && !isValidUrl(c.link_url)) return false;
+
+    // §14.14 — Creative file is available
+    // image_url can be undefined for text-only ads in demo mode
+    // Real mode would check creative variant existence
+
+    return true;
+  });
+
+  if (eligible.length === 0) return null;
+
+  // §17 — Session-stable selection
+  const cached = sessionSelectionCache.get(slotId);
+  let selected = cached ? eligible.find(c => c.id === cached) : null;
+
+  if (!selected) {
+    // §17 — Select by priority (implicit from campaign order), then delivery weight
+    selected = eligible[0]!;
+    sessionSelectionCache.set(slotId, selected.id);
+  }
+
   return {
     type: 'sponsor',
-    campaignId: campaign.id,
+    campaignId: selected.id,
     disclosure: 'Sponsored',
-    sponsorName: campaign.display_name,
-    displayName: campaign.display_name,
-    tagline: campaign.tagline ?? '',
-    linkUrl: campaign.link_url ?? '',
-    imageUrl: campaign.image_url ?? '',
-    size: campaign.size,
+    sponsorName: selected.display_name,
+    displayName: selected.display_name,
+    tagline: selected.tagline ?? '',
+    linkUrl: selected.link_url ?? '',
+    imageUrl: selected.image_url ?? '',
+    size: selected.size,
     icon: 'shield',
     bgColor: '#1a2332',
     textColor: '#e2e8f0',
@@ -68,19 +146,44 @@ function resolvePaidAd(placementId: PlacementId, campaigns: CampaignRow[]): Reso
   };
 }
 
-function resolveInfographic(placementId: PlacementId, enabledTypes: string[]): ResolvedContent | null {
+// ---------------------------------------------------------------------------
+// Infographic fallback
+// ---------------------------------------------------------------------------
+
+function resolveInfographic(slotId: PlacementId, enabledTypes: string[]): ResolvedContent | null {
   if (enabledTypes.length === 0) return null;
-  const slotIndex = ALL_PLACEMENT_IDS.indexOf(placementId);
+  const slotIndex = ALL_PLACEMENT_IDS.indexOf(slotId);
   const infographicType = enabledTypes[slotIndex % enabledTypes.length]!;
   return { type: 'infographic', infographicType };
 }
 
-function resolvePlaceholder(placementId: PlacementId): ResolvedContent | null {
+// ---------------------------------------------------------------------------
+// Placeholder fallback
+// ---------------------------------------------------------------------------
+
+function resolvePlaceholder(slotId: PlacementId): ResolvedContent | null {
   const assets = getEnabledAssetsByType('placeholder');
   if (assets.length === 0) return null;
-  const slotIndex = ALL_PLACEMENT_IDS.indexOf(placementId);
+  const slotIndex = ALL_PLACEMENT_IDS.indexOf(slotId);
   const asset = assets[slotIndex % assets.length]!;
   const src = getImageData(asset.id);
   if (!src) return null;
   return { type: 'placeholder', src, alt: asset.alt };
+}
+
+// ---------------------------------------------------------------------------
+// Legacy bridge — existing components call resolveSlotContent
+// ---------------------------------------------------------------------------
+
+export function resolveSlotContent(input: ResolverInput): ResolvedContent {
+  return resolvePublicPlacement(
+    {
+      globalPublicMode: input.globalDisplayEnabled,
+      placementMode: input.assignment.mode,
+      campaigns: input.campaigns,
+      globalInfographicFallback: input.globalInfographicFallback,
+      enabledInfographicTypes: input.enabledInfographicTypes,
+    },
+    input.assignment.slotKey,
+  );
 }

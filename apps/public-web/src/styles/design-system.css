@@ -107,6 +107,10 @@
   --ticker-h: 30px;
   --footer-h: 26px;
   --panel-w: 380px;
+
+  /* Layout rails — §5 */
+  --left-rail-width: 380px;
+  --right-rail-width: 280px;
 }
 
 /* ---------------------------------------------------------------------------
@@ -565,21 +569,47 @@ body {
   position: relative;
 }
 
-/* Glance: 2-column grid — priorities left (full height), map right, health strip bottom-right */
+/* Glance: 3-column CSS Grid — §5
+   left-rail (priorities + sponsor slots) | map + bottom | right-rail (dashboard + sponsor)
+   Health strip spans center only. */
 .glance-view {
   display: grid;
-  grid-template-columns: 380px 1fr;
-  grid-template-rows: 1fr auto;
+  grid-template-columns: var(--left-rail-width) minmax(0, 1fr) var(--right-rail-width);
+  grid-template-rows: 1fr auto auto;
   grid-template-areas:
-    "priorities map"
-    "priorities health";
+    "left-rail  map     right-rail"
+    "left-rail  bottom  right-rail"
+    "left-rail  health  health";
   height: 100%;
   overflow: hidden;
 }
 
+/* Left rail — always present, contains priorities + sponsor slots */
+.left-rail {
+  grid-area: left-rail;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.left-rail-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.left-rail-sponsors {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* Legacy alias — still used in some layouts */
 .glance-priorities {
-  grid-area: priorities;
-  grid-row: 1 / -1;
+  grid-area: left-rail;
   overflow-y: auto;
   border-right: 1px solid var(--border);
   padding: var(--sp-4);
@@ -1385,8 +1415,14 @@ body {
     grid-template-rows: 1fr auto auto;
     grid-template-areas:
       "map"
-      "priorities"
+      "left-rail"
       "health";
+  }
+
+  .left-rail {
+    border-right: none;
+    border-top: 1px solid var(--border);
+    max-height: 40vh;
   }
 
   .glance-priorities {

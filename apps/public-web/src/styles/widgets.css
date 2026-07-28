@@ -1,9 +1,10 @@
-/* Widget zones — overlaid on map */
+/* Widget zones — CSS Grid areas (§5: no absolute positioning for ads) */
 
 .widget-panel-toggle.collapsed {
-  position: absolute;
-  top: 56px;
-  right: 12px;
+  grid-area: right-rail;
+  align-self: start;
+  justify-self: end;
+  margin: 8px;
   z-index: 20;
   background: var(--bg-surface);
   border: 1px solid var(--border);
@@ -25,17 +26,12 @@
 }
 
 .widget-zone-right {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 280px;
-  bottom: 180px;
-  z-index: 12;
+  grid-area: right-rail;
   background: var(--bg-surface);
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  pointer-events: auto;
+  overflow: hidden;
 }
 
 .widget-zone-header {
@@ -76,12 +72,8 @@
 }
 
 .widget-zone-bottom {
-  position: absolute;
-  bottom: 0;
-  left: 380px;
-  right: 280px;
-  z-index: 12;
-  pointer-events: auto;
+  grid-area: bottom;
+  overflow: hidden;
 }
 
 /* Stats bar */
@@ -416,14 +408,14 @@
 
 /* Responsive */
 @media (max-width: 900px) {
-  .widget-zone-right { width: 240px; }
-  .widget-zone-bottom { left: 300px; right: 240px; }
+  :root { --right-rail-width: 240px; }
   .bottom-zone-grid { grid-template-columns: 80px 3fr 2fr 120px; }
 }
 @media (max-width: 768px) {
   .widget-zone-right { display: none; }
-  .widget-zone-bottom { left: 0; right: 0; }
+  .widget-zone-bottom { display: none; }
   .widget-zone-top { display: none; }
+  .widget-panel-toggle.collapsed { display: none; }
   .bottom-zone-grid { grid-template-columns: 1fr; }
   .bottom-infographics-panel, .bottom-ad-panel, .bottom-panel-activity { display: none; }
 }

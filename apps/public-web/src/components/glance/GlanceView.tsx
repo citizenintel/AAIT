@@ -5,6 +5,8 @@ import { getPriorityDevelopments } from '@/lib/attention-engine';
 import { IntelligenceMap } from '@/components/map/IntelligenceMap';
 import { useIncidentData } from '@/lib/hooks/useIncidentData';
 import ConfidenceAnatomy from '@/components/shared/ConfidenceAnatomy';
+import { WidgetPanel } from '@/components/widgets/WidgetPanel';
+import { ManagedContentSlot } from '@/components/widgets/ManagedContentSlot';
 import type { IntelligenceEvent } from '@/types/ontology';
 
 const PROVINCES = [
@@ -79,61 +81,68 @@ export function GlanceView() {
 
   return (
     <div className="glance-view">
-      <div className="glance-priorities">
-        <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--sp-1)' }}>
-          Priority Developments
-        </div>
+      {/* Left rail — §5: priorities + sponsor slots (slots outside scroll area) */}
+      <div className="left-rail">
+        <div className="left-rail-content">
+          <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--sp-1)' }}>
+            Priority Developments
+          </div>
 
-        {isLoading
-          ? Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="priority-card">
-                <div className="priority-card-severity skeleton" style={{ width: 3, minHeight: 60 }} />
-                <div className="priority-card-content">
-                  <div className="skeleton" style={{ height: 16, width: '80%' }} />
-                  <div className="skeleton" style={{ height: 12, width: '50%', marginTop: 8 }} />
-                  <div className="skeleton" style={{ height: 12, width: '30%', marginTop: 8 }} />
-                </div>
-              </div>
-            ))
-          : priorities.map((evt) => {
-              const severity = getSeverityForEvent(evt);
-              const change = evt.changeFromBaseline;
-              return (
-                <div
-                  key={evt.id}
-                  className="priority-card"
-                  onClick={() => handleCardClick(evt.id)}
-                >
-                  <div className="priority-card-severity" data-severity={severity} />
+          {isLoading
+            ? Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="priority-card">
+                  <div className="priority-card-severity skeleton" style={{ width: 3, minHeight: 60 }} />
                   <div className="priority-card-content">
-                    <div className="priority-card-title">{evt.title}</div>
-                    <div className="priority-card-meta">
-                      <span>{evt.location.placeName}, {evt.location.province}</span>
-                      <span>·</span>
-                      <span>{formatDistanceToNow(evt.timestamp, { addSuffix: true })}</span>
-                    </div>
-                    <div className="priority-card-indicators">
-                      <ConfidenceAnatomy confidence={evt.confidence} mode="compact" />
-                      {change && change.changeFromWeekBaseline > 50 && (
-                        <span className="change-badge" data-type="above-baseline">
-                          ↑ {Math.round(change.changeFromWeekBaseline)}% above baseline
-                        </span>
-                      )}
-                      {change?.isFirstOccurrence && (
-                        <span className="change-badge" data-type="first-occurrence">
-                          First occurrence
-                        </span>
-                      )}
-                      {change && change.accelerationRate > 1.5 && (
-                        <span className="change-badge" data-type="escalating">
-                          Accelerating
-                        </span>
-                      )}
-                    </div>
+                    <div className="skeleton" style={{ height: 16, width: '80%' }} />
+                    <div className="skeleton" style={{ height: 12, width: '50%', marginTop: 8 }} />
+                    <div className="skeleton" style={{ height: 12, width: '30%', marginTop: 8 }} />
                   </div>
                 </div>
-              );
-            })}
+              ))
+            : priorities.map((evt) => {
+                const severity = getSeverityForEvent(evt);
+                const change = evt.changeFromBaseline;
+                return (
+                  <div
+                    key={evt.id}
+                    className="priority-card"
+                    onClick={() => handleCardClick(evt.id)}
+                  >
+                    <div className="priority-card-severity" data-severity={severity} />
+                    <div className="priority-card-content">
+                      <div className="priority-card-title">{evt.title}</div>
+                      <div className="priority-card-meta">
+                        <span>{evt.location.placeName}, {evt.location.province}</span>
+                        <span>·</span>
+                        <span>{formatDistanceToNow(evt.timestamp, { addSuffix: true })}</span>
+                      </div>
+                      <div className="priority-card-indicators">
+                        <ConfidenceAnatomy confidence={evt.confidence} mode="compact" />
+                        {change && change.changeFromWeekBaseline > 50 && (
+                          <span className="change-badge" data-type="above-baseline">
+                            ↑ {Math.round(change.changeFromWeekBaseline)}% above baseline
+                          </span>
+                        )}
+                        {change?.isFirstOccurrence && (
+                          <span className="change-badge" data-type="first-occurrence">
+                            First occurrence
+                          </span>
+                        )}
+                        {change && change.accelerationRate > 1.5 && (
+                          <span className="change-badge" data-type="escalating">
+                            Accelerating
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+        </div>
+        <div className="left-rail-sponsors">
+          <ManagedContentSlot slotKey="LEFT_RAIL_FEATURED" />
+          <ManagedContentSlot slotKey="LEFT_RAIL_COMPACT" />
+        </div>
       </div>
 
       <div className="glance-map">
@@ -148,6 +157,9 @@ export function GlanceView() {
           currentTime={currentTime}
         />
       </div>
+
+      {/* Widget zones rendered as grid children — §5: no absolute positioning */}
+      <WidgetPanel />
 
       <div className="glance-health">
         <div className="province-strip">

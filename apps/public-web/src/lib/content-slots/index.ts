@@ -15,5 +15,5 @@ export {
   getPlacementDefinition, getSlotDefinition,
 } from './registry';
 export { getAssets, saveAssets, getAssetsByType, getEnabledAssetsByType, getImageData, uploadAsset, removeAsset, toggleAsset, getStorageUsage, migrateFromLegacy } from './asset-library';
-export { resolveSlotContent } from './resolver';
-export type { ResolverInput } from './resolver';
+export { resolvePublicPlacement, resolveSlotContent } from './resolver';
+export type { PlacementContext, ResolverInput } from './resolver';
