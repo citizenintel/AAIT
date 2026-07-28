@@ -1,53 +1,63 @@
-import type { SlotDefinition, SlotKey } from './types';
-import { MAX_PUBLIC_CONTENT_SLOTS } from './types';
+import type { PlacementDefinition, PlacementId } from './types';
+import { MAX_PUBLIC_PLACEMENTS } from './types';
 
-export const SLOT_REGISTRY: SlotDefinition[] = [
+// §3 — Four stable placement definitions
+export const PLACEMENT_REGISTRY: PlacementDefinition[] = [
   {
-    key: 'layers_featured',
-    label: 'Layers Panel · Featured',
-    location: 'Inside the Layers panel — large featured position',
-    aspectRatio: '4:3',
-    maxWidth: 340,
-    maxHeight: 280,
-    fitMode: 'contain',
+    id: 'LEFT_RAIL_FEATURED',
+    publicLabel: 'Left Rail — Featured Sponsor',
+    referenceWidth: 300,
+    referenceHeight: 250,
+    aspectRatio: '6:5',
+    placementGroup: 'left_rail',
+    defaultFitMode: 'cover',
   },
   {
-    key: 'layers_footer',
-    label: 'Layers Panel · Footer',
-    location: 'Bottom of the Layers panel — compact card',
-    aspectRatio: '3:1',
-    maxWidth: 340,
-    maxHeight: 120,
-    fitMode: 'contain',
+    id: 'LEFT_RAIL_COMPACT',
+    publicLabel: 'Left Rail — Compact Sponsor',
+    referenceWidth: 320,
+    referenceHeight: 50,
+    aspectRatio: '32:5',
+    placementGroup: 'left_rail',
+    defaultFitMode: 'contain',
   },
   {
-    key: 'right_dashboard_sponsor',
-    label: 'Right Dashboard · Sponsor',
-    location: 'Right dashboard column — below province chart',
-    aspectRatio: '16:9',
-    maxWidth: 260,
-    maxHeight: 160,
-    fitMode: 'contain',
+    id: 'RIGHT_RAIL_RECTANGLE',
+    publicLabel: 'Right Dashboard — Sponsor',
+    referenceWidth: 300,
+    referenceHeight: 250,
+    aspectRatio: '6:5',
+    placementGroup: null,
+    defaultFitMode: 'cover',
   },
   {
-    key: 'bottom_intelligence_left',
-    label: 'Bottom Bar · Left',
-    location: 'Bottom intelligence bar — wide horizontal banner',
-    aspectRatio: '5:1',
-    maxWidth: 500,
-    maxHeight: 160,
-    fitMode: 'contain',
+    id: 'BOTTOM_LEADERBOARD',
+    publicLabel: 'Bottom Intelligence Bar — Sponsor',
+    referenceWidth: 728,
+    referenceHeight: 90,
+    aspectRatio: '364:45',
+    placementGroup: null,
+    defaultFitMode: 'contain',
   },
 ];
 
-export const ALL_SLOT_KEYS: SlotKey[] = SLOT_REGISTRY.map(s => s.key);
+// Legacy alias
+export const SLOT_REGISTRY = PLACEMENT_REGISTRY;
 
-export function getSlotDefinition(key: SlotKey): SlotDefinition {
-  const def = SLOT_REGISTRY.find(s => s.key === key);
-  if (!def) throw new Error(`Unknown slot: ${key}`);
+export const ALL_PLACEMENT_IDS: PlacementId[] = PLACEMENT_REGISTRY.map(p => p.id);
+
+// Legacy alias
+export const ALL_SLOT_KEYS = ALL_PLACEMENT_IDS;
+
+export function getPlacementDefinition(id: PlacementId): PlacementDefinition {
+  const def = PLACEMENT_REGISTRY.find(p => p.id === id);
+  if (!def) throw new Error(`Unknown placement: ${id}`);
   return def;
 }
 
-if (SLOT_REGISTRY.length !== MAX_PUBLIC_CONTENT_SLOTS) {
-  throw new Error(`Registry must contain exactly ${MAX_PUBLIC_CONTENT_SLOTS} slots`);
+// Legacy alias
+export const getSlotDefinition = getPlacementDefinition;
+
+if (PLACEMENT_REGISTRY.length !== MAX_PUBLIC_PLACEMENTS) {
+  throw new Error(`Registry must contain exactly ${MAX_PUBLIC_PLACEMENTS} placements`);
 }

@@ -214,7 +214,7 @@ export const INFOGRAPHIC_LABELS: Record<string, string> = {
 // Expand overlay — click any ad to see it large, centered over the map
 // ---------------------------------------------------------------------------
 
-function AdOverlay({ content, onClose }: { content: Extract<ResolvedContent, { type: 'paid_ad' }>; onClose: () => void }) {
+function AdOverlay({ content, onClose }: { content: Extract<ResolvedContent, { type: 'sponsor' }>; onClose: () => void }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const previousFocus = useRef<Element | null>(null);
@@ -283,7 +283,7 @@ function SponsorIcon({ icon, color, size = 28 }: { icon: string; color: string; 
   }
 }
 
-function RenderPaidAd({ content, onExpand }: { content: Extract<ResolvedContent, { type: 'paid_ad' }>; onExpand: () => void }) {
+function RenderPaidAd({ content, onExpand }: { content: Extract<ResolvedContent, { type: 'sponsor' }>; onExpand: () => void }) {
   if (content.imageUrl) {
     return (
       <div className="sponsor-slot" style={{ borderRadius: 8, overflow: 'hidden', position: 'relative', border: '1px solid #c9a84c33', cursor: 'pointer' }} title={`Click to expand: ${content.displayName}`} onClick={onExpand}>
@@ -365,7 +365,7 @@ export function ManagedContentSlot({ slotKey }: { slotKey: SlotKey }) {
 
   if (resolved.type === 'hidden') return null;
 
-  if (resolved.type === 'paid_ad') {
+  if (resolved.type === 'sponsor') {
     return (
       <>
         <RenderPaidAd content={resolved} onExpand={() => setExpanded(true)} />

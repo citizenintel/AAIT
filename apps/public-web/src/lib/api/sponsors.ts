@@ -1,5 +1,6 @@
 import { isSupabaseConfigured, sponsor } from '../supabase';
 import { MOCK_SPONSOR_ADS, type SponsorAd } from '../../data/mock-sponsors';
+import type { PlacementId } from '../content-slots';
 
 export interface SponsorRow {
   id: string;

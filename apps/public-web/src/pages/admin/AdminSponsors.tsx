@@ -5,24 +5,23 @@ import {
   DURATION_LABELS,
   DURATION_PRICES,
   SIZE_PRICES,
-  SLOT_LABELS,
+  PLACEMENT_LABELS,
   MOCK_SPONSOR_ADS,
   type SponsorAd,
   type AdDuration,
 } from '../../data/mock-sponsors';
 import {
-  SLOT_REGISTRY,
-  ALL_SLOT_KEYS,
+  PLACEMENT_REGISTRY,
+  ALL_PLACEMENT_IDS,
   getAssets,
   saveAssets,
   getAssetsByType,
   getImageData,
   uploadAsset,
   removeAsset,
-  toggleAsset,
   getStorageUsage,
   migrateFromLegacy,
-  type SlotKey,
+  type PlacementId,
   type ContentAsset,
 } from '@/lib/content-slots';
 import { INFOGRAPHIC_LABELS } from '@/components/widgets/ManagedContentSlot';
@@ -96,21 +95,21 @@ function formatBytes(bytes: number): string {
 // Slot Card Component
 // ---------------------------------------------------------------------------
 
-function SlotCard({ slotKey, ads }: { slotKey: SlotKey; ads: SponsorAd[] }) {
-  const slotDef = SLOT_REGISTRY.find(s => s.key === slotKey)!;
+function SlotCard({ placementId, ads }: { placementId: PlacementId; ads: SponsorAd[] }) {
+  const placementDef = PLACEMENT_REGISTRY.find(p => p.id === placementId)!;
   const slotAssignments = useAppStore(s => s.slotAssignments);
   const setSlotMode = useAppStore(s => s.setSlotMode);
-  const assignment = slotAssignments[slotKey];
+  const assignment = slotAssignments[placementId];
   const mode = assignment?.mode ?? 'auto';
-  const campaign = ads.find(a => a.slot === slotKey && a.enabled);
+  const campaign = ads.find(a => a.slot === placementId && a.enabled);
   const status = campaign ? getStatus(campaign) : null;
 
   return (
     <div className="admin-card" style={{ padding: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{slotDef.label}</div>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{slotDef.location}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{placementDef.publicLabel}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{placementDef.referenceWidth}×{placementDef.referenceHeight}</div>
         </div>
         {status && (
           <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 3, background: STATUS_STYLES[status]?.bg, color: STATUS_STYLES[status]?.color, textTransform: 'uppercase' }}>
@@ -130,7 +129,7 @@ function SlotCard({ slotKey, ads }: { slotKey: SlotKey; ads: SponsorAd[] }) {
         <label style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Mode:</label>
         <select
           value={mode}
-          onChange={e => setSlotMode(slotKey, e.target.value)}
+          onChange={e => setSlotMode(placementId, e.target.value)}
           style={{ fontSize: 11, padding: '3px 8px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)', cursor: 'pointer' }}
         >
           {MODE_OPTIONS.map(m => <option key={m} value={m}>{MODE_LABELS[m]}</option>)}
@@ -173,16 +172,11 @@ function AssetLibrary() {
     refresh();
   };
 
-  const handleToggle = (id: string, enabled: boolean) => {
-    toggleAsset(id, enabled);
-    refresh();
-  };
-
   return (
     <div className="admin-card" style={{ marginBottom: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
         <div>
-          <h2 style={{ margin: 0 }}>Placeholder Images</h2>
+          <h2 style={{ margin: 0 }}>Creative Library</h2>
           <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
             Uploaded images shown in slots when no paid campaign is active.
           </p>
@@ -210,18 +204,13 @@ function AssetLibrary() {
           {assets.map(asset => {
             const thumb = getImageData(asset.id);
             return (
-              <div key={asset.id} style={{ border: `1px solid ${asset.enabled ? 'var(--accent)' : 'var(--border-subtle)'}`, borderRadius: 6, overflow: 'hidden', background: 'var(--bg-elevated)', opacity: asset.enabled ? 1 : 0.5 }}>
+              <div key={asset.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 6, overflow: 'hidden', background: 'var(--bg-elevated)' }}>
                 <div style={{ height: 40, background: '#0a0f1a', overflow: 'hidden' }}>
                   {thumb && <img src={thumb} alt={asset.alt} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
                 </div>
                 <div style={{ padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 11, color: 'var(--text-primary)', fontWeight: 600 }}>{asset.label}</span>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <button onClick={() => handleToggle(asset.id, !asset.enabled)} style={{ fontSize: 9, padding: '2px 6px', background: asset.enabled ? '#38a16920' : 'var(--bg-base)', color: asset.enabled ? '#38a169' : 'var(--text-muted)', border: `1px solid ${asset.enabled ? '#38a16940' : 'var(--border-subtle)'}`, borderRadius: 3, cursor: 'pointer' }}>
-                      {asset.enabled ? 'ON' : 'OFF'}
-                    </button>
-                    <button onClick={() => handleRemove(asset.id)} style={{ fontSize: 9, padding: '2px 6px', background: 'none', border: '1px solid #c5303040', borderRadius: 3, cursor: 'pointer', color: '#c53030' }}>✕</button>
-                  </div>
+                  <button onClick={() => handleRemove(asset.id)} style={{ fontSize: 9, padding: '2px 6px', background: 'none', border: '1px solid #c5303040', borderRadius: 3, cursor: 'pointer', color: '#c53030' }}>✕</button>
                 </div>
               </div>
             );
@@ -254,7 +243,7 @@ function InfographicControls() {
     <div className="admin-card" style={{ marginBottom: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div>
-          <h2 style={{ margin: 0 }}>Infographic Fallback</h2>
+          <h2 style={{ margin: 0 }}>Platform Fallback Content</h2>
           <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
             When enabled, empty slots show data visualisations instead of hiding.
           </p>
@@ -296,7 +285,7 @@ function CampaignsTable() {
   const [newTagline, setNewTagline] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const [newSize, setNewSize] = useState<string>('standard');
-  const [newSlot, setNewSlot] = useState<SlotKey>('layers_featured');
+  const [newSlot, setNewSlot] = useState<PlacementId>('LEFT_RAIL_FEATURED');
 
   const updateAds = useCallback((updated: SponsorAd[]) => {
     setAds(updated);
@@ -362,8 +351,8 @@ function CampaignsTable() {
               <select value={newSize} onChange={e => setNewSize(e.target.value)} style={{ flex: 1, fontSize: 12, padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)' }}>
                 {Object.entries(SIZE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
-              <select value={newSlot} onChange={e => setNewSlot(e.target.value as SlotKey)} style={{ flex: 1, fontSize: 12, padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)' }}>
-                {ALL_SLOT_KEYS.map(k => <option key={k} value={k}>{SLOT_LABELS[k]}</option>)}
+              <select value={newSlot} onChange={e => setNewSlot(e.target.value as PlacementId)} style={{ flex: 1, fontSize: 12, padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)' }}>
+                {ALL_PLACEMENT_IDS.map(k => <option key={k} value={k}>{PLACEMENT_LABELS[k]}</option>)}
               </select>
             </div>
           </div>
@@ -376,7 +365,7 @@ function CampaignsTable() {
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Sponsor</th>
-              <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Slot</th>
+              <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Placement</th>
               <th style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Status</th>
               <th style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Duration</th>
               <th style={{ textAlign: 'right', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Price</th>
@@ -395,7 +384,7 @@ function CampaignsTable() {
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{ad.tagline}</div>
                   </td>
                   <td style={{ padding: '8px 6px', color: 'var(--text-secondary)' }}>
-                    {SLOT_LABELS[ad.slot]}
+                    {PLACEMENT_LABELS[ad.slot]}
                   </td>
                   <td style={{ padding: '8px 6px', textAlign: 'center' }}>
                     <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 3, background: style.bg, color: style.color, textTransform: 'uppercase' }}>
@@ -434,38 +423,38 @@ function CampaignsTable() {
 }
 
 // ---------------------------------------------------------------------------
-// Placement Map Wireframe
+// Placement Map Wireframe — §12
 // ---------------------------------------------------------------------------
 
 function PlacementMap({ ads }: { ads: SponsorAd[] }) {
   const slotAssignments = useAppStore(s => s.slotAssignments);
 
-  function slotStatus(key: SlotKey): 'active' | 'empty' | 'hidden' {
-    const assignment = slotAssignments[key];
+  function slotStatus(id: PlacementId): 'active' | 'empty' | 'hidden' {
+    const assignment = slotAssignments[id];
     if (assignment?.mode === 'hidden') return 'hidden';
-    const campaign = ads.find(a => a.slot === key && a.enabled);
+    const campaign = ads.find(a => a.slot === id && a.enabled);
     if (campaign && getStatus(campaign) === 'active') return 'active';
     return 'empty';
   }
 
-  const statusColor = (key: SlotKey) => {
-    const s = slotStatus(key);
+  const statusColor = (id: PlacementId) => {
+    const s = slotStatus(id);
     if (s === 'active') return '#38a169';
     if (s === 'hidden') return '#636366';
     return '#d69e2e';
   };
 
-  const statusBg = (key: SlotKey) => {
-    const s = slotStatus(key);
+  const statusBg = (id: PlacementId) => {
+    const s = slotStatus(id);
     if (s === 'active') return '#38a16918';
     if (s === 'hidden') return '#63636618';
     return '#d69e2e18';
   };
 
-  const slotBox = (key: SlotKey, label: string) => (
-    <div style={{ padding: '6px 10px', border: `2px solid ${statusColor(key)}`, borderRadius: 4, background: statusBg(key), fontSize: 9, fontWeight: 700, color: statusColor(key), textAlign: 'center', whiteSpace: 'nowrap' }}>
+  const slotBox = (id: PlacementId, label: string) => (
+    <div style={{ padding: '6px 10px', border: `2px solid ${statusColor(id)}`, borderRadius: 4, background: statusBg(id), fontSize: 9, fontWeight: 700, color: statusColor(id), textAlign: 'center', whiteSpace: 'nowrap' }}>
       {label}
-      <div style={{ fontSize: 7, fontWeight: 400, opacity: 0.8, marginTop: 2, textTransform: 'uppercase' }}>{slotStatus(key)}</div>
+      <div style={{ fontSize: 7, fontWeight: 400, opacity: 0.8, marginTop: 2, textTransform: 'uppercase' }}>{slotStatus(id)}</div>
     </div>
   );
 
@@ -473,26 +462,26 @@ function PlacementMap({ ads }: { ads: SponsorAd[] }) {
     <div className="admin-card" style={{ marginBottom: 24, padding: 20 }}>
       <h2 style={{ margin: '0 0 12px', fontSize: 14 }}>Placement Map</h2>
       <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr 140px', gridTemplateRows: '1fr 60px', gap: 8, height: 220, background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)', padding: 12 }}>
-        {/* Sidebar (Layers panel) */}
+        {/* Left rail */}
         <div style={{ gridRow: '1 / 3', display: 'flex', flexDirection: 'column', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
-          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>LAYERS PANEL</div>
-          {slotBox('layers_featured', 'Featured')}
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>LEFT RAIL</div>
+          {slotBox('LEFT_RAIL_FEATURED', 'Featured')}
           <div style={{ flex: 1 }} />
-          {slotBox('layers_footer', 'Footer')}
+          {slotBox('LEFT_RAIL_COMPACT', 'Compact')}
         </div>
         {/* Map area */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', borderRadius: 4, color: 'var(--text-muted)', fontSize: 11 }}>
           MAP AREA
         </div>
-        {/* Right dashboard */}
+        {/* Right rail */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
-          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>RIGHT PANEL</div>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>RIGHT RAIL</div>
           <div style={{ flex: 1 }} />
-          {slotBox('right_dashboard_sponsor', 'Sponsor')}
+          {slotBox('RIGHT_RAIL_RECTANGLE', 'Sponsor')}
         </div>
         {/* Bottom bar */}
         <div style={{ gridColumn: '2 / 4', display: 'flex', alignItems: 'center', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
-          {slotBox('bottom_intelligence_left', 'Bottom Left')}
+          {slotBox('BOTTOM_LEADERBOARD', 'Leaderboard')}
           <div style={{ flex: 1, height: 16, background: 'var(--border-subtle)', borderRadius: 3 }} />
           <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>News Feed</div>
           <div style={{ flex: 1, height: 16, background: 'var(--border-subtle)', borderRadius: 3 }} />
@@ -503,33 +492,33 @@ function PlacementMap({ ads }: { ads: SponsorAd[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Capacity Indicator
+// Capacity Indicator — §15
 // ---------------------------------------------------------------------------
 
 function CapacityIndicator({ ads }: { ads: SponsorAd[] }) {
-  const activeCount = ALL_SLOT_KEYS.filter(key => {
-    const campaign = ads.find(a => a.slot === key && a.enabled);
+  const occupiedCount = ALL_PLACEMENT_IDS.filter(id => {
+    const campaign = ads.find(a => a.slot === id && a.enabled);
     return campaign && getStatus(campaign) === 'active';
   }).length;
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>CAPACITY</div>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>PLACEMENTS OCCUPIED</div>
       <div style={{ display: 'flex', gap: 4 }}>
-        {ALL_SLOT_KEYS.map((key, i) => (
-          <div key={key} style={{ width: 24, height: 8, borderRadius: 2, background: i < activeCount ? '#38a169' : 'var(--border-subtle)' }} />
+        {ALL_PLACEMENT_IDS.map((id, i) => (
+          <div key={id} style={{ width: 24, height: 8, borderRadius: 2, background: i < occupiedCount ? '#38a169' : 'var(--border-subtle)' }} />
         ))}
       </div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: activeCount === 4 ? '#38a169' : 'var(--text-secondary)' }}>
-        {activeCount}/4
+      <div style={{ fontSize: 12, fontWeight: 700, color: occupiedCount === 4 ? '#38a169' : 'var(--text-secondary)' }}>
+        {occupiedCount}/4
       </div>
-      {activeCount === 4 && <span style={{ fontSize: 9, padding: '2px 6px', background: '#38a16920', color: '#38a169', borderRadius: 3, fontWeight: 700 }}>FULL</span>}
+      {occupiedCount === 4 && <span style={{ fontSize: 9, padding: '2px 6px', background: '#38a16920', color: '#38a169', borderRadius: 3, fontWeight: 700 }}>FULL</span>}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Main Admin Page
+// Main Admin Page — §12: "SPONSOR & PLACEMENT MANAGER"
 // ---------------------------------------------------------------------------
 
 export function AdminSponsors() {
@@ -547,16 +536,16 @@ export function AdminSponsors() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22 }}>Content Manager</h1>
+          <h1 style={{ margin: 0, fontSize: 22 }}>Sponsor & Placement Manager</h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
-            4-slot content system — paid ads, placeholders, and infographics
+            4 placements · Paid sponsors, platform fallback, and creative library
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <CapacityIndicator ads={ads} />
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 14px', background: sponsorsEnabled ? '#38a16915' : '#c5303015', border: `1px solid ${sponsorsEnabled ? '#38a16940' : '#c5303040'}`, borderRadius: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: sponsorsEnabled ? '#38a169' : '#c53030' }}>
-              Public display: {sponsorsEnabled ? 'ON' : 'OFF'}
+              Public sponsorship: {sponsorsEnabled ? 'ON' : 'OFF'}
             </span>
             <input type="checkbox" checked={sponsorsEnabled} onChange={e => setSponsorsEnabled(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
           </label>
@@ -567,10 +556,10 @@ export function AdminSponsors() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
         <PlacementMap ads={ads} />
         <div>
-          <h2 style={{ margin: '0 0 12px', fontSize: 14 }}>Slot Controls</h2>
+          <h2 style={{ margin: '0 0 12px', fontSize: 14 }}>Placement Controls</h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {ALL_SLOT_KEYS.map(key => (
-              <SlotCard key={key} slotKey={key} ads={ads} />
+            {ALL_PLACEMENT_IDS.map(id => (
+              <SlotCard key={id} placementId={id} ads={ads} />
             ))}
           </div>
         </div>
@@ -592,7 +581,7 @@ export function AdminSponsors() {
             Storage: {formatBytes(storage.used)} used ({storage.items} items)
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-            Max 4 content slots · Demo mode (localStorage)
+            Max 4 placements · Demo mode (localStorage)
           </div>
         </div>
       </div>

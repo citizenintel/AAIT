@@ -87,7 +87,7 @@ export function NewsTicker() {
         <LivePanel />
       </div>
       <div className="bottom-ad-panel">
-        <ManagedContentSlot slotKey="bottom_intelligence_left" />
+        <ManagedContentSlot slotKey="BOTTOM_LEADERBOARD" />
       </div>
 
       <div className="bottom-panel-news">

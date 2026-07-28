@@ -205,7 +205,7 @@ export function Sidebar() {
         </div>
       )}
 
-      <ManagedContentSlot slotKey="layers_featured" />
+      <ManagedContentSlot slotKey="LEFT_RAIL_FEATURED" />
 
       <div className="sidebar-summary">
         <div className="sidebar-summary-title">The Last 24 Hours</div>
@@ -250,7 +250,7 @@ export function Sidebar() {
         )}
       </div>
 
-      <ManagedContentSlot slotKey="layers_footer" />
+      <ManagedContentSlot slotKey="LEFT_RAIL_COMPACT" />
 
       <div className="sidebar-footer-note">
         <strong>Mapped. Sourced. Reviewed.</strong> What the statistics refuse to count.
