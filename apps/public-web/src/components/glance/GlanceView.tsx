@@ -6,7 +6,7 @@ import { IntelligenceMap } from '@/components/map/IntelligenceMap';
 import { useIncidentData } from '@/lib/hooks/useIncidentData';
 import ConfidenceAnatomy from '@/components/shared/ConfidenceAnatomy';
 import { WidgetPanel } from '@/components/widgets/WidgetPanel';
-import { ManagedContentSlot } from '@/components/widgets/ManagedContentSlot';
+import { LeftRail } from '@/components/shell/LeftRail';
 import type { IntelligenceEvent } from '@/types/ontology';
 
 const PROVINCES = [
@@ -81,9 +81,8 @@ export function GlanceView() {
 
   return (
     <div className="glance-view">
-      {/* Left rail — §5: priorities + sponsor slots (slots outside scroll area) */}
-      <div className="left-rail">
-        <div className="left-rail-content">
+      <LeftRail glanceContent={
+        <>
           <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--sp-1)' }}>
             Priority Developments
           </div>
@@ -138,12 +137,8 @@ export function GlanceView() {
                   </div>
                 );
               })}
-        </div>
-        <div className="left-rail-sponsors">
-          <ManagedContentSlot slotKey="LEFT_RAIL_FEATURED" />
-          <ManagedContentSlot slotKey="LEFT_RAIL_COMPACT" />
-        </div>
-      </div>
+        </>
+      } />
 
       <div className="glance-map">
         <IntelligenceMap

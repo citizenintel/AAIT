@@ -6,10 +6,10 @@
 export const MAX_PUBLIC_PLACEMENTS = 4;
 
 export type PlacementId =
-  | 'LEFT_RAIL_FEATURED'
+  | 'GLANCE_RAIL_FEATURED'
   | 'LEFT_RAIL_COMPACT'
-  | 'RIGHT_RAIL_RECTANGLE'
-  | 'BOTTOM_LEADERBOARD';
+  | 'RIGHT_DASHBOARD_RECTANGLE'
+  | 'BOTTOM_INTELLIGENCE_LEADERBOARD';
 
 // Backward-compat alias — will be removed once all legacy references are gone
 export type SlotKey = PlacementId;

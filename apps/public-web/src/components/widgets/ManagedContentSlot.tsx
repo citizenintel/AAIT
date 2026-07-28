@@ -363,24 +363,29 @@ export function ManagedContentSlot({ slotKey }: { slotKey: SlotKey }) {
     enabledInfographicTypes,
   }), [assignment, campaigns, globalInfographicFallback, globalDisplayEnabled, enabledInfographicTypes]);
 
-  if (resolved.type === 'hidden') return null;
+  if (resolved.type === 'hidden') {
+    return <div data-sponsor-slot={slotKey} data-render-type="hidden" data-visibility="hidden" />;
+  }
+
+  const renderType = resolved.type;
+  let inner: React.ReactNode = null;
 
   if (resolved.type === 'sponsor') {
-    return (
+    inner = (
       <>
         <RenderPaidAd content={resolved} onExpand={() => setExpanded(true)} />
         {expanded && <AdOverlay content={resolved} onClose={() => setExpanded(false)} />}
       </>
     );
+  } else if (resolved.type === 'infographic') {
+    inner = <RenderInfographic infographicType={resolved.infographicType} />;
+  } else if (resolved.type === 'placeholder') {
+    inner = <RenderPlaceholder src={resolved.src} alt={resolved.alt} />;
   }
 
-  if (resolved.type === 'infographic') {
-    return <RenderInfographic infographicType={resolved.infographicType} />;
-  }
-
-  if (resolved.type === 'placeholder') {
-    return <RenderPlaceholder src={resolved.src} alt={resolved.alt} />;
-  }
-
-  return null;
+  return (
+    <div data-sponsor-slot={slotKey} data-render-type={renderType} data-visibility="visible">
+      {inner}
+    </div>
+  );
 }

@@ -8,7 +8,6 @@ import { InvestigateView } from '@/components/investigate/InvestigateView';
 import { BriefView } from '@/components/brief/BriefView';
 import { CommandPalette } from '@/components/shared/CommandPalette';
 import { TickerBar } from '@/components/TickerBar';
-import { Sidebar } from '@/components/Sidebar';
 import { fetchEvents } from '@/lib/api/events';
 import { fetchAssets } from '@/lib/api/assets';
 import type { InterfaceLevel, RenderingTier } from '@/types/ontology';
@@ -40,8 +39,10 @@ export function AppShell() {
   const addAssets = useAppStore((s) => s.addAssets);
   const hydrate = useAppStore((s) => s.hydrate);
 
+  const sidebarOpen = useAppStore((s) => s.sidebarOpen);
+  const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
+
   const [lensOpen, setLensOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const lensRef = useRef<HTMLDivElement>(null);
   const alertsRef = useRef<HTMLDivElement>(null);
@@ -235,14 +236,6 @@ export function AppShell() {
       </header>
 
       <div className="app-content">
-        {sidebarOpen && (
-          <>
-            <div className="sidebar-overlay-backdrop" onClick={() => setSidebarOpen(false)} />
-            <div className="sidebar-overlay">
-              <Sidebar />
-            </div>
-          </>
-        )}
         <div key={interfaceLevel} className="level-panel" style={{ height: '100%' }}>
           {interfaceLevel === 'glance' && <GlanceView />}
           {interfaceLevel === 'investigate' && <InvestigateView />}

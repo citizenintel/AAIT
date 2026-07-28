@@ -51,10 +51,10 @@ export const SIZE_PRICES: Record<string, number> = {
 };
 
 export const PLACEMENT_LABELS: Record<PlacementId, string> = {
-  'LEFT_RAIL_FEATURED': 'Left Rail — Featured Sponsor',
+  'GLANCE_RAIL_FEATURED': 'Glance Rail — Featured Sponsor',
   'LEFT_RAIL_COMPACT': 'Left Rail — Compact Sponsor',
-  'RIGHT_RAIL_RECTANGLE': 'Right Dashboard — Sponsor',
-  'BOTTOM_LEADERBOARD': 'Bottom Intelligence Bar — Sponsor',
+  'RIGHT_DASHBOARD_RECTANGLE': 'Right Dashboard — Sponsor',
+  'BOTTOM_INTELLIGENCE_LEADERBOARD': 'Bottom Intelligence Bar — Sponsor',
 };
 
 // Legacy alias
@@ -189,7 +189,7 @@ export const MOCK_ASSIGNMENTS: Assignment[] = [
   {
     id: 'assign-farmwatch-leftrail',
     campaignId: 'campaign-farmwatch-main',
-    placementId: 'LEFT_RAIL_FEATURED',
+    placementId: 'GLANCE_RAIL_FEATURED',
     status: 'ACTIVE',
     startAt: rollingDate(20),
     endAt: rollingExpiry(10),
@@ -215,7 +215,7 @@ export const MOCK_ASSIGNMENTS: Assignment[] = [
   {
     id: 'assign-cybervault-right',
     campaignId: 'campaign-cybervault-main',
-    placementId: 'RIGHT_RAIL_RECTANGLE',
+    placementId: 'RIGHT_DASHBOARD_RECTANGLE',
     status: 'ACTIVE',
     startAt: rollingDate(1),
     endAt: rollingExpiry(6),
@@ -228,7 +228,7 @@ export const MOCK_ASSIGNMENTS: Assignment[] = [
   {
     id: 'assign-veldbroadband-bottom',
     campaignId: 'campaign-veldbroadband-main',
-    placementId: 'BOTTOM_LEADERBOARD',
+    placementId: 'BOTTOM_INTELLIGENCE_LEADERBOARD',
     status: 'ACTIVE',
     startAt: rollingDate(5),
     endAt: rollingExpiry(25),
@@ -248,7 +248,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
     id: 'sp-005',
     name: 'FarmWatch Alert',
-    slot: 'LEFT_RAIL_FEATURED',
+    slot: 'GLANCE_RAIL_FEATURED',
     enabled: true,
     size: 'premium',
     tagline: 'Real-time farm security alerts straight to your phone',
@@ -287,7 +287,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
     id: 'sp-004',
     name: 'CyberVault',
-    slot: 'RIGHT_RAIL_RECTANGLE',
+    slot: 'RIGHT_DASHBOARD_RECTANGLE',
     enabled: true,
     size: 'standard',
     tagline: 'Data Security & Backup Solutions',
@@ -306,7 +306,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
     id: 'sp-006',
     name: 'Veld Broadband',
-    slot: 'BOTTOM_LEADERBOARD',
+    slot: 'BOTTOM_INTELLIGENCE_LEADERBOARD',
     enabled: true,
     size: 'standard',
     tagline: 'Rural Connectivity — No Dead Zones',

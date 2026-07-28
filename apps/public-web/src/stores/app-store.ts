@@ -521,16 +521,16 @@ export const useAppStore = create<AppStore>()(
     setEnabledInfographicTypes: (types) => set((s) => { s.enabledInfographicTypes = types; try { localStorage.setItem('aait_infographic_types', JSON.stringify(types)); } catch {} }),
     slotAssignments: (() => {
       const defaults: Record<string, { slotKey: string; assetId: string | null; campaignId: string | null; mode: string }> = {
-        'LEFT_RAIL_FEATURED': { slotKey: 'LEFT_RAIL_FEATURED', assetId: null, campaignId: null, mode: 'auto' },
+        'GLANCE_RAIL_FEATURED': { slotKey: 'GLANCE_RAIL_FEATURED', assetId: null, campaignId: null, mode: 'auto' },
         'LEFT_RAIL_COMPACT': { slotKey: 'LEFT_RAIL_COMPACT', assetId: null, campaignId: null, mode: 'auto' },
-        'RIGHT_RAIL_RECTANGLE': { slotKey: 'RIGHT_RAIL_RECTANGLE', assetId: null, campaignId: null, mode: 'auto' },
-        'BOTTOM_LEADERBOARD': { slotKey: 'BOTTOM_LEADERBOARD', assetId: null, campaignId: null, mode: 'auto' },
+        'RIGHT_DASHBOARD_RECTANGLE': { slotKey: 'RIGHT_DASHBOARD_RECTANGLE', assetId: null, campaignId: null, mode: 'auto' },
+        'BOTTOM_INTELLIGENCE_LEADERBOARD': { slotKey: 'BOTTOM_INTELLIGENCE_LEADERBOARD', assetId: null, campaignId: null, mode: 'auto' },
       };
       try {
         const v = localStorage.getItem('aait_slot_assignments');
         if (v) {
           const parsed = JSON.parse(v);
-          if (parsed['layers_featured']) {
+          if (parsed['layers_featured'] || parsed['LEFT_RAIL_FEATURED'] || parsed['RIGHT_RAIL_RECTANGLE'] || parsed['BOTTOM_LEADERBOARD']) {
             localStorage.removeItem('aait_slot_assignments');
             return defaults;
           }

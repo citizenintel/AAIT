@@ -4,8 +4,8 @@ import { MAX_PUBLIC_PLACEMENTS } from './types';
 // §3 — Four stable placement definitions
 export const PLACEMENT_REGISTRY: PlacementDefinition[] = [
   {
-    id: 'LEFT_RAIL_FEATURED',
-    publicLabel: 'Left Rail — Featured Sponsor',
+    id: 'GLANCE_RAIL_FEATURED',
+    publicLabel: 'Glance Rail — Featured Sponsor',
     referenceWidth: 300,
     referenceHeight: 250,
     aspectRatio: '6:5',
@@ -22,7 +22,7 @@ export const PLACEMENT_REGISTRY: PlacementDefinition[] = [
     defaultFitMode: 'contain',
   },
   {
-    id: 'RIGHT_RAIL_RECTANGLE',
+    id: 'RIGHT_DASHBOARD_RECTANGLE',
     publicLabel: 'Right Dashboard — Sponsor',
     referenceWidth: 300,
     referenceHeight: 250,
@@ -31,7 +31,7 @@ export const PLACEMENT_REGISTRY: PlacementDefinition[] = [
     defaultFitMode: 'cover',
   },
   {
-    id: 'BOTTOM_LEADERBOARD',
+    id: 'BOTTOM_INTELLIGENCE_LEADERBOARD',
     publicLabel: 'Bottom Intelligence Bar — Sponsor',
     referenceWidth: 728,
     referenceHeight: 90,

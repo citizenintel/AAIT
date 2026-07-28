@@ -285,7 +285,7 @@ function CampaignsTable() {
   const [newTagline, setNewTagline] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const [newSize, setNewSize] = useState<string>('standard');
-  const [newSlot, setNewSlot] = useState<PlacementId>('LEFT_RAIL_FEATURED');
+  const [newSlot, setNewSlot] = useState<PlacementId>('GLANCE_RAIL_FEATURED');
 
   const updateAds = useCallback((updated: SponsorAd[]) => {
     setAds(updated);
@@ -464,8 +464,8 @@ function PlacementMap({ ads }: { ads: SponsorAd[] }) {
       <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr 140px', gridTemplateRows: '1fr 60px', gap: 8, height: 220, background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)', padding: 12 }}>
         {/* Left rail */}
         <div style={{ gridRow: '1 / 3', display: 'flex', flexDirection: 'column', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
-          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>LEFT RAIL</div>
-          {slotBox('LEFT_RAIL_FEATURED', 'Featured')}
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>GLANCE / LEFT RAIL</div>
+          {slotBox('GLANCE_RAIL_FEATURED', 'Featured')}
           <div style={{ flex: 1 }} />
           {slotBox('LEFT_RAIL_COMPACT', 'Compact')}
         </div>
@@ -475,13 +475,13 @@ function PlacementMap({ ads }: { ads: SponsorAd[] }) {
         </div>
         {/* Right rail */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
-          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>RIGHT RAIL</div>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>RIGHT DASHBOARD</div>
           <div style={{ flex: 1 }} />
-          {slotBox('RIGHT_RAIL_RECTANGLE', 'Sponsor')}
+          {slotBox('RIGHT_DASHBOARD_RECTANGLE', 'Sponsor')}
         </div>
         {/* Bottom bar */}
         <div style={{ gridColumn: '2 / 4', display: 'flex', alignItems: 'center', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
-          {slotBox('BOTTOM_LEADERBOARD', 'Leaderboard')}
+          {slotBox('BOTTOM_INTELLIGENCE_LEADERBOARD', 'Leaderboard')}
           <div style={{ flex: 1, height: 16, background: 'var(--border-subtle)', borderRadius: 3 }} />
           <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>News Feed</div>
           <div style={{ flex: 1, height: 16, background: 'var(--border-subtle)', borderRadius: 3 }} />
@@ -500,18 +500,27 @@ function CapacityIndicator({ ads }: { ads: SponsorAd[] }) {
     const campaign = ads.find(a => a.slot === id && a.enabled);
     return campaign && getStatus(campaign) === 'active';
   }).length;
+  const activeCampaigns = ads.filter(a => a.enabled && getStatus(a) === 'active').length;
+  const scheduledCampaigns = ads.filter(a => a.enabled && getStatus(a) === 'scheduled').length;
+  const creativesInLibrary = getAssetsByType('placeholder').length;
+
+  const counters = [
+    { label: 'Occupied', value: occupiedCount, max: 4, color: occupiedCount === 4 ? '#38a169' : '#4299e1' },
+    { label: 'Active', value: activeCampaigns, color: '#38a169' },
+    { label: 'Scheduled', value: scheduledCampaigns, color: '#d69e2e' },
+    { label: 'Creatives', value: creativesInLibrary, color: '#9f7aea' },
+  ];
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>PLACEMENTS OCCUPIED</div>
-      <div style={{ display: 'flex', gap: 4 }}>
-        {ALL_PLACEMENT_IDS.map((id, i) => (
-          <div key={id} style={{ width: 24, height: 8, borderRadius: 2, background: i < occupiedCount ? '#38a169' : 'var(--border-subtle)' }} />
-        ))}
-      </div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: occupiedCount === 4 ? '#38a169' : 'var(--text-secondary)' }}>
-        {occupiedCount}/4
-      </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 14px', background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+      {counters.map(c => (
+        <div key={c.label} style={{ textAlign: 'center', minWidth: 48 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: c.color }}>
+            {c.max ? `${c.value}/${c.max}` : c.value}
+          </div>
+          <div style={{ fontSize: 8, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{c.label}</div>
+        </div>
+      ))}
       {occupiedCount === 4 && <span style={{ fontSize: 9, padding: '2px 6px', background: '#38a16920', color: '#38a169', borderRadius: 3, fontWeight: 700 }}>FULL</span>}
     </div>
   );
