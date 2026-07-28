@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useAppStore } from '../../store/app-store';
 import { saveAdminAds, getStoredAdminAds, saveCampaigns, createMockCampaign, type CampaignRow } from '@/lib/api/sponsors';
 import {
@@ -24,14 +24,40 @@ import {
   seedTestData,
   clearTestData,
   isTestDataSeeded,
+  resolvePublicPlacement,
   type PlacementId,
   type ContentAsset,
+  type PlacementContext,
 } from '@/lib/content-slots';
 import { INFOGRAPHIC_LABELS } from '@/components/widgets/ManagedContentSlot';
 
 const SIZE_LABELS: Record<string, string> = { premium: 'Premium', standard: 'Standard', compact: 'Compact' };
-const MODE_LABELS: Record<string, string> = { auto: 'Auto', paid_ad: 'Paid Ad', infographic: 'Infographic', placeholder: 'Placeholder', hidden: 'Hidden' };
-const MODE_OPTIONS = ['auto', 'paid_ad', 'infographic', 'placeholder', 'hidden'] as const;
+
+const MODE_LABELS: Record<string, string> = {
+  disabled: 'Disabled',
+  manual: 'Manual',
+  auto: 'Auto',
+  fallback_only: 'Fallback Only',
+};
+const MODE_OPTIONS = ['auto', 'manual', 'fallback_only', 'disabled'] as const;
+
+const MODE_DESCRIPTIONS: Record<string, string> = {
+  disabled: 'Slot collapsed — nothing renders',
+  manual: 'Render the explicitly assigned campaign',
+  auto: 'Choose from active campaigns for this placement',
+  fallback_only: 'No paid content — show platform fallback or collapse',
+};
+
+const LEGACY_MODE_MAP: Record<string, string> = {
+  paid_ad: 'manual',
+  infographic: 'fallback_only',
+  placeholder: 'fallback_only',
+  hidden: 'disabled',
+};
+
+function normalizeLegacyMode(mode: string): string {
+  return LEGACY_MODE_MAP[mode] ?? mode;
+}
 
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   active: { bg: '#38a16922', color: '#38a169' },
@@ -94,25 +120,479 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function getPublicResult(
+  placementId: PlacementId,
+  ads: SponsorAd[],
+  sponsorsEnabled: boolean,
+  slotMode: string,
+  globalInfographicFallback: boolean,
+  enabledInfographicTypes: string[],
+): { label: string; detail: string; color: string } {
+  const mode = normalizeLegacyMode(slotMode);
+  const campaigns: CampaignRow[] = ads
+    .filter(a => a.enabled && new Date(a.expiresAt).getTime() > Date.now())
+    .map(a => ({
+      id: a.id, sponsor_id: a.id, name: a.name, size: a.size,
+      placement: a.slot, status: 'active', starts_at: a.startedAt,
+      ends_at: a.expiresAt, display_name: a.name, tagline: a.tagline,
+      link_url: a.websiteUrl, logo_path: null, image_url: a.imageUrl,
+    }));
+
+  const ctx: PlacementContext = {
+    globalPublicMode: sponsorsEnabled,
+    placementMode: mode === 'disabled' ? 'hidden' : mode === 'manual' ? 'paid_ad' : mode === 'fallback_only' ? 'infographic' : 'auto',
+    campaigns,
+    globalInfographicFallback,
+    enabledInfographicTypes,
+  };
+  const resolved = resolvePublicPlacement(ctx, placementId);
+
+  if (resolved.type === 'sponsor') {
+    return { label: 'VISIBLE', detail: resolved.displayName, color: '#38a169' };
+  }
+  if (resolved.type === 'infographic') {
+    return { label: 'FALLBACK', detail: INFOGRAPHIC_LABELS[resolved.infographicType] ?? resolved.infographicType, color: '#4299e1' };
+  }
+  if (resolved.type === 'placeholder') {
+    return { label: 'PLACEHOLDER', detail: 'Uploaded image', color: '#9f7aea' };
+  }
+
+  if (!sponsorsEnabled) return { label: 'NOT VISIBLE', detail: 'Public sponsorship is OFF', color: '#c53030' };
+  if (mode === 'disabled') return { label: 'DISABLED', detail: 'Placement mode is Disabled', color: '#636366' };
+  const hasCampaign = ads.some(a => a.slot === placementId && a.enabled && getStatus(a) === 'active');
+  if (!hasCampaign) return { label: 'EMPTY', detail: 'No active campaign assigned', color: '#d69e2e' };
+  return { label: 'NOT VISIBLE', detail: 'No eligible content', color: '#c53030' };
+}
+
 // ---------------------------------------------------------------------------
-// Slot Card Component
+// Shared state hook — single source of truth for admin ads
 // ---------------------------------------------------------------------------
 
-function SlotCard({ placementId, ads }: { placementId: PlacementId; ads: SponsorAd[] }) {
-  const placementDef = PLACEMENT_REGISTRY.find(p => p.id === placementId)!;
+function useAdminAds() {
+  const [ads, setAds] = useState<SponsorAd[]>(() => {
+    const stored = getStoredAdminAds();
+    return stored ?? [...MOCK_SPONSOR_ADS];
+  });
+
+  const updateAds = useCallback((updated: SponsorAd[]) => {
+    setAds(updated);
+    syncToFrontend(updated);
+  }, []);
+
+  return { ads, updateAds };
+}
+
+// ---------------------------------------------------------------------------
+// Placement Drawer — opens when clicking a placement in the map
+// ---------------------------------------------------------------------------
+
+function PlacementDrawer({
+  placementId,
+  ads,
+  onUpdateAds,
+  onClose,
+}: {
+  placementId: PlacementId;
+  ads: SponsorAd[];
+  onUpdateAds: (ads: SponsorAd[]) => void;
+  onClose: () => void;
+}) {
+  const def = PLACEMENT_REGISTRY.find(p => p.id === placementId)!;
   const slotAssignments = useAppStore(s => s.slotAssignments);
+  const sponsorsEnabled = useAppStore(s => s.sponsorsEnabled);
+  const globalInfographicFallback = useAppStore(s => s.globalInfographicFallback);
+  const enabledInfographicTypes = useAppStore(s => s.enabledInfographicTypes);
   const setSlotMode = useAppStore(s => s.setSlotMode);
   const assignment = slotAssignments[placementId];
-  const mode = assignment?.mode ?? 'auto';
-  const campaign = ads.find(a => a.slot === placementId && a.enabled);
-  const status = campaign ? getStatus(campaign) : null;
+  const mode = normalizeLegacyMode(assignment?.mode ?? 'auto');
+
+  const campaign = ads.find(a => a.slot === placementId && a.enabled && getStatus(a) === 'active');
+  const allForSlot = ads.filter(a => a.slot === placementId);
+  const result = getPublicResult(placementId, ads, sponsorsEnabled, mode, globalInfographicFallback, enabledInfographicTypes);
+
+  const [assigning, setAssigning] = useState(false);
+  const [assignCampaignId, setAssignCampaignId] = useState('');
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const assets = useMemo(() => getAssetsByType('placeholder'), []);
+
+  const unassignedCampaigns = ads.filter(a => {
+    if (a.slot === placementId) return false;
+    const otherSlotCampaign = ads.find(o => o.slot === a.slot && o.id !== a.id && o.enabled);
+    return true;
+  });
+
+  const handleAssignExisting = (campaignId: string) => {
+    const updated = ads.map(a => a.id === campaignId ? { ...a, slot: placementId } : a);
+    onUpdateAds(updated);
+    setAssigning(false);
+  };
+
+  const handleClearAssignment = () => {
+    const updated = ads.map(a => a.slot === placementId ? { ...a, enabled: false } : a);
+    onUpdateAds(updated);
+  };
+
+  const handleAssignImage = (imageData: string) => {
+    if (campaign) {
+      const updated = ads.map(a => a.id === campaign.id ? { ...a, imageUrl: imageData } : a);
+      onUpdateAds(updated);
+    }
+    setShowImagePicker(false);
+  };
+
+  const handleRemoveImage = () => {
+    if (campaign) {
+      const updated = ads.map(a => a.id === campaign.id ? { ...a, imageUrl: undefined } : a);
+      onUpdateAds(updated);
+    }
+  };
 
   return (
-    <div className="admin-card" style={{ padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+    <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 480, background: 'var(--bg-surface)', borderLeft: '1px solid var(--border)', zIndex: 1000, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 24px rgba(0,0,0,0.3)' }}>
+      {/* Header */}
+      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{placementDef.publicLabel}</div>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{placementDef.referenceWidth}×{placementDef.referenceHeight}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{def.publicLabel}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+            {placementId} · {def.referenceWidth}×{def.referenceHeight}
+          </div>
+        </div>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--text-muted)', cursor: 'pointer', padding: '0 4px' }}>×</button>
+      </div>
+
+      {/* Scrollable body */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+        {/* Current result */}
+        <div style={{ padding: '10px 14px', background: `${result.color}12`, border: `1px solid ${result.color}40`, borderRadius: 8, marginBottom: 16 }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: result.color, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
+            Current public result
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: result.color }}>{result.label}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{result.detail}</div>
+        </div>
+
+        {/* Placement details */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Placement Details</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 11 }}>
+            <div style={{ padding: '8px 10px', background: 'var(--bg-base)', borderRadius: 4, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ color: 'var(--text-muted)', fontSize: 9, marginBottom: 2 }}>SIZE</div>
+              <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{def.referenceWidth}×{def.referenceHeight}</div>
+            </div>
+            <div style={{ padding: '8px 10px', background: 'var(--bg-base)', borderRadius: 4, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ color: 'var(--text-muted)', fontSize: 9, marginBottom: 2 }}>ASPECT RATIO</div>
+              <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{def.aspectRatio}</div>
+            </div>
+            <div style={{ padding: '8px 10px', background: 'var(--bg-base)', borderRadius: 4, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ color: 'var(--text-muted)', fontSize: 9, marginBottom: 2 }}>FIT MODE</div>
+              <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{def.defaultFitMode}</div>
+            </div>
+            <div style={{ padding: '8px 10px', background: 'var(--bg-base)', borderRadius: 4, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ color: 'var(--text-muted)', fontSize: 9, marginBottom: 2 }}>GROUP</div>
+              <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{def.placementGroup ?? 'None'}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Placement mode */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Placement Mode</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {MODE_OPTIONS.map(m => (
+              <label key={m} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: mode === m ? '#c9a84c12' : 'var(--bg-base)', border: `1px solid ${mode === m ? '#c9a84c40' : 'var(--border-subtle)'}`, borderRadius: 6, cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name={`mode-${placementId}`}
+                  checked={mode === m}
+                  onChange={() => {
+                    const storeMode = m === 'disabled' ? 'hidden' : m === 'manual' ? 'paid_ad' : m === 'fallback_only' ? 'infographic' : 'auto';
+                    setSlotMode(placementId, storeMode);
+                  }}
+                  style={{ marginTop: 2 }}
+                />
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: mode === m ? '#c9a84c' : 'var(--text-primary)' }}>{MODE_LABELS[m]}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{MODE_DESCRIPTIONS[m]}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Assigned campaign */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Assigned Campaign</div>
+          {campaign ? (
+            <div style={{ padding: '12px 14px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{campaign.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{campaign.tagline}</div>
+                </div>
+                <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 3, background: STATUS_STYLES.active.bg, color: STATUS_STYLES.active.color, textTransform: 'uppercase' }}>
+                  {getStatus(campaign)}
+                </span>
+              </div>
+
+              {/* Creative thumbnail */}
+              {campaign.imageUrl ? (
+                <div style={{ marginBottom: 8, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border-subtle)', position: 'relative' }}>
+                  <img src={campaign.imageUrl} alt={campaign.name} style={{ width: '100%', height: 120, objectFit: 'contain', display: 'block', background: '#0a0f1a' }} />
+                  <div style={{ position: 'absolute', top: 4, right: 4, display: 'flex', gap: 4 }}>
+                    <button onClick={handleRemoveImage} style={{ fontSize: 9, padding: '3px 8px', background: '#c5303088', border: 'none', borderRadius: 3, color: '#fff', cursor: 'pointer' }}>Remove</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: 16, textAlign: 'center', border: '1px dashed var(--border-subtle)', borderRadius: 6, marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>No creative image assigned</div>
+                  <button onClick={() => setShowImagePicker(true)} style={{ fontSize: 11, padding: '4px 12px', background: '#4299e118', border: '1px solid #4299e140', borderRadius: 4, color: '#4299e1', cursor: 'pointer', fontWeight: 600 }}>
+                    Select creative
+                  </button>
+                </div>
+              )}
+
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{timeRemaining(campaign.expiresAt)}</div>
+
+              <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                <button onClick={() => setShowImagePicker(true)} style={{ fontSize: 10, padding: '4px 10px', background: '#4299e118', border: '1px solid #4299e140', borderRadius: 4, color: '#4299e1', cursor: 'pointer', fontWeight: 600 }}>
+                  {campaign.imageUrl ? 'Change creative' : 'Add creative'}
+                </button>
+                <button onClick={() => setAssigning(true)} style={{ fontSize: 10, padding: '4px 10px', background: '#d69e2e18', border: '1px solid #d69e2e40', borderRadius: 4, color: '#d69e2e', cursor: 'pointer', fontWeight: 600 }}>
+                  Change campaign
+                </button>
+                <button onClick={handleClearAssignment} style={{ fontSize: 10, padding: '4px 10px', background: '#c5303018', border: '1px solid #c5303040', borderRadius: 4, color: '#c53030', cursor: 'pointer', fontWeight: 600 }}>
+                  Clear
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: 20, textAlign: 'center', border: '1px dashed var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>EMPTY</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>No campaign assigned to this placement</div>
+              <button onClick={() => setAssigning(true)} style={{ fontSize: 12, padding: '6px 16px', background: '#38a16918', border: '1px solid #38a16940', borderRadius: 6, color: '#38a169', cursor: 'pointer', fontWeight: 600 }}>
+                Assign campaign
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Campaign assignment picker */}
+        {assigning && (
+          <div style={{ marginBottom: 16, padding: '12px 14px', background: '#c9a84c08', border: '1px solid #c9a84c30', borderRadius: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#c9a84c', marginBottom: 8 }}>Select a campaign to assign</div>
+            {ads.length === 0 ? (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No campaigns available. Create one first.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {ads.map(a => {
+                  const status = getStatus(a);
+                  const isCurrent = a.slot === placementId && a.enabled;
+                  return (
+                    <button
+                      key={a.id}
+                      onClick={() => handleAssignExisting(a.id)}
+                      disabled={isCurrent}
+                      style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '8px 10px', background: isCurrent ? '#38a16912' : 'var(--bg-base)',
+                        border: `1px solid ${isCurrent ? '#38a16940' : 'var(--border-subtle)'}`,
+                        borderRadius: 6, cursor: isCurrent ? 'default' : 'pointer', textAlign: 'left',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{a.name}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                          {PLACEMENT_LABELS[a.slot]} · {status}
+                          {isCurrent && ' (current)'}
+                        </div>
+                      </div>
+                      {a.imageUrl && (
+                        <img src={a.imageUrl} alt="" style={{ width: 40, height: 28, objectFit: 'contain', borderRadius: 3, background: '#0a0f1a' }} />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <button onClick={() => setAssigning(false)} style={{ fontSize: 10, padding: '4px 10px', marginTop: 8, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-muted)', cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {/* Image picker from Creative Library */}
+        {showImagePicker && (
+          <div style={{ marginBottom: 16, padding: '12px 14px', background: '#4299e108', border: '1px solid #4299e130', borderRadius: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#4299e1', marginBottom: 8 }}>Select creative from library</div>
+            {assets.length === 0 ? (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No images in creative library. Upload one first.</div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                {assets.map(asset => {
+                  const thumb = getImageData(asset.id);
+                  return (
+                    <button
+                      key={asset.id}
+                      onClick={() => thumb && handleAssignImage(thumb)}
+                      style={{ padding: 0, background: '#0a0f1a', border: '1px solid var(--border-subtle)', borderRadius: 4, cursor: 'pointer', overflow: 'hidden' }}
+                    >
+                      {thumb && <img src={thumb} alt={asset.alt} style={{ width: '100%', height: 60, objectFit: 'cover', display: 'block' }} />}
+                      <div style={{ padding: '3px 6px', fontSize: 9, color: 'var(--text-secondary)', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{asset.label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <button onClick={() => setShowImagePicker(false)} style={{ fontSize: 10, padding: '4px 10px', marginTop: 8, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-muted)', cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {/* All campaigns for this slot */}
+        {allForSlot.length > 0 && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Campaign History</div>
+            {allForSlot.map(a => {
+              const s = getStatus(a);
+              return (
+                <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'var(--bg-base)', borderRadius: 4, border: '1px solid var(--border-subtle)', marginBottom: 4, fontSize: 11 }}>
+                  <span style={{ color: 'var(--text-primary)' }}>{a.name}</span>
+                  <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 3, background: STATUS_STYLES[s]?.bg, color: STATUS_STYLES[s]?.color, textTransform: 'uppercase' }}>{s}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Overlay backdrop for the drawer
+function DrawerBackdrop({ onClick }: { onClick: () => void }) {
+  return <div onClick={onClick} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.4)', zIndex: 999 }} />;
+}
+
+// ---------------------------------------------------------------------------
+// Placement Map — clickable wireframe
+// ---------------------------------------------------------------------------
+
+function PlacementMap({ ads, onSelectPlacement }: { ads: SponsorAd[]; onSelectPlacement: (id: PlacementId) => void }) {
+  const slotAssignments = useAppStore(s => s.slotAssignments);
+  const sponsorsEnabled = useAppStore(s => s.sponsorsEnabled);
+  const globalInfographicFallback = useAppStore(s => s.globalInfographicFallback);
+  const enabledInfographicTypes = useAppStore(s => s.enabledInfographicTypes);
+
+  function slotStatus(id: PlacementId): 'active' | 'empty' | 'hidden' | 'fallback' {
+    const assignment = slotAssignments[id];
+    const mode = normalizeLegacyMode(assignment?.mode ?? 'auto');
+    if (mode === 'disabled') return 'hidden';
+    if (!sponsorsEnabled && mode !== 'fallback_only') return 'hidden';
+    const campaign = ads.find(a => a.slot === id && a.enabled);
+    if (campaign && getStatus(campaign) === 'active') return 'active';
+    if (globalInfographicFallback || mode === 'fallback_only') return 'fallback';
+    return 'empty';
+  }
+
+  const statusColor = (s: string) => {
+    if (s === 'active') return '#38a169';
+    if (s === 'hidden') return '#636366';
+    if (s === 'fallback') return '#4299e1';
+    return '#d69e2e';
+  };
+
+  const slotBox = (id: PlacementId, label: string) => {
+    const s = slotStatus(id);
+    const color = statusColor(s);
+    const campaign = ads.find(a => a.slot === id && a.enabled && getStatus(a) === 'active');
+
+    return (
+      <button
+        onClick={() => onSelectPlacement(id)}
+        style={{
+          padding: '6px 10px', border: `2px solid ${color}`, borderRadius: 4,
+          background: `${color}18`, fontSize: 9, fontWeight: 700, color,
+          textAlign: 'center', whiteSpace: 'nowrap', cursor: 'pointer',
+          transition: 'all 0.15s', minWidth: 0,
+        }}
+        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderWidth = '3px'; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderWidth = '2px'; }}
+        title={`Click to manage ${PLACEMENT_LABELS[id]}`}
+      >
+        {campaign ? (
+          <>
+            {campaign.imageUrl ? (
+              <img src={campaign.imageUrl} alt="" style={{ width: '100%', maxHeight: 40, objectFit: 'contain', borderRadius: 2, marginBottom: 3 }} />
+            ) : null}
+            <div>{campaign.name}</div>
+          </>
+        ) : (
+          label
+        )}
+        <div style={{ fontSize: 7, fontWeight: 400, opacity: 0.8, marginTop: 2, textTransform: 'uppercase' }}>{s}</div>
+      </button>
+    );
+  };
+
+  return (
+    <div className="admin-card" style={{ marginBottom: 24, padding: 20 }}>
+      <h2 style={{ margin: '0 0 12px', fontSize: 14 }}>Placement Map</h2>
+      <p style={{ margin: '0 0 12px', fontSize: 10, color: 'var(--text-muted)' }}>Click any placement to manage it</p>
+      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr 140px', gridTemplateRows: '1fr 60px', gap: 8, height: 220, background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)', padding: 12 }}>
+        {/* Left rail */}
+        <div style={{ gridRow: '1 / 3', display: 'flex', flexDirection: 'column', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>GLANCE / LEFT RAIL</div>
+          {slotBox('GLANCE_RAIL_FEATURED', 'Featured')}
+          <div style={{ flex: 1 }} />
+          {slotBox('LEFT_RAIL_COMPACT', 'Compact')}
+        </div>
+        {/* Map area */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', borderRadius: 4, color: 'var(--text-muted)', fontSize: 11 }}>
+          MAP AREA
+        </div>
+        {/* Right rail */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>RIGHT DASHBOARD</div>
+          <div style={{ flex: 1 }} />
+          {slotBox('RIGHT_DASHBOARD_RECTANGLE', 'Sponsor')}
+        </div>
+        {/* Bottom bar */}
+        <div style={{ gridColumn: '2 / 4', display: 'flex', alignItems: 'center', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
+          {slotBox('BOTTOM_INTELLIGENCE_LEADERBOARD', 'Leaderboard')}
+          <div style={{ flex: 1, height: 16, background: 'var(--border-subtle)', borderRadius: 3 }} />
+          <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>News Feed</div>
+          <div style={{ flex: 1, height: 16, background: 'var(--border-subtle)', borderRadius: 3 }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Slot Card with current result
+// ---------------------------------------------------------------------------
+
+function SlotCard({ placementId, ads, onSelect }: { placementId: PlacementId; ads: SponsorAd[]; onSelect: () => void }) {
+  const def = PLACEMENT_REGISTRY.find(p => p.id === placementId)!;
+  const slotAssignments = useAppStore(s => s.slotAssignments);
+  const setSlotMode = useAppStore(s => s.setSlotMode);
+  const sponsorsEnabled = useAppStore(s => s.sponsorsEnabled);
+  const globalInfographicFallback = useAppStore(s => s.globalInfographicFallback);
+  const enabledInfographicTypes = useAppStore(s => s.enabledInfographicTypes);
+  const assignment = slotAssignments[placementId];
+  const rawMode = assignment?.mode ?? 'auto';
+  const mode = normalizeLegacyMode(rawMode);
+  const campaign = ads.find(a => a.slot === placementId && a.enabled);
+  const status = campaign ? getStatus(campaign) : null;
+  const result = getPublicResult(placementId, ads, sponsorsEnabled, mode, globalInfographicFallback, enabledInfographicTypes);
+
+  return (
+    <div className="admin-card" style={{ padding: 14, cursor: 'pointer', transition: 'border-color 0.15s' }} onClick={onSelect}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{def.publicLabel}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{def.referenceWidth}×{def.referenceHeight}</div>
         </div>
         {status && (
           <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 3, background: STATUS_STYLES[status]?.bg, color: STATUS_STYLES[status]?.color, textTransform: 'uppercase' }}>
@@ -122,34 +602,46 @@ function SlotCard({ placementId, ads }: { placementId: PlacementId; ads: Sponsor
       </div>
 
       {campaign && (
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8, padding: '6px 8px', background: 'var(--bg-base)', borderRadius: 4, border: '1px solid var(--border-subtle)' }}>
-          <strong>{campaign.name}</strong> — {campaign.tagline}
-          {status === 'active' && <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 3 }}>{timeRemaining(campaign.expiresAt)}</div>}
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6, padding: '4px 8px', background: 'var(--bg-base)', borderRadius: 4, border: '1px solid var(--border-subtle)' }}>
+          <strong>{campaign.name}</strong>
+          {campaign.imageUrl && <span style={{ fontSize: 9, color: '#38a169', marginLeft: 6 }}>has creative</span>}
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <label style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Mode:</label>
         <select
           value={mode}
-          onChange={e => setSlotMode(placementId, e.target.value)}
-          style={{ fontSize: 11, padding: '3px 8px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)', cursor: 'pointer' }}
+          onChange={e => {
+            const m = e.target.value;
+            const storeMode = m === 'disabled' ? 'hidden' : m === 'manual' ? 'paid_ad' : m === 'fallback_only' ? 'infographic' : 'auto';
+            setSlotMode(placementId, storeMode);
+          }}
+          onClick={e => e.stopPropagation()}
+          style={{ fontSize: 11, padding: '2px 6px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)', cursor: 'pointer' }}
         >
           {MODE_OPTIONS.map(m => <option key={m} value={m}>{MODE_LABELS[m]}</option>)}
         </select>
+      </div>
+
+      {/* Current result */}
+      <div style={{ fontSize: 10, padding: '4px 8px', background: `${result.color}08`, borderRadius: 4, border: `1px solid ${result.color}25` }}>
+        <span style={{ fontWeight: 700, color: result.color }}>{result.label}</span>
+        <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>{result.detail}</span>
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Asset Library Component
+// Asset Library — upload + assign to campaigns
 // ---------------------------------------------------------------------------
 
-function AssetLibrary() {
+function AssetLibrary({ ads, onUpdateAds }: { ads: SponsorAd[]; onUpdateAds: (ads: SponsorAd[]) => void }) {
   const [assets, setAssets] = useState(() => { migrateFromLegacy(); return getAssetsByType('placeholder'); });
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [assigningAsset, setAssigningAsset] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => setAssets(getAssetsByType('placeholder')), []);
@@ -175,13 +667,27 @@ function AssetLibrary() {
     refresh();
   };
 
+  const handleAssignToCampaign = (assetId: string, campaignId: string) => {
+    const imageData = getImageData(assetId);
+    if (!imageData) return;
+    const updated = ads.map(a => a.id === campaignId ? { ...a, imageUrl: imageData } : a);
+    onUpdateAds(updated);
+    setAssigningAsset(null);
+  };
+
+  const getAssignedCampaign = (assetId: string): SponsorAd | undefined => {
+    const imageData = getImageData(assetId);
+    if (!imageData) return undefined;
+    return ads.find(a => a.imageUrl === imageData);
+  };
+
   return (
     <div className="admin-card" style={{ marginBottom: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>Creative Library</h2>
           <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-            Uploaded images shown in slots when no paid campaign is active.
+            Upload images, assign to campaigns, and manage creatives.
           </p>
         </div>
         <div>
@@ -203,17 +709,45 @@ function AssetLibrary() {
           No placeholder images. Upload one to get started.
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
           {assets.map(asset => {
             const thumb = getImageData(asset.id);
+            const assigned = getAssignedCampaign(asset.id);
+            const isAssigning = assigningAsset === asset.id;
+
             return (
               <div key={asset.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 6, overflow: 'hidden', background: 'var(--bg-elevated)' }}>
-                <div style={{ height: 40, background: '#0a0f1a', overflow: 'hidden' }}>
+                <div style={{ height: 60, background: '#0a0f1a', overflow: 'hidden', position: 'relative' }}>
                   {thumb && <img src={thumb} alt={asset.alt} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
                 </div>
-                <div style={{ padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 11, color: 'var(--text-primary)', fontWeight: 600 }}>{asset.label}</span>
-                  <button onClick={() => handleRemove(asset.id)} style={{ fontSize: 9, padding: '2px 6px', background: 'none', border: '1px solid #c5303040', borderRadius: 3, cursor: 'pointer', color: '#c53030' }}>✕</button>
+                <div style={{ padding: '6px 8px' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-primary)', fontWeight: 600, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{asset.label}</div>
+                  {assigned ? (
+                    <div style={{ fontSize: 9, color: '#38a169', marginBottom: 4 }}>
+                      Assigned: <strong>{assigned.name}</strong>
+                      <div style={{ color: 'var(--text-muted)' }}>{PLACEMENT_LABELS[assigned.slot]}</div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 9, color: 'var(--text-muted)', marginBottom: 4 }}>Not assigned</div>
+                  )}
+
+                  {isAssigning ? (
+                    <div style={{ marginTop: 4 }}>
+                      <div style={{ fontSize: 9, fontWeight: 600, color: '#4299e1', marginBottom: 3 }}>Assign to campaign:</div>
+                      {ads.map(a => (
+                        <button key={a.id} onClick={() => handleAssignToCampaign(asset.id, a.id)} style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: 9, padding: '3px 6px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 3, marginBottom: 2, cursor: 'pointer', color: 'var(--text-primary)' }}>
+                          {a.name}
+                          <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>{PLACEMENT_LABELS[a.slot]?.split('—')[0]}</span>
+                        </button>
+                      ))}
+                      <button onClick={() => setAssigningAsset(null)} style={{ fontSize: 9, padding: '2px 6px', marginTop: 2, background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 3, cursor: 'pointer', color: 'var(--text-muted)' }}>Cancel</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button onClick={() => setAssigningAsset(asset.id)} style={{ fontSize: 9, padding: '2px 6px', background: '#4299e110', border: '1px solid #4299e130', borderRadius: 3, cursor: 'pointer', color: '#4299e1', fontWeight: 600, flex: 1 }}>Assign</button>
+                      <button onClick={() => handleRemove(asset.id)} style={{ fontSize: 9, padding: '2px 6px', background: 'none', border: '1px solid #c5303040', borderRadius: 3, cursor: 'pointer', color: '#c53030' }}>✕</button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -274,15 +808,14 @@ function InfographicControls() {
 }
 
 // ---------------------------------------------------------------------------
-// Campaigns Table
+// Campaigns Table — enhanced with creative, assignment, public result
 // ---------------------------------------------------------------------------
 
-function CampaignsTable() {
-  const [ads, setAds] = useState<SponsorAd[]>(() => {
-    const stored = getStoredAdminAds();
-    if (stored) return stored;
-    return [...MOCK_SPONSOR_ADS];
-  });
+function CampaignsTable({ ads, onUpdateAds }: { ads: SponsorAd[]; onUpdateAds: (ads: SponsorAd[]) => void }) {
+  const sponsorsEnabled = useAppStore(s => s.sponsorsEnabled);
+  const slotAssignments = useAppStore(s => s.slotAssignments);
+  const globalInfographicFallback = useAppStore(s => s.globalInfographicFallback);
+  const enabledInfographicTypes = useAppStore(s => s.enabledInfographicTypes);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [newTagline, setNewTagline] = useState('');
@@ -290,14 +823,9 @@ function CampaignsTable() {
   const [newSize, setNewSize] = useState<string>('standard');
   const [newSlot, setNewSlot] = useState<PlacementId>('GLANCE_RAIL_FEATURED');
 
-  const updateAds = useCallback((updated: SponsorAd[]) => {
-    setAds(updated);
-    syncToFrontend(updated);
-  }, []);
-
   const toggleAd = (id: string) => {
     const updated = ads.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a);
-    updateAds(updated);
+    onUpdateAds(updated);
   };
 
   const setDuration = (id: string, duration: AdDuration) => {
@@ -307,14 +835,13 @@ function CampaignsTable() {
       if (a.id !== id) return a;
       return { ...a, duration, startedAt: now, expiresAt: new Date(Date.now() + (ms[duration] ?? 604800000)).toISOString(), paidZAR: calcPrice(duration, a.size) };
     });
-    updateAds(updated);
+    onUpdateAds(updated);
   };
 
   const handleAdd = async () => {
     if (!newName.trim()) return;
     const ad = await createMockCampaign(newName, newTagline, newSize, newSlot, newUrl);
-    const updated = [...ads, ad];
-    updateAds(updated);
+    onUpdateAds([...ads, ad]);
     setShowAddForm(false);
     setNewName('');
     setNewTagline('');
@@ -322,13 +849,23 @@ function CampaignsTable() {
   };
 
   const removeAd = (id: string) => {
-    updateAds(ads.filter(a => a.id !== id));
+    onUpdateAds(ads.filter(a => a.id !== id));
   };
 
   const totalImpressions = ads.reduce((s, a) => s + a.impressions, 0);
   const totalClicks = ads.reduce((s, a) => s + a.clicks, 0);
   const totalRevenue = ads.reduce((s, a) => s + a.paidZAR, 0);
   const activeCount = ads.filter(a => getStatus(a) === 'active').length;
+
+  function getCampaignPublicResult(ad: SponsorAd): { label: string; color: string } {
+    const status = getStatus(ad);
+    if (status !== 'active') return { label: `NOT VISIBLE — Campaign ${status}`, color: '#636366' };
+    if (!sponsorsEnabled) return { label: 'NOT VISIBLE — Public sponsorship OFF', color: '#c53030' };
+    const assignment = slotAssignments[ad.slot];
+    const mode = normalizeLegacyMode(assignment?.mode ?? 'auto');
+    if (mode === 'disabled') return { label: 'NOT VISIBLE — Placement disabled', color: '#636366' };
+    return { label: 'VISIBLE', color: '#38a169' };
+  }
 
   return (
     <div className="admin-card" style={{ marginBottom: 24 }}>
@@ -368,10 +905,11 @@ function CampaignsTable() {
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Sponsor</th>
+              <th style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10, width: 50 }}>Creative</th>
               <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Placement</th>
               <th style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Status</th>
+              <th style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Public</th>
               <th style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Duration</th>
-              <th style={{ textAlign: 'right', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Price</th>
               <th style={{ textAlign: 'right', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Stats</th>
               <th style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Actions</th>
             </tr>
@@ -380,13 +918,21 @@ function CampaignsTable() {
             {ads.map(ad => {
               const status = getStatus(ad);
               const style = STATUS_STYLES[status]!;
+              const publicResult = getCampaignPublicResult(ad);
               return (
                 <tr key={ad.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   <td style={{ padding: '8px 6px' }}>
                     <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{ad.name}</div>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{ad.tagline}</div>
                   </td>
-                  <td style={{ padding: '8px 6px', color: 'var(--text-secondary)' }}>
+                  <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                    {ad.imageUrl ? (
+                      <img src={ad.imageUrl} alt="" style={{ width: 40, height: 28, objectFit: 'contain', borderRadius: 3, background: '#0a0f1a', border: '1px solid var(--border-subtle)' }} />
+                    ) : (
+                      <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>None</span>
+                    )}
+                  </td>
+                  <td style={{ padding: '8px 6px', color: 'var(--text-secondary)', fontSize: 10 }}>
                     {PLACEMENT_LABELS[ad.slot]}
                   </td>
                   <td style={{ padding: '8px 6px', textAlign: 'center' }}>
@@ -396,12 +942,12 @@ function CampaignsTable() {
                     {status === 'active' && <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2 }}>{timeRemaining(ad.expiresAt)}</div>}
                   </td>
                   <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                    <span style={{ fontSize: 9, fontWeight: 600, color: publicResult.color }}>{publicResult.label}</span>
+                  </td>
+                  <td style={{ padding: '8px 6px', textAlign: 'center' }}>
                     <select value={ad.duration} onChange={e => setDuration(ad.id, e.target.value as AdDuration)} style={{ fontSize: 10, padding: '2px 4px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 3, color: 'var(--text-primary)' }}>
                       {Object.entries(DURATION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                     </select>
-                  </td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    R{ad.paidZAR.toLocaleString()}
                   </td>
                   <td style={{ padding: '8px 6px', textAlign: 'right' }}>
                     <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{ad.impressions.toLocaleString()} imp</div>
@@ -426,76 +972,7 @@ function CampaignsTable() {
 }
 
 // ---------------------------------------------------------------------------
-// Placement Map Wireframe — §12
-// ---------------------------------------------------------------------------
-
-function PlacementMap({ ads }: { ads: SponsorAd[] }) {
-  const slotAssignments = useAppStore(s => s.slotAssignments);
-
-  function slotStatus(id: PlacementId): 'active' | 'empty' | 'hidden' {
-    const assignment = slotAssignments[id];
-    if (assignment?.mode === 'hidden') return 'hidden';
-    const campaign = ads.find(a => a.slot === id && a.enabled);
-    if (campaign && getStatus(campaign) === 'active') return 'active';
-    return 'empty';
-  }
-
-  const statusColor = (id: PlacementId) => {
-    const s = slotStatus(id);
-    if (s === 'active') return '#38a169';
-    if (s === 'hidden') return '#636366';
-    return '#d69e2e';
-  };
-
-  const statusBg = (id: PlacementId) => {
-    const s = slotStatus(id);
-    if (s === 'active') return '#38a16918';
-    if (s === 'hidden') return '#63636618';
-    return '#d69e2e18';
-  };
-
-  const slotBox = (id: PlacementId, label: string) => (
-    <div style={{ padding: '6px 10px', border: `2px solid ${statusColor(id)}`, borderRadius: 4, background: statusBg(id), fontSize: 9, fontWeight: 700, color: statusColor(id), textAlign: 'center', whiteSpace: 'nowrap' }}>
-      {label}
-      <div style={{ fontSize: 7, fontWeight: 400, opacity: 0.8, marginTop: 2, textTransform: 'uppercase' }}>{slotStatus(id)}</div>
-    </div>
-  );
-
-  return (
-    <div className="admin-card" style={{ marginBottom: 24, padding: 20 }}>
-      <h2 style={{ margin: '0 0 12px', fontSize: 14 }}>Placement Map</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr 140px', gridTemplateRows: '1fr 60px', gap: 8, height: 220, background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)', padding: 12 }}>
-        {/* Left rail */}
-        <div style={{ gridRow: '1 / 3', display: 'flex', flexDirection: 'column', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
-          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>GLANCE / LEFT RAIL</div>
-          {slotBox('GLANCE_RAIL_FEATURED', 'Featured')}
-          <div style={{ flex: 1 }} />
-          {slotBox('LEFT_RAIL_COMPACT', 'Compact')}
-        </div>
-        {/* Map area */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', borderRadius: 4, color: 'var(--text-muted)', fontSize: 11 }}>
-          MAP AREA
-        </div>
-        {/* Right rail */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
-          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>RIGHT DASHBOARD</div>
-          <div style={{ flex: 1 }} />
-          {slotBox('RIGHT_DASHBOARD_RECTANGLE', 'Sponsor')}
-        </div>
-        {/* Bottom bar */}
-        <div style={{ gridColumn: '2 / 4', display: 'flex', alignItems: 'center', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
-          {slotBox('BOTTOM_INTELLIGENCE_LEADERBOARD', 'Leaderboard')}
-          <div style={{ flex: 1, height: 16, background: 'var(--border-subtle)', borderRadius: 3 }} />
-          <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>News Feed</div>
-          <div style={{ flex: 1, height: 16, background: 'var(--border-subtle)', borderRadius: 3 }} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Capacity Indicator — §15
+// Capacity Indicator
 // ---------------------------------------------------------------------------
 
 function CapacityIndicator({ ads }: { ads: SponsorAd[] }) {
@@ -504,20 +981,18 @@ function CapacityIndicator({ ads }: { ads: SponsorAd[] }) {
     return campaign && getStatus(campaign) === 'active';
   }).length;
   const activeCampaigns = ads.filter(a => a.enabled && getStatus(a) === 'active').length;
-  const scheduledCampaigns = ads.filter(a => a.enabled && getStatus(a) === 'scheduled').length;
-  const creativesInLibrary = getAssetsByType('placeholder').length;
+  const withCreative = ads.filter(a => a.imageUrl).length;
 
   const counters = [
     { label: 'Occupied', value: occupiedCount, max: 4, color: occupiedCount === 4 ? '#38a169' : '#4299e1' },
     { label: 'Active', value: activeCampaigns, color: '#38a169' },
-    { label: 'Scheduled', value: scheduledCampaigns, color: '#d69e2e' },
-    { label: 'Creatives', value: creativesInLibrary, color: '#9f7aea' },
+    { label: 'Creatives', value: withCreative, color: '#9f7aea' },
   ];
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 14px', background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
       {counters.map(c => (
-        <div key={c.label} style={{ textAlign: 'center', minWidth: 48 }}>
+        <div key={c.label} style={{ textAlign: 'center', minWidth: 42 }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: c.color }}>
             {c.max ? `${c.value}/${c.max}` : c.value}
           </div>
@@ -565,7 +1040,7 @@ function TestModeControls() {
 }
 
 // ---------------------------------------------------------------------------
-// Main Admin Page — §12: "SPONSOR & PLACEMENT MANAGER"
+// Main Admin Page
 // ---------------------------------------------------------------------------
 
 export function AdminSponsors() {
@@ -573,10 +1048,17 @@ export function AdminSponsors() {
   const setSponsorsEnabled = useAppStore(s => s.setSponsorsEnabled);
   const storage = useMemo(() => getStorageUsage(), []);
 
-  const ads = useMemo(() => {
-    const stored = getStoredAdminAds();
-    return stored ?? [...MOCK_SPONSOR_ADS];
-  }, []);
+  const { ads, updateAds } = useAdminAds();
+  const [drawerPlacement, setDrawerPlacement] = useState<PlacementId | null>(null);
+
+  const occupiedCount = ALL_PLACEMENT_IDS.filter(id => {
+    const campaign = ads.find(a => a.slot === id && a.enabled);
+    return campaign && getStatus(campaign) === 'active';
+  }).length;
+
+  const sponsorStatusText = sponsorsEnabled
+    ? `${occupiedCount} of 4 placements are currently visible`
+    : 'Paid campaigns will not appear publicly';
 
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px' }}>
@@ -591,34 +1073,37 @@ export function AdminSponsors() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <CapacityIndicator ads={ads} />
           <TestModeControls />
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 14px', background: sponsorsEnabled ? '#38a16915' : '#c5303015', border: `1px solid ${sponsorsEnabled ? '#38a16940' : '#c5303040'}`, borderRadius: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: sponsorsEnabled ? '#38a169' : '#c53030' }}>
-              Public sponsorship: {sponsorsEnabled ? 'ON' : 'OFF'}
-            </span>
-            <input type="checkbox" checked={sponsorsEnabled} onChange={e => setSponsorsEnabled(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
-          </label>
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 14px', background: sponsorsEnabled ? '#38a16915' : '#c5303015', border: `1px solid ${sponsorsEnabled ? '#38a16940' : '#c5303040'}`, borderRadius: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: sponsorsEnabled ? '#38a169' : '#c53030' }}>
+                Public sponsorship: {sponsorsEnabled ? 'ON' : 'OFF'}
+              </span>
+              <input type="checkbox" checked={sponsorsEnabled} onChange={e => setSponsorsEnabled(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+            </label>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3, textAlign: 'center' }}>{sponsorStatusText}</div>
+          </div>
         </div>
       </div>
 
       {/* Placement Map + Slot Cards side by side */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
-        <PlacementMap ads={ads} />
+        <PlacementMap ads={ads} onSelectPlacement={setDrawerPlacement} />
         <div>
           <h2 style={{ margin: '0 0 12px', fontSize: 14 }}>Placement Controls</h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {ALL_PLACEMENT_IDS.map(id => (
-              <SlotCard key={id} placementId={id} ads={ads} />
+              <SlotCard key={id} placementId={id} ads={ads} onSelect={() => setDrawerPlacement(id)} />
             ))}
           </div>
         </div>
       </div>
 
       {/* Campaigns */}
-      <CampaignsTable />
+      <CampaignsTable ads={ads} onUpdateAds={updateAds} />
 
       {/* Asset Library + Infographic side by side */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-        <AssetLibrary />
+        <AssetLibrary ads={ads} onUpdateAds={updateAds} />
         <InfographicControls />
       </div>
 
@@ -633,6 +1118,19 @@ export function AdminSponsors() {
           </div>
         </div>
       </div>
+
+      {/* Placement drawer */}
+      {drawerPlacement && (
+        <>
+          <DrawerBackdrop onClick={() => setDrawerPlacement(null)} />
+          <PlacementDrawer
+            placementId={drawerPlacement}
+            ads={ads}
+            onUpdateAds={updateAds}
+            onClose={() => setDrawerPlacement(null)}
+          />
+        </>
+      )}
     </div>
   );
 }
