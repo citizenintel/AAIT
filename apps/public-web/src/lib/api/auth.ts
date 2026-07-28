@@ -104,6 +104,12 @@ function demoSignIn(email: string, password: string): AppUser {
       displayName: 'Editor User',
       role: 'senior_editor',
     },
+    'mod.demo@example.com': {
+      id: 'demo-mod',
+      email: 'mod.demo@example.com',
+      displayName: 'Moderator Demo',
+      role: 'moderator',
+    },
   };
 
   const user = demos[email];

@@ -29,7 +29,7 @@
   top: 0;
   right: 0;
   width: 280px;
-  bottom: 0;
+  bottom: 180px;
   z-index: 12;
   background: var(--bg-surface);
   border-left: 1px solid var(--border);
@@ -159,16 +159,44 @@
   border-top: 1px solid var(--border);
   max-height: 180px;
   overflow: hidden;
+  padding-left: 4px;
 }
 .bottom-zone-grid.expanded { max-height: 360px; }
 
+/* Left: Infographics panel — standalone card */
+.bottom-infographics-panel {
+  background: var(--bg-elevated, #232328);
+  border: 1px solid rgba(56, 161, 105, 0.35);
+  border-top: 3px solid #38a169;
+  border-radius: 0 0 4px 4px;
+  margin: 0 4px 4px 0;
+  overflow: hidden;
+}
+
+/* Left-center: Ad panel — standalone card */
+.bottom-ad-panel {
+  background: var(--bg-elevated, #232328);
+  border: 1px solid rgba(214, 158, 46, 0.35);
+  border-top: 3px solid #d69e2e;
+  border-radius: 0 0 4px 4px;
+  margin: 0 4px 4px 0;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+.bottom-ad-panel > * {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Left: LIVE panel */
 .bottom-panel-live {
-  border-right: 1px solid var(--border);
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
+  overflow: hidden;
 }
 .bottom-live-badge {
   display: flex;
@@ -184,20 +212,20 @@
 .bottom-live-stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 4px;
 }
 .bottom-live-stat {
   display: flex;
   flex-direction: column;
 }
 .bottom-live-stat-value {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text-primary);
-  line-height: 1.2;
+  line-height: 1.1;
 }
 .bottom-live-stat-label {
-  font-size: 9px;
+  font-size: 8px;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -346,6 +374,12 @@
   align-items: stretch;
   border-left: 1px solid var(--border);
   overflow: hidden;
+  padding: 6px;
+}
+.bottom-panel-ad .sponsor-slot {
+  flex: 1;
+  margin: 0;
+  min-height: 0;
 }
 .bottom-panel-ad .sponsor-slot.banner {
   margin: 0;
@@ -391,5 +425,5 @@
   .widget-zone-bottom { left: 0; right: 0; }
   .widget-zone-top { display: none; }
   .bottom-zone-grid { grid-template-columns: 1fr; }
-  .bottom-panel-live, .bottom-panel-activity, .bottom-panel-ad { display: none; }
+  .bottom-infographics-panel, .bottom-ad-panel, .bottom-panel-activity { display: none; }
 }

@@ -1,14 +1,17 @@
+import type { SlotKey } from '../lib/content-slots';
+
 export type AdDuration = '24h' | '48h' | '7d' | '30d' | 'custom';
 
 export interface SponsorAd {
   id: string;
   name: string;
-  slot: 1 | 2 | 3 | 4 | 5 | 6;
+  slot: SlotKey;
   enabled: boolean;
-  size: 'premium' | 'banner' | 'standard' | 'compact';
+  size: 'premium' | 'standard' | 'compact';
   tagline: string;
   description?: string;
   websiteUrl: string;
+  imageUrl?: string;
   bgColor: string;
   textColor: string;
   accentColor: string;
@@ -39,45 +42,29 @@ export const DURATION_PRICES: Record<AdDuration, number> = {
 
 export const SIZE_PRICES: Record<string, number> = {
   premium: 3,
-  banner: 2,
   standard: 1,
   compact: 0.5,
 };
 
-export const SLOT_LABELS: Record<number, string> = {
-  1: 'Dashboard A',
-  2: 'Sidebar Premium',
-  3: 'Sidebar B',
-  4: 'Dashboard B',
-  5: 'Bottom Banner L',
-  6: 'Bottom Banner R',
+export const SLOT_LABELS: Record<SlotKey, string> = {
+  'layers_featured': 'Layers Panel · Featured',
+  'layers_footer': 'Layers Panel · Footer',
+  'right_dashboard_sponsor': 'Right Dashboard · Sponsor',
+  'bottom_intelligence_left': 'Bottom Bar · Left',
 };
+
+function rollingDate(daysAgo: number): string {
+  return new Date(Date.now() - daysAgo * 86400000).toISOString();
+}
+function rollingExpiry(daysFromNow: number): string {
+  return new Date(Date.now() + daysFromNow * 86400000).toISOString();
+}
 
 export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
-    id: 'sp-001',
-    name: 'SecureGuard SA',
-    slot: 1,
-    enabled: true,
-    size: 'standard',
-    tagline: '24/7 Farm & Rural Security',
-    description: 'Rapid response, perimeter monitoring and armed patrols for farms and smallholdings across South Africa.',
-    websiteUrl: 'https://secureguard-demo.co.za',
-    bgColor: '#1a2332',
-    textColor: '#e2e8f0',
-    accentColor: '#e53e3e',
-    icon: 'shield',
-    duration: '7d',
-    startedAt: '2026-07-18T08:00:00Z',
-    expiresAt: '2026-07-25T08:00:00Z',
-    impressions: 3420,
-    clicks: 87,
-    paidZAR: 499,
-  },
-  {
     id: 'sp-005',
     name: 'FarmWatch Alert',
-    slot: 2,
+    slot: 'layers_featured',
     enabled: true,
     size: 'premium',
     tagline: 'Real-time farm security alerts straight to your phone',
@@ -88,8 +75,8 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
     accentColor: '#ed8936',
     icon: 'shield',
     duration: '30d',
-    startedAt: '2026-07-01T00:00:00Z',
-    expiresAt: '2026-07-31T00:00:00Z',
+    startedAt: rollingDate(20),
+    expiresAt: rollingExpiry(10),
     impressions: 14200,
     clicks: 412,
     paidZAR: 4497,
@@ -97,7 +84,7 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
     id: 'sp-003',
     name: 'AgriShield Insurance',
-    slot: 3,
+    slot: 'layers_footer',
     enabled: true,
     size: 'standard',
     tagline: 'Protecting South African Farmers Since 1998',
@@ -107,8 +94,8 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
     accentColor: '#48bb78',
     icon: 'farm',
     duration: '7d',
-    startedAt: '2026-07-20T12:00:00Z',
-    expiresAt: '2026-07-27T12:00:00Z',
+    startedAt: rollingDate(2),
+    expiresAt: rollingExpiry(5),
     impressions: 1560,
     clicks: 41,
     paidZAR: 499,
@@ -116,58 +103,39 @@ export const MOCK_SPONSOR_ADS: SponsorAd[] = [
   {
     id: 'sp-004',
     name: 'CyberVault',
-    slot: 4,
+    slot: 'right_dashboard_sponsor',
     enabled: true,
-    size: 'compact',
+    size: 'standard',
     tagline: 'Data Security & Backup Solutions',
     websiteUrl: 'https://cybervault-demo.co.za',
     bgColor: '#1e1e2e',
     textColor: '#e2e8f0',
     accentColor: '#4299e1',
     icon: 'lock',
-    duration: '48h',
-    startedAt: '2026-07-21T06:00:00Z',
-    expiresAt: '2026-07-23T06:00:00Z',
+    duration: '7d',
+    startedAt: rollingDate(1),
+    expiresAt: rollingExpiry(6),
     impressions: 890,
     clicks: 23,
-    paidZAR: 90,
-  },
-  {
-    id: 'sp-002',
-    name: 'Praxcil',
-    slot: 5,
-    enabled: true,
-    size: 'banner',
-    tagline: 'This site was designed by Praxcil',
-    websiteUrl: 'https://praxcil.com',
-    bgColor: '#1a1a2e',
-    textColor: '#e2e8f0',
-    accentColor: '#c9a84c',
-    icon: 'web',
-    duration: '30d',
-    startedAt: '2026-07-01T00:00:00Z',
-    expiresAt: '2026-07-31T00:00:00Z',
-    impressions: 12800,
-    clicks: 342,
-    paidZAR: 2998,
+    paidZAR: 499,
   },
   {
     id: 'sp-006',
-    name: 'SafeRoute SA',
-    slot: 6,
+    name: 'Veld Broadband',
+    slot: 'bottom_intelligence_left',
     enabled: true,
-    size: 'premium',
-    tagline: 'Navigate safely — live incident-aware routing for South Africa',
-    websiteUrl: 'https://saferoute-demo.co.za',
-    bgColor: '#1e2a1e',
+    size: 'standard',
+    tagline: 'Rural Connectivity — No Dead Zones',
+    websiteUrl: 'https://veldbroadband-demo.co.za',
+    bgColor: '#1a2332',
     textColor: '#e2e8f0',
-    accentColor: '#68d391',
-    icon: 'lock',
+    accentColor: '#9f7aea',
+    icon: 'web',
     duration: '30d',
-    startedAt: '2026-07-01T00:00:00Z',
-    expiresAt: '2026-07-31T00:00:00Z',
-    impressions: 5400,
-    clicks: 156,
-    paidZAR: 2998,
+    startedAt: rollingDate(5),
+    expiresAt: rollingExpiry(25),
+    impressions: 6720,
+    clicks: 198,
+    paidZAR: 1499,
   },
 ];

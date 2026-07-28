@@ -29,8 +29,8 @@ function satelliteStyle(): maplibregl.StyleSpecification {
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#0a1a2e' } },
-      { id: 'satellite-tiles', type: 'raster', source: 'esri-satellite' },
-      { id: 'label-tiles', type: 'raster', source: 'carto-labels' },
+      { id: 'satellite-tiles', type: 'raster', source: 'esri-satellite', paint: { 'raster-fade-duration': 300 } },
+      { id: 'label-tiles', type: 'raster', source: 'carto-labels', paint: { 'raster-fade-duration': 300 } },
     ],
   } satisfies maplibregl.StyleSpecification;
 }
@@ -55,7 +55,7 @@ const MAP_STYLES: Record<string, string | maplibregl.StyleSpecification> = {
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#d4c6a1' } },
-      { id: 'topo-tiles', type: 'raster', source: 'opentopomap' },
+      { id: 'topo-tiles', type: 'raster', source: 'opentopomap', paint: { 'raster-fade-duration': 300 } },
     ],
   } satisfies maplibregl.StyleSpecification,
   satellite: satelliteStyle(),
@@ -122,6 +122,7 @@ export function MapView() {
   const showRoadsRef = useRef(showRoads);
   showRoadsRef.current = showRoads;
   const [show3DHint, setShow3DHint] = useState(false);
+  const didMount = useRef(false);
 
   const filters = useAppStore((s) => s.filters);
   const setSelectedIncident = useAppStore((s) => s.setSelectedIncident);
@@ -306,27 +307,45 @@ export function MapView() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+
+    // Skip on mount — the map constructor already set the initial style
+    if (!didMount.current) {
+      didMount.current = true;
+      return;
+    }
+
     const is3D = activeStyle === '3d';
     if (!is3D) disable3D(map);
+
+    const canvas = map.getCanvas();
+    canvas.style.transition = 'opacity 250ms ease';
+    canvas.style.opacity = '0.15';
+
     map.setStyle(MAP_STYLES[activeStyle]!);
     map.triggerRepaint();
-    // NOTE: `style.load` does NOT fire reliably after setStyle() in maplibre-gl v4
-    // (the style rebuilds from scratch and skips the event), which silently drops
-    // the measure source/layers on every basemap switch. `idle` fires once the new
-    // style has applied, so re-add the custom layers there instead.
+
+    const showCanvas = () => {
+      requestAnimationFrame(() => {
+        canvas.style.opacity = '1';
+        setTimeout(() => { canvas.style.transition = ''; }, 300);
+      });
+    };
+
+    const failsafe = setTimeout(showCanvas, 3000);
+
     let tries = 0;
     const reAdd = () => {
       addMeasureLayers(map);
       addMarkers(map, filteredIncidents);
       if (measureRef.current.points.length > 0) updateMeasureGeometry(map, measureRef.current.points);
       if (is3D) enable3D(map);
-      // On CARTO vector styles the road layers may not be merged in at the first idle;
-      // applyRoads returns false in that case, so retry until they appear.
       const applied = applyRoads(map, activeStyle, showRoadsRef.current);
-      if (!applied && tries < 6) { tries += 1; map.once('idle', reAdd); }
+      if (!applied && tries < 6) { tries += 1; map.once('idle', reAdd); return; }
+      clearTimeout(failsafe);
+      showCanvas();
     };
     map.once('idle', reAdd);
-    return () => { map.off('idle', reAdd); };
+    return () => { map.off('idle', reAdd); clearTimeout(failsafe); };
   }, [activeStyle, addMeasureLayers, updateMeasureGeometry, enable3D, disable3D, applyRoads]);
 
   // Roads toggle — apply immediately if the style is ready, otherwise the style

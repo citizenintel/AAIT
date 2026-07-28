@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { RssFeedConfig } from '../../data/mock-news';
 import { fetchRssFeeds, updateRssFeed, createRssFeed, deleteRssFeed } from '@/lib/api/news-feeds';
 import { useQuery } from '@/lib/hooks/useQuery';
+import { useFeedFreshness } from '@/lib/hooks/useFeedFreshness';
 
 export function AdminFeeds() {
   const { data: feeds, loading, error, refetch } = useQuery(fetchRssFeeds, []);
@@ -46,6 +47,8 @@ export function AdminFeeds() {
   const totalArticles = feedList.reduce((s, f) => s + f.articleCount, 0);
   const categories = [...new Set(feedList.map(f => f.category))];
 
+  const { refreshFeeds, getFeedAge, activeFeedCount } = useFeedFreshness();
+
   if (loading) return <div className="admin-page"><p>Loading feeds...</p></div>;
   if (error) return <div className="admin-page"><p className="error-text">Error loading feeds: {error}</p></div>;
 
@@ -82,6 +85,21 @@ export function AdminFeeds() {
           <div className="stat-value">{categories.length}</div>
           <div className="stat-label">Categories</div>
         </div>
+      </div>
+
+      <div style={{ padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', display: 'inline-block', animation: 'pulse 2s infinite' }} />
+          <span style={{ color: 'var(--text-secondary)' }}>Auto-refresh active — feeds polled every <strong>10 minutes</strong></span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ color: 'var(--text-muted)' }}>{activeFeedCount} feeds tracked</span>
+          <button className="btn btn-small" onClick={refreshFeeds} style={{ fontSize: 11 }}>Refresh now</button>
+        </div>
+      </div>
+
+      <div style={{ padding: '8px 14px', background: '#3182ce10', borderRadius: 6, border: '1px solid #3182ce22', marginBottom: 16, fontSize: 11, color: 'var(--text-secondary)' }}>
+        <strong>Freshness rules:</strong> New updates overwrite content older than 30 min. Feeds with no updates for 4 hours are automatically removed to keep the ticker fresh.
       </div>
 
       <div className="admin-card" style={{ marginBottom: 16 }}>
@@ -142,7 +160,18 @@ export function AdminFeeds() {
                 </td>
                 <td><span className="table-badge" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>{feed.category}</span></td>
                 <td>{feed.articleCount.toLocaleString()}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{timeAgo(feed.lastFetched)}</td>
+                <td style={{ fontSize: 12 }}>
+                  {(() => {
+                    const age = getFeedAge(feed.id);
+                    const dotColor = age.isFresh ? '#22c55e' : age.isStale ? '#ef4444' : '#eab308';
+                    return (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+                        <span style={{ color: 'var(--text-muted)' }}>{timeAgo(feed.lastFetched)}</span>
+                      </span>
+                    );
+                  })()}
+                </td>
                 <td>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button className="btn btn-small" onClick={() => fetchNow(feed.id)}>Fetch now</button>
@@ -171,7 +200,9 @@ export function AdminFeeds() {
       <div className="admin-card">
         <h2>Feed ingestion rules</h2>
         <ul className="admin-rules">
-          <li>Feeds are polled every <strong>15 minutes</strong> for active sources</li>
+          <li>Feeds are polled every <strong>10 minutes</strong> for active sources</li>
+          <li>New updates overwrite content older than <strong>30 minutes</strong></li>
+          <li>Feeds with no new updates are removed after <strong>4 hours</strong></li>
           <li>Articles are auto-categorised by module based on keyword matching</li>
           <li>No article is auto-published as an incident — editorial review required</li>
           <li>Duplicate detection uses title similarity + source URL deduplication</li>

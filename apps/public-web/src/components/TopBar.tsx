@@ -47,7 +47,7 @@ export function TopBar() {
   return (
     <header className="topbar">
       <div className="topbar-brand" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
-        <div className="topbar-title">Intelligence Twin</div>
+        <div className="topbar-title">AAIT</div>
         <div className="topbar-context">Live situational awareness for South Africa</div>
       </div>
 

@@ -47,7 +47,7 @@ export const MOCK_SUBMISSIONS: Submission[] = [
   },
   {
     id: 'SUB-004', title: 'Farm attack with video evidence — Tzaneen', status: 'pending_review', module: 'ait',
-    submitted: '2026-07-21', knowledgeType: 'witness', reporter: 'Henri Test DEMO', reporterEmail: 'test.demo@example.com',
+    submitted: '2026-07-21', knowledgeType: 'witness', reporter: 'Citizen Reporter DEMO', reporterEmail: 'test.demo@example.com',
     attachments: 1, attachmentBytes: 7340032, oversized: true, retentionExpiry: '2026-07-28',
     town: 'Tzaneen', province: 'Limpopo', dateOccurred: '2026-07-21', severity: 'high', sapsNumber: '',
     narrative: 'Large video file attached showing security footage. Incident occurred on the R71 near Tzaneen.',

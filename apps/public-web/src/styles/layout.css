@@ -461,10 +461,13 @@
   border: 1px solid;
   border-left-width: 3px;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
   flex-shrink: 0;
 }
-.sponsor-slot:hover { opacity: 0.85; }
+.sponsor-slot:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
 .sponsor-slot-inner { display: flex; gap: 10px; align-items: flex-start; }
 .sponsor-slot-text { flex: 1; min-width: 0; }
 .sponsor-slot-name { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
@@ -510,9 +513,95 @@
   font-weight: 600;
   letter-spacing: 0.03em;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: background 0.2s ease, opacity 0.15s;
 }
-.sponsor-premium-cta:hover { opacity: 0.7; }
+.sponsor-premium-cta:hover { background: rgba(255,255,255,0.08); }
+
+/* Ad expand overlay */
+.ad-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.15s ease-out;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.ad-overlay-content {
+  position: relative;
+  background: var(--bg-surface, #1a202c);
+  border: 1px solid #c9a84c55;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 480px;
+  width: 90vw;
+  max-height: 80vh;
+  overflow: auto;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  animation: scaleIn 0.15s ease-out;
+}
+@keyframes scaleIn { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.ad-overlay-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: var(--text-muted, #94a3b8);
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.ad-overlay-close:hover { color: #fff; background: rgba(255,255,255,0.1); }
+
+.ad-overlay-image-wrap {
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.ad-overlay-image-wrap img {
+  width: 100%;
+  height: auto;
+  display: block;
+  max-height: 300px;
+  object-fit: cover;
+}
+
+.ad-overlay-text-wrap {
+  border: 1px solid;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.ad-overlay-cta {
+  display: inline-block;
+  padding: 8px 20px;
+  background: #c9a84c;
+  color: #000;
+  font-weight: 700;
+  font-size: 13px;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.ad-overlay-cta:hover { background: #d4b65e; }
+
+.ad-overlay-sponsor-tag {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--text-muted, #94a3b8);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 
 .layer-group {
   border-bottom: 1px solid var(--border);

@@ -25,6 +25,7 @@ export type AppRole =
   | 'news_ingestion_bot'
   | 'junior_editor'
   | 'senior_editor'
+  | 'moderator'
   | 'identity_reviewer'
   | 'evidence_reviewer'
   | 'bias_analyst'
@@ -32,4 +33,5 @@ export type AppRole =
   | 'security_admin'
   | 'sponsor_admin'
   | 'platform_admin'
+  | 'system_administrator'
   | 'superadmin';

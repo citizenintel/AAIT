@@ -4,11 +4,13 @@ import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 
 export default defineConfig({
+  base: process.env.GITHUB_ACTIONS ? '/AAIT/' : '/',
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
@@ -22,14 +24,14 @@ export default defineConfig({
         ],
       },
       manifest: {
-        name: 'Intelligence Twin',
-        short_name: 'IntelTwin',
+        name: 'AAIT Incident Tracker',
+        short_name: 'AAIT',
         theme_color: '#111113',
         background_color: '#111113',
         display: 'standalone',
         icons: [
-          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
         ],
       },
     }),
@@ -46,9 +48,6 @@ export default defineConfig({
     target: 'es2022',
   },
   optimizeDeps: {
-    esbuildOptions: {
-      target: 'es2022',
-    },
     exclude: ['@duckdb/duckdb-wasm', 'maplibre-gl'],
   },
   worker: {

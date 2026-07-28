@@ -108,7 +108,7 @@ export function BriefView() {
     if (chapters.length === 0) return;
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
     const lines = [
-      `INTELLIGENCE TWIN — BRIEFING`,
+      `AAIT INCIDENT TRACKER — BRIEFING`,
       `Audience: ${audience}`,
       `Generated: ${now}`,
       `Chapters: ${chapters.length}`,

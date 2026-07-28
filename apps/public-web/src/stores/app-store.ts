@@ -84,7 +84,31 @@ export interface TickerConfig {
   direction: 'ltr' | 'rtl';
   speedSeconds: number;
   tone: 'normal' | 'alert';
+  fontBold: boolean;
+  fontColor: 'white' | 'green' | 'yellow' | 'red';
 }
+
+export interface ModPermissions {
+  dashboard: boolean;
+  ticker: boolean;
+  incidents: boolean;
+  submissions: boolean;
+  reports: boolean;
+  feeds: boolean;
+  import: boolean;
+  exportPrint: boolean;
+}
+
+const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
+  dashboard: true,
+  ticker: true,
+  incidents: false,
+  submissions: false,
+  reports: false,
+  feeds: false,
+  import: false,
+  exportPrint: false,
+};
 
 interface AuthUser {
   id: string;
@@ -219,15 +243,34 @@ interface AppStore {
   ticker: TickerConfig;
   updateTicker: (patch: Partial<TickerConfig>) => void;
 
-  // --- Sponsors (legacy) ---
+  // --- Content slots ---
   sponsorsEnabled: boolean;
   setSponsorsEnabled: (enabled: boolean) => void;
+  globalInfographicFallback: boolean;
+  setGlobalInfographicFallback: (enabled: boolean) => void;
+  enabledInfographicTypes: string[];
+  setEnabledInfographicTypes: (types: string[]) => void;
+  slotAssignments: Record<string, { slotKey: string; assetId: string | null; campaignId: string | null; mode: string }>;
+  setSlotMode: (slotKey: string, mode: string) => void;
 
   // --- Dismissed alerts (legacy) ---
   dismissedAlertIds: Record<string, true>;
   dismissAlert: (id: string) => void;
   dismissAllAlerts: (ids: string[]) => void;
   clearDismissedAlerts: () => void;
+
+  // --- Moderator permissions ---
+  modPermissions: Record<string, ModPermissions>;
+  modEnabled: Record<string, boolean>;
+  setModPermission: (email: string, key: keyof ModPermissions, value: boolean) => void;
+  setModEnabled: (email: string, enabled: boolean) => void;
+  addModerator: (email: string) => void;
+  removeModerator: (email: string) => void;
+
+  // --- Feed freshness ---
+  feedLastRefresh: Record<string, number>;
+  markFeedRefreshed: (feedId: string) => void;
+  cleanStaleFeeds: () => string[];
 
   // --- Hydration ---
   hydrate: () => Promise<void>;
@@ -459,23 +502,89 @@ export const useAppStore = create<AppStore>()(
     ticker: {
       enabled: true,
       mode: 'rss',
-      customText: 'Intelligence Twin — live situational awareness for South Africa\nAll incidents currently shown are synthetic test data\nReport an incident from the map toolbar',
+      customText: 'AAIT Incident Tracker — live situational awareness for South Africa\nAll incidents currently shown are synthetic test data\nReport an incident from the map toolbar',
       rssFeedId: null,
       direction: 'rtl',
       speedSeconds: 45,
       tone: 'normal',
+      fontBold: false,
+      fontColor: 'white',
     },
     updateTicker: (patch) => set((s) => { Object.assign(s.ticker, patch); }),
 
-    // --- Sponsors (legacy) ---
-    sponsorsEnabled: true,
-    setSponsorsEnabled: (enabled) => set((s) => { s.sponsorsEnabled = enabled; }),
+    // --- Content slots ---
+    sponsorsEnabled: (() => { try { const v = localStorage.getItem('aait_sponsors_enabled'); return v === null ? true : v === 'true'; } catch { return true; } })(),
+    setSponsorsEnabled: (enabled) => set((s) => { s.sponsorsEnabled = enabled; try { localStorage.setItem('aait_sponsors_enabled', String(enabled)); } catch { /* private browsing */ } }),
+    globalInfographicFallback: (() => { try { const v = localStorage.getItem('aait_infographic_fallback'); return v === null ? true : v === 'true'; } catch { return true; } })(),
+    setGlobalInfographicFallback: (enabled) => set((s) => { s.globalInfographicFallback = enabled; try { localStorage.setItem('aait_infographic_fallback', String(enabled)); } catch {} }),
+    enabledInfographicTypes: (() => { try { const v = localStorage.getItem('aait_infographic_types'); return v ? JSON.parse(v) : ['severity', 'module', 'province', 'trend', 'casualties', 'stats']; } catch { return ['severity', 'module', 'province', 'trend', 'casualties', 'stats']; } })(),
+    setEnabledInfographicTypes: (types) => set((s) => { s.enabledInfographicTypes = types; try { localStorage.setItem('aait_infographic_types', JSON.stringify(types)); } catch {} }),
+    slotAssignments: (() => {
+      const defaults: Record<string, { slotKey: string; assetId: string | null; campaignId: string | null; mode: string }> = {
+        'layers_featured': { slotKey: 'layers_featured', assetId: null, campaignId: null, mode: 'auto' },
+        'layers_footer': { slotKey: 'layers_footer', assetId: null, campaignId: null, mode: 'auto' },
+        'right_dashboard_sponsor': { slotKey: 'right_dashboard_sponsor', assetId: null, campaignId: null, mode: 'auto' },
+        'bottom_intelligence_left': { slotKey: 'bottom_intelligence_left', assetId: null, campaignId: null, mode: 'auto' },
+      };
+      try { const v = localStorage.getItem('aait_slot_assignments'); if (v) return JSON.parse(v); } catch {}
+      return defaults;
+    })(),
+    setSlotMode: (slotKey, mode) => set((s) => {
+      if (s.slotAssignments[slotKey]) {
+        s.slotAssignments[slotKey]!.mode = mode;
+        try { localStorage.setItem('aait_slot_assignments', JSON.stringify(s.slotAssignments)); } catch {}
+      }
+    }),
 
     // --- Dismissed alerts (legacy) ---
     dismissedAlertIds: {},
     dismissAlert: (id) => set((s) => { s.dismissedAlertIds[id] = true; }),
     dismissAllAlerts: (ids) => set((s) => { for (const id of ids) s.dismissedAlertIds[id] = true; }),
     clearDismissedAlerts: () => set((s) => { s.dismissedAlertIds = {}; }),
+
+    // --- Moderator permissions ---
+    modPermissions: {
+      'mod.demo@example.com': { ...DEFAULT_MOD_PERMISSIONS },
+    },
+    modEnabled: {
+      'mod.demo@example.com': true,
+    },
+    setModPermission: (email, key, value) => set((s) => {
+      if (!s.modPermissions[email]) s.modPermissions[email] = { ...DEFAULT_MOD_PERMISSIONS };
+      s.modPermissions[email]![key] = value;
+    }),
+    setModEnabled: (email, enabled) => set((s) => {
+      s.modEnabled[email] = enabled;
+    }),
+    addModerator: (email) => set((s) => {
+      if (!s.modPermissions[email]) s.modPermissions[email] = { ...DEFAULT_MOD_PERMISSIONS };
+      if (s.modEnabled[email] === undefined) s.modEnabled[email] = true;
+    }),
+    removeModerator: (email) => set((s) => {
+      delete s.modPermissions[email];
+      delete s.modEnabled[email];
+    }),
+
+    // --- Feed freshness ---
+    feedLastRefresh: {},
+    markFeedRefreshed: (feedId) => set((s) => {
+      s.feedLastRefresh[feedId] = Date.now();
+    }),
+    cleanStaleFeeds: () => {
+      const now = Date.now();
+      const FOUR_HOURS = 4 * 60 * 60 * 1000;
+      const stale: string[] = [];
+      const state = get();
+      for (const [feedId, ts] of Object.entries(state.feedLastRefresh)) {
+        if (now - ts > FOUR_HOURS) stale.push(feedId);
+      }
+      if (stale.length > 0) {
+        set((s) => {
+          for (const id of stale) delete s.feedLastRefresh[id];
+        });
+      }
+      return stale;
+    },
 
     // --- Hydration ---
     hydrate: async () => {

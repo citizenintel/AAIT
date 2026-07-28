@@ -26,9 +26,13 @@ export interface CampaignRow {
   tagline: string | null;
   link_url: string | null;
   logo_path: string | null;
+  image_url?: string;
   impressions?: number;
   clicks?: number;
 }
+
+const CAMPAIGNS_STORAGE_KEY = 'aait_campaigns';
+const ADMIN_ADS_KEY = 'aait_admin_ads';
 
 export async function fetchSponsors(): Promise<SponsorRow[]> {
   if (!isSupabaseConfigured()) return mockToRows();
@@ -45,14 +49,54 @@ export async function fetchSponsors(): Promise<SponsorRow[]> {
   return data ?? [];
 }
 
+export function getStoredCampaigns(): CampaignRow[] {
+  try {
+    const raw = localStorage.getItem(CAMPAIGNS_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return [];
+}
+
+export function saveCampaigns(campaigns: CampaignRow[]): void {
+  localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify(campaigns));
+}
+
+export function getStoredAdminAds(): SponsorAd[] | null {
+  try {
+    const raw = localStorage.getItem(ADMIN_ADS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return null;
+}
+
+export function saveAdminAds(ads: SponsorAd[]): void {
+  localStorage.setItem(ADMIN_ADS_KEY, JSON.stringify(ads));
+}
+
 export async function fetchActiveCampaigns(): Promise<CampaignRow[]> {
   if (!isSupabaseConfigured()) {
-    return MOCK_SPONSOR_ADS.filter(a => a.enabled).map(a => ({
+    let ads = getStoredAdminAds();
+    if (ads) {
+      const now = Date.now();
+      let refreshed = false;
+      ads = ads.map(a => {
+        if (a.enabled && new Date(a.expiresAt).getTime() <= now) {
+          refreshed = true;
+          const durationMs: Record<string, number> = { '24h': 86400000, '48h': 172800000, '7d': 604800000, '30d': 2592000000 };
+          const ms = durationMs[a.duration] ?? 604800000;
+          return { ...a, startedAt: new Date().toISOString(), expiresAt: new Date(now + ms).toISOString() };
+        }
+        return a;
+      });
+      if (refreshed) saveAdminAds(ads);
+    }
+    const source = ads ?? MOCK_SPONSOR_ADS;
+    return source.filter(a => a.enabled).map(a => ({
       id: a.id,
       sponsor_id: a.id,
       name: a.name,
       size: a.size,
-      placement: `slot-${a.slot}`,
+      placement: a.slot,
       status: 'active',
       starts_at: a.startedAt,
       ends_at: a.expiresAt,
@@ -60,6 +104,7 @@ export async function fetchActiveCampaigns(): Promise<CampaignRow[]> {
       tagline: a.tagline,
       link_url: a.websiteUrl,
       logo_path: null,
+      image_url: a.imageUrl,
       impressions: a.impressions,
       clicks: a.clicks,
     }));
@@ -99,7 +144,7 @@ export async function updateCampaignStatus(id: string, status: string): Promise<
   if (error) throw new Error(error.message);
 }
 
-export async function createMockCampaign(name: string, tagline: string, size: string, slot: number): Promise<SponsorAd> {
+export async function createMockCampaign(name: string, tagline: string, size: string, slot: string, websiteUrl?: string, imageUrl?: string): Promise<SponsorAd> {
   const now = new Date();
   const expires = new Date(now.getTime() + 604800000);
   const ad: SponsorAd = {
@@ -109,7 +154,8 @@ export async function createMockCampaign(name: string, tagline: string, size: st
     enabled: true,
     size: size as SponsorAd['size'],
     tagline,
-    websiteUrl: '',
+    websiteUrl: websiteUrl || '',
+    imageUrl: imageUrl || undefined,
     bgColor: '#1a2332',
     textColor: '#e2e8f0',
     accentColor: '#4299e1',
@@ -147,7 +193,7 @@ function mockToRows(): SponsorRow[] {
       sponsor_id: a.id,
       name: a.name,
       size: a.size,
-      placement: `slot-${a.slot}`,
+      placement: a.slot,
       status: a.enabled ? 'active' : 'paused',
       starts_at: a.startedAt,
       ends_at: a.expiresAt,

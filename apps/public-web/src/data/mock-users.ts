@@ -37,7 +37,7 @@ export interface AppUser {
 
 // All seeded accounts are DEMO so real vs. demo is obvious later.
 export const MOCK_USERS: AppUser[] = [
-  { id: 'usr-001', name: 'Henri (JJ) DEMO', email: 'admin@altafrikaner.com', role: 'admin', permissions: [], registeredAt: '2026-06-01', isDemo: true },
+  { id: 'usr-001', name: 'Admin User DEMO', email: 'admin@altafrikaner.com', role: 'admin', permissions: [], registeredAt: '2026-06-01', isDemo: true },
   { id: 'usr-002', name: 'Senior Editor DEMO', email: 'editor@altafrikaner.com', role: 'moderator', permissions: ['approve_submissions', 'approve_incidents', 'edit_incidents', 'reply_reporters', 'print_reports'], registeredAt: '2026-06-10', isDemo: true },
   { id: 'usr-003', name: 'Regional Mod DEMO', email: 'mod.limpopo@altafrikaner.com', role: 'moderator', permissions: ['approve_submissions', 'reply_reporters'], registeredAt: '2026-07-02', isDemo: true },
   { id: 'usr-004', name: 'Thabo M. DEMO', email: 'thabo.demo@example.com', role: 'reader', permissions: [], registeredAt: '2026-07-14', isDemo: true },

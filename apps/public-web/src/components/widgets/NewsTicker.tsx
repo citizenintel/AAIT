@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { MOCK_NEWS, sourceDomain } from '../../data/mock-news';
 import { MODULE_META } from '../../data/mock-incidents';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
-import { SponsorSlot } from './SponsorSlot';
+import { ManagedContentSlot } from './ManagedContentSlot';
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -83,7 +83,12 @@ export function NewsTicker() {
 
   return (
     <div className={`bottom-zone-grid${expanded ? ' expanded' : ''}`}>
-      <LivePanel />
+      <div className="bottom-infographics-panel">
+        <LivePanel />
+      </div>
+      <div className="bottom-ad-panel">
+        <ManagedContentSlot slotKey="bottom_intelligence_left" />
+      </div>
 
       <div className="bottom-panel-news">
         <div className="widget-news-header">
@@ -116,10 +121,6 @@ export function NewsTicker() {
         <div className="widget-news-footer">
           Synthetic feed — {MOCK_NEWS.length} articles from {new Set(MOCK_NEWS.map(n => n.source)).size} sources
         </div>
-      </div>
-
-      <div className="bottom-panel-ad">
-        <SponsorSlot slot={5} />
       </div>
 
       <RecentActivity />

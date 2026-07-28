@@ -52,48 +52,10 @@ const EVENT_TYPE_COLORS: Record<EventType, string> = {
   other: '#6366f1',
 };
 
-// ---------------------------------------------------------------------------
-// Fallback dark style (inline, no network dependency)
-// ---------------------------------------------------------------------------
-
-const FALLBACK_DARK_STYLE: maplibregl.StyleSpecification = {
-  version: 8 as const,
-  sources: {
-    'osm-raster': {
-      type: 'raster',
-      tiles: [
-        'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      ],
-      tileSize: 256,
-      attribution: '&copy; OpenStreetMap contributors',
-      maxzoom: 19,
-    },
-  },
-  layers: [
-    {
-      id: 'bg',
-      type: 'background',
-      paint: { 'background-color': '#111113' },
-    },
-    {
-      id: 'osm-tiles',
-      type: 'raster',
-      source: 'osm-raster',
-      paint: {
-        'raster-saturation': -0.8,
-        'raster-brightness-max': 0.35,
-      },
-    },
-  ],
-};
 
 // ---------------------------------------------------------------------------
-// Map styles
+// Map styles — all inline (no remote style JSON fetches)
 // ---------------------------------------------------------------------------
-
-const DARK_STYLE_URL = 'https://tiles.openfreemap.org/styles/dark';
 
 function satelliteStyle(): maplibregl.StyleSpecification {
   return {
@@ -116,15 +78,49 @@ function satelliteStyle(): maplibregl.StyleSpecification {
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#0a1a2e' } },
-      { id: 'satellite-tiles', type: 'raster', source: 'esri-satellite' },
-      { id: 'label-tiles', type: 'raster', source: 'carto-labels' },
+      { id: 'satellite-tiles', type: 'raster', source: 'esri-satellite', paint: { 'raster-fade-duration': 300 } },
+      { id: 'label-tiles', type: 'raster', source: 'carto-labels', paint: { 'raster-fade-duration': 300 } },
     ],
   } satisfies maplibregl.StyleSpecification;
 }
 
-const MAP_STYLES: Record<string, string | maplibregl.StyleSpecification> = {
-  standard: DARK_STYLE_URL,
-  light: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+const DARK_STYLE: maplibregl.StyleSpecification = {
+  version: 8 as const,
+  sources: {
+    'carto-dark': {
+      type: 'raster',
+      tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
+      tileSize: 256,
+      attribution: '&copy; CARTO &copy; OpenStreetMap contributors',
+      maxzoom: 18,
+    },
+  },
+  layers: [
+    { id: 'bg', type: 'background', paint: { 'background-color': '#111113' } },
+    { id: 'dark-tiles', type: 'raster', source: 'carto-dark', paint: { 'raster-fade-duration': 300 } },
+  ],
+};
+
+const LIGHT_STYLE: maplibregl.StyleSpecification = {
+  version: 8 as const,
+  sources: {
+    'carto-light': {
+      type: 'raster',
+      tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'],
+      tileSize: 256,
+      attribution: '&copy; CARTO &copy; OpenStreetMap contributors',
+      maxzoom: 18,
+    },
+  },
+  layers: [
+    { id: 'bg', type: 'background', paint: { 'background-color': '#f2efe9' } },
+    { id: 'light-tiles', type: 'raster', source: 'carto-light', paint: { 'raster-fade-duration': 300 } },
+  ],
+};
+
+const MAP_STYLES: Record<string, maplibregl.StyleSpecification> = {
+  standard: DARK_STYLE,
+  light: LIGHT_STYLE,
   terrain: {
     version: 8 as const,
     sources: {
@@ -142,7 +138,7 @@ const MAP_STYLES: Record<string, string | maplibregl.StyleSpecification> = {
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#d4c6a1' } },
-      { id: 'topo-tiles', type: 'raster', source: 'opentopomap' },
+      { id: 'topo-tiles', type: 'raster', source: 'opentopomap', paint: { 'raster-fade-duration': 300 } },
     ],
   } satisfies maplibregl.StyleSpecification,
   satellite: satelliteStyle(),
@@ -473,7 +469,7 @@ export function IntelligenceMap({
       });
     }
     if (map.getZoom() < 7) {
-      map.flyTo({ center: [28.92, -29.55], zoom: 9, pitch: 78, bearing: 18, duration: 2400, essential: true });
+      map.flyTo({ center: [18.45, -33.96], zoom: 11, pitch: 76, bearing: -30, duration: 2800, essential: true });
     } else {
       map.easeTo({ pitch: 78, duration: 1000 });
     }
@@ -549,22 +545,13 @@ export function IntelligenceMap({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: DARK_STYLE_URL,
+      style: DARK_STYLE,
       center: [25.5, -28.0],
       zoom: 5.5,
       minZoom: 3,
       maxZoom: 18,
       maxPitch: 85,
       attributionControl: false,
-    });
-
-    // If the remote style fails, switch to the fallback inline style
-    let styleLoadFailed = false;
-    map.on('error', (e: maplibregl.ErrorEvent) => {
-      if (!styleLoadFailed && (e as any).error?.message?.includes('style')) {
-        styleLoadFailed = true;
-        map.setStyle(FALLBACK_DARK_STYLE);
-      }
     });
 
     map.on('load', () => {
@@ -682,7 +669,7 @@ export function IntelligenceMap({
           `<span>${escapeHtml(String(p.town))}, ${escapeHtml(String(p.province))}</span>` +
           `</div>` +
           casualtyHtml +
-          `<div style="margin-top:8px"><a href="/incident/${escapeHtml(String(p.id))}" style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600">View full details →</a></div>` +
+          `<div style="margin-top:8px"><a href="${import.meta.env.BASE_URL}incident/${escapeHtml(String(p.id))}" style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600">View full details →</a></div>` +
           `</div>`,
         )
         .addTo(map);
@@ -776,6 +763,11 @@ export function IntelligenceMap({
 
     const is3D = activeStyle === '3d';
     if (!is3D) disable3D(map);
+
+    const canvas = map.getCanvas();
+    canvas.style.transition = 'opacity 250ms ease';
+    canvas.style.opacity = '0.15';
+
     map.setStyle(MAP_STYLES[activeStyle]!);
 
     let tries = 0;
@@ -785,11 +777,27 @@ export function IntelligenceMap({
       if (measureRef.current.points.length > 0) updateMeasureGeometry(map, measureRef.current.points);
       if (is3D) enable3D(map);
       const applied = applyRoads(map, activeStyle, showRoadsRef.current);
-      if (!applied && tries < 6) { tries += 1; map.once('idle', reAdd); }
+      if (!applied && tries < 6) { tries += 1; map.once('idle', reAdd); return; }
       map.triggerRepaint();
+      requestAnimationFrame(() => {
+        canvas.style.opacity = '1';
+        setTimeout(() => { canvas.style.transition = ''; }, 300);
+      });
     };
     map.once('idle', reAdd);
-    return () => { map.off('idle', reAdd); };
+
+    // Failsafe: if idle never fires within 4s, force canvas visible
+    const failsafe = setTimeout(() => {
+      if (canvas.style.opacity !== '1') {
+        canvas.style.opacity = '1';
+        canvas.style.transition = '';
+        addSourceAndLayer(map);
+        addMeasureLayers(map);
+        if (is3D) enable3D(map);
+      }
+    }, 4000);
+
+    return () => { map.off('idle', reAdd); clearTimeout(failsafe); };
   }, [activeStyle, addSourceAndLayer, addMeasureLayers, updateMeasureGeometry, enable3D, disable3D, applyRoads]);
 
   // ------------------------------------------------------------------

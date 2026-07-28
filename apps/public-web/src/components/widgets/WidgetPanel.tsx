@@ -8,7 +8,7 @@ import { StatsBar } from './StatsBar';
 import { NewsTicker } from './NewsTicker';
 import { CasualtiesCard } from './CasualtiesCard';
 import { ProvinceBar } from './ProvinceBar';
-import { SponsorSlot } from './SponsorSlot';
+import { ManagedContentSlot } from './ManagedContentSlot';
 
 function WidgetRenderer({ id }: { id: WidgetId }) {
   const { incidents } = useIncidentData();
@@ -93,8 +93,7 @@ export function WidgetPanel() {
                 <div className="widget-card">
                   <WidgetRenderer id={w.id} />
                 </div>
-                {i === 1 && <SponsorSlot slot={1} />}
-                {i === 3 && <SponsorSlot slot={4} />}
+                {i === 3 && <ManagedContentSlot slotKey="right_dashboard_sponsor" />}
               </div>
             ))}
           </div>

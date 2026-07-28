@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "pnpm --filter public-web dev",
     "build": "pnpm --filter public-web build",
-    "typecheck": "tsc --build",
+    "typecheck": "pnpm --filter public-web exec tsc --noEmit && tsc --build packages/types",
     "lint": "eslint .",
     "test": "vitest run"
   },

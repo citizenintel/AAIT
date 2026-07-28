@@ -25,10 +25,13 @@ export function TickerBar() {
     items = source.map((n) => `${n.title}  ·  ${sourceDomain(n.source)}`);
   }
 
-  if (items.length === 0) items = ['Intelligence Twin'];
+  if (items.length === 0) items = ['AAIT Incident Tracker'];
 
   // Duplicate the sequence so the CSS translateX(-50%) loop is seamless.
   const loop = [...items, ...items];
+
+  const colorMap: Record<string, string> = { green: '#22c55e', yellow: '#eab308', red: '#ef4444', white: '' };
+  const textColor = colorMap[ticker.fontColor] || '';
 
   return (
     <div className={`ticker-bar dir-${ticker.direction} tone-${ticker.tone}`} aria-label="News ticker" role="marquee">
@@ -37,7 +40,14 @@ export function TickerBar() {
         {ticker.tone === 'alert' ? 'ALERT' : ticker.mode === 'rss' ? 'LIVE' : 'NOTICE'}
       </span>
       <div className="ticker-viewport">
-        <div className="ticker-track" style={{ animationDuration: `${ticker.speedSeconds}s` }}>
+        <div
+          className="ticker-track"
+          style={{
+            animationDuration: `${ticker.speedSeconds}s`,
+            fontWeight: ticker.fontBold ? 700 : 400,
+            ...(textColor ? { color: textColor } : {}),
+          }}
+        >
           {loop.map((text, i) => (
             <span className="ticker-item" key={i} aria-hidden={i >= items.length}>
               <span className="ticker-sep" />

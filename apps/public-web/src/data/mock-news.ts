@@ -192,6 +192,12 @@ const SOURCE_DOMAINS: Record<string, string> = {
   'TAU SA': 'tausa.co.za',
   'AfriForum': 'afriforum.co.za',
   'Internet Archive': 'web.archive.org',
+  'X — Yusuf Abramjee': 'x.com/Abramjee',
+  'X — SA Crime Stats': 'x.com/sa_crime',
+  'X — CrimeWatch SA': 'x.com/crimewatch202',
+  'X — RSA Trucker': 'x.com/rsa_trucker',
+  'X — Abo Robo': 'x.com/ABOROBO',
+  'Facebook — Locals SA': 'facebook.com/LocalsSA',
 };
 
 /** The source's web address as display text (no hyperlink). */
@@ -222,4 +228,10 @@ export const MOCK_RSS_FEEDS: RssFeedConfig[] = [
   { id: 'rss-010', name: 'Internet Archive — FarmiTracker', url: 'https://web.archive.org/web/*/farmitracker.co.za/*', category: 'archive', enabled: true, lastFetched: '2026-07-20T00:00:00Z', articleCount: 48 },
   { id: 'rss-011', name: 'TAU SA', url: 'https://tausa.co.za/feed/', category: 'agricultural', enabled: true, lastFetched: '2026-07-22T09:00:00Z', articleCount: 89 },
   { id: 'rss-012', name: 'AfriForum', url: 'https://www.afriforum.co.za/feed/', category: 'civil-rights', enabled: true, lastFetched: '2026-07-22T10:30:00Z', articleCount: 245 },
+  { id: 'rss-013', name: 'X — Yusuf Abramjee (@Abramjee)', url: 'https://rsshub.example/twitter/user/Abramjee', category: 'social-crime', enabled: true, lastFetched: '2026-07-25T08:00:00Z', articleCount: 64 },
+  { id: 'rss-014', name: 'X — SA Crime Stats (@sa_crime)', url: 'https://rsshub.example/twitter/user/sa_crime', category: 'social-crime', enabled: true, lastFetched: '2026-07-25T08:00:00Z', articleCount: 38 },
+  { id: 'rss-015', name: 'X — CrimeWatch SA (@crimewatch202)', url: 'https://rsshub.example/twitter/user/crimewatch202', category: 'social-crime', enabled: true, lastFetched: '2026-07-25T07:30:00Z', articleCount: 112 },
+  { id: 'rss-016', name: 'X — RSA Trucker (@rsa_trucker)', url: 'https://rsshub.example/twitter/user/rsa_trucker', category: 'social-traffic', enabled: true, lastFetched: '2026-07-25T07:45:00Z', articleCount: 87 },
+  { id: 'rss-017', name: 'X — Abo Robo (@ABOROBO)', url: 'https://rsshub.example/twitter/user/ABOROBO', category: 'social-crime', enabled: true, lastFetched: '2026-07-25T08:10:00Z', articleCount: 29 },
+  { id: 'rss-018', name: 'Facebook — Locals SA (@LocalsSA)', url: 'https://rsshub.example/facebook/page/LocalsSA', category: 'social-community', enabled: true, lastFetched: '2026-07-25T06:00:00Z', articleCount: 53 },
 ];

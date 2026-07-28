@@ -1,17 +1,36 @@
-import { useState, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useAppStore } from '../../store/app-store';
-import { fetchSponsors, updateCampaignStatus, createMockCampaign } from '@/lib/api/sponsors';
-import { useQuery, useMutation } from '@/lib/hooks/useQuery';
+import { saveAdminAds, getStoredAdminAds, saveCampaigns, createMockCampaign, type CampaignRow } from '@/lib/api/sponsors';
 import {
   DURATION_LABELS,
   DURATION_PRICES,
   SIZE_PRICES,
   SLOT_LABELS,
+  MOCK_SPONSOR_ADS,
   type SponsorAd,
   type AdDuration,
 } from '../../data/mock-sponsors';
+import {
+  SLOT_REGISTRY,
+  ALL_SLOT_KEYS,
+  getAssets,
+  saveAssets,
+  getAssetsByType,
+  getImageData,
+  uploadAsset,
+  removeAsset,
+  toggleAsset,
+  getStorageUsage,
+  migrateFromLegacy,
+  type SlotKey,
+  type ContentAsset,
+} from '@/lib/content-slots';
+import { INFOGRAPHIC_LABELS } from '@/components/widgets/ManagedContentSlot';
 
-const SIZE_LABELS: Record<string, string> = { premium: 'Premium', banner: 'Banner', standard: 'Standard', compact: 'Compact' };
+const SIZE_LABELS: Record<string, string> = { premium: 'Premium', standard: 'Standard', compact: 'Compact' };
+const MODE_LABELS: Record<string, string> = { auto: 'Auto', paid_ad: 'Paid Ad', infographic: 'Infographic', placeholder: 'Placeholder', hidden: 'Hidden' };
+const MODE_OPTIONS = ['auto', 'paid_ad', 'infographic', 'placeholder', 'hidden'] as const;
+
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   active: { bg: '#38a16922', color: '#38a169' },
   paused: { bg: '#d69e2e22', color: '#d69e2e' },
@@ -20,8 +39,7 @@ const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
 
 function getStatus(ad: SponsorAd): 'active' | 'paused' | 'expired' {
   if (!ad.enabled) return 'paused';
-  const now = new Date();
-  if (new Date(ad.expiresAt) <= now) return 'expired';
+  if (new Date(ad.expiresAt) <= new Date()) return 'expired';
   return 'active';
 }
 
@@ -41,301 +59,368 @@ function calcPrice(duration: AdDuration, size: string): number {
   return Math.round(base * mult);
 }
 
-export function AdminSponsors() {
-  const { data: sponsors, loading, error, refetch } = useQuery(fetchSponsors);
-  const statusMutation = useMutation(updateCampaignStatus);
+function syncToFrontend(adsList: SponsorAd[]) {
+  saveAdminAds(adsList);
+  const now = Date.now();
+  const campaigns: CampaignRow[] = adsList.map(a => {
+    const expired = new Date(a.expiresAt).getTime() <= now;
+    const status = !a.enabled ? 'paused' : expired ? 'expired' : 'active';
+    return {
+      id: a.id,
+      sponsor_id: a.id,
+      name: a.name,
+      size: a.size,
+      placement: a.slot,
+      status,
+      starts_at: a.startedAt,
+      ends_at: a.expiresAt,
+      display_name: a.name,
+      tagline: a.tagline,
+      link_url: a.websiteUrl,
+      logo_path: null,
+      image_url: a.imageUrl,
+      impressions: a.impressions,
+      clicks: a.clicks,
+    };
+  });
+  saveCampaigns(campaigns);
+}
 
-  // Flatten SponsorRow[] (with nested campaigns) into a SponsorAd-shaped list
-  // so the existing table template works unchanged
-  const initialAds = useMemo(() => {
-    if (!sponsors) return [];
-    const result: SponsorAd[] = [];
-    let slotIndex = 1;
-    for (const sp of sponsors) {
-      for (const c of sp.campaigns ?? []) {
-        result.push({
-          id: c.id,
-          name: c.display_name || sp.name,
-          slot: (slotIndex <= 6 ? slotIndex : slotIndex % 6 + 1) as SponsorAd['slot'],
-          enabled: c.status === 'active',
-          size: (c.size as SponsorAd['size']) || 'standard',
-          tagline: c.tagline ?? '',
-          websiteUrl: c.link_url ?? sp.url ?? '',
-          bgColor: '#1a1a2e',
-          textColor: '#e0e0e0',
-          accentColor: '#4a90d9',
-          icon: 'shield',
-          duration: '7d',
-          startedAt: c.starts_at ?? new Date().toISOString(),
-          expiresAt: c.ends_at ?? new Date().toISOString(),
-          impressions: c.impressions ?? 0,
-          clicks: c.clicks ?? 0,
-          paidZAR: 0,
-        });
-        slotIndex++;
-      }
-    }
-    return result;
-  }, [sponsors]);
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
-  const [ads, setAds] = useState<SponsorAd[]>([]);
-  // Sync API data into local state when it arrives
-  if (initialAds.length > 0 && ads.length === 0) {
-    setAds(initialAds);
-  }
+// ---------------------------------------------------------------------------
+// Slot Card Component
+// ---------------------------------------------------------------------------
 
-  const [editId, setEditId] = useState<string | null>(null);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newSponsor, setNewSponsor] = useState({ name: '', tagline: '', size: 'standard' as string });
-  const sponsorsEnabled = useAppStore((s) => s.sponsorsEnabled);
-  const setSponsorsEnabled = useAppStore((s) => s.setSponsorsEnabled);
+function SlotCard({ slotKey, ads }: { slotKey: SlotKey; ads: SponsorAd[] }) {
+  const slotDef = SLOT_REGISTRY.find(s => s.key === slotKey)!;
+  const slotAssignments = useAppStore(s => s.slotAssignments);
+  const setSlotMode = useAppStore(s => s.setSlotMode);
+  const assignment = slotAssignments[slotKey];
+  const mode = assignment?.mode ?? 'auto';
+  const campaign = ads.find(a => a.slot === slotKey && a.enabled);
+  const status = campaign ? getStatus(campaign) : null;
 
-  const activeCount = ads.filter((a) => a.enabled && getStatus(a) === 'active').length;
-  const totalRevenue = ads.reduce((sum, a) => sum + a.paidZAR, 0);
-  const totalImpressions = ads.reduce((sum, a) => sum + a.impressions, 0);
-  const totalClicks = ads.reduce((sum, a) => sum + a.clicks, 0);
+  return (
+    <div className="admin-card" style={{ padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{slotDef.label}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{slotDef.location}</div>
+        </div>
+        {status && (
+          <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 3, background: STATUS_STYLES[status]?.bg, color: STATUS_STYLES[status]?.color, textTransform: 'uppercase' }}>
+            {status}
+          </span>
+        )}
+      </div>
 
-  const toggleAd = async (id: string) => {
-    const ad = ads.find((a) => a.id === id);
-    if (!ad) return;
-    const newStatus = ad.enabled ? 'paused' : 'active';
-    // Optimistic local update
-    setAds((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a))
-    );
+      {campaign && (
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8, padding: '6px 8px', background: 'var(--bg-base)', borderRadius: 4, border: '1px solid var(--border-subtle)' }}>
+          <strong>{campaign.name}</strong> — {campaign.tagline}
+          {status === 'active' && <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 3 }}>{timeRemaining(campaign.expiresAt)}</div>}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <label style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Mode:</label>
+        <select
+          value={mode}
+          onChange={e => setSlotMode(slotKey, e.target.value)}
+          style={{ fontSize: 11, padding: '3px 8px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)', cursor: 'pointer' }}
+        >
+          {MODE_OPTIONS.map(m => <option key={m} value={m}>{MODE_LABELS[m]}</option>)}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Asset Library Component
+// ---------------------------------------------------------------------------
+
+function AssetLibrary() {
+  const [assets, setAssets] = useState(() => { migrateFromLegacy(); return getAssetsByType('placeholder'); });
+  const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const refresh = useCallback(() => setAssets(getAssetsByType('placeholder')), []);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError('');
+    setUploading(true);
     try {
-      await statusMutation.execute(id, newStatus);
-    } catch {
-      // Revert on failure
-      setAds((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, enabled: ad.enabled } : a))
-      );
+      await uploadAsset(file, 'placeholder');
+      refresh();
+    } catch (err: any) {
+      setError(err.message ?? 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
     }
   };
 
-  const addSponsor = async () => {
-    if (!newSponsor.name.trim()) return;
-    const usedSlots = new Set(ads.map(a => a.slot));
-    const freeSlot = ([1, 2, 3, 4, 5, 6] as const).find(s => !usedSlots.has(s)) ?? 1;
-    try {
-      const ad = await createMockCampaign(newSponsor.name.trim(), newSponsor.tagline.trim(), newSponsor.size, freeSlot);
-      setAds(prev => [...prev, ad]);
-    } catch { /* production: DB insert */ }
-    setNewSponsor({ name: '', tagline: '', size: 'standard' });
-    setShowAddForm(false);
+  const handleRemove = (id: string) => {
+    removeAsset(id);
+    refresh();
   };
 
-  const setDuration = (id: string, duration: AdDuration) => {
-    setAds((prev) =>
-      prev.map((a) => {
-        if (a.id !== id) return a;
-        const now = new Date().toISOString();
-        const ms =
-          duration === '24h' ? 86400000
-          : duration === '48h' ? 172800000
-          : duration === '7d' ? 604800000
-          : duration === '30d' ? 2592000000
-          : 604800000;
-        return {
-          ...a,
-          duration,
-          startedAt: now,
-          expiresAt: new Date(Date.now() + ms).toISOString(),
-          paidZAR: calcPrice(duration, a.size),
-        };
-      })
-    );
+  const handleToggle = (id: string, enabled: boolean) => {
+    toggleAsset(id, enabled);
+    refresh();
   };
 
   return (
-    <div className="admin-page">
-      <div className="admin-page-header">
-        <h1>Sponsors</h1>
-        <p>Manage sponsor campaigns across 6 slots — 2 sidebar, 2 dashboard, 2 bottom banners.</p>
-      </div>
-
-      {loading && <div className="import-msg" style={{ marginBottom: 16 }}>Loading sponsors…</div>}
-      {error && <div className="import-msg warning" style={{ marginBottom: 16 }}><strong>Error:</strong> {error}</div>}
-
-      <div className="stats-grid" style={{ marginBottom: 24 }}>
-        <div className="stat-card">
-          <div className="stat-value">{activeCount} / 6</div>
-          <div className="stat-label">Active sponsors</div>
+    <div className="admin-card" style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Placeholder Images</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+            Uploaded images shown in slots when no paid campaign is active.
+          </p>
         </div>
-        <div className="stat-card">
-          <div className="stat-value">R{totalRevenue.toLocaleString()}</div>
-          <div className="stat-label">Total revenue</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{totalImpressions.toLocaleString()}</div>
-          <div className="stat-label">Total impressions</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{totalClicks.toLocaleString()}</div>
-          <div className="stat-label">Total clicks</div>
+        <div>
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUpload} />
+          <button className="btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading} style={{ fontSize: 12, padding: '6px 14px' }}>
+            {uploading ? 'Uploading...' : '+ Upload image'}
+          </button>
         </div>
       </div>
 
-      <div className="admin-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2>Public display</h2>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
-            <span style={{ color: sponsorsEnabled ? '#38a169' : 'var(--text-muted)' }}>
-              {sponsorsEnabled ? 'ON — ads visible on map' : 'OFF — visualizations shown instead'}
-            </span>
-            <span
-              className={`layer-toggle module-toggle${sponsorsEnabled ? ' active' : ''}`}
-              role="switch"
-              aria-checked={sponsorsEnabled}
-              onClick={() => setSponsorsEnabled(!sponsorsEnabled)}
-              tabIndex={0}
-            />
-          </label>
+      {error && (
+        <div style={{ padding: '8px 12px', background: '#c5303015', border: '1px solid #c5303040', borderRadius: 6, color: '#c53030', fontSize: 12, marginBottom: 12 }}>
+          {error}
         </div>
-        <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 0 }}>
-          When ON, sponsor ads appear in 6 slots (2 sidebar, 2 dashboard, 2 bottom banners). When OFF, those slots show incident data visualizations instead.
-        </p>
+      )}
+
+      {assets.length === 0 ? (
+        <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, border: '1px dashed var(--border-subtle)', borderRadius: 8 }}>
+          No placeholder images. Upload one to get started.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
+          {assets.map(asset => {
+            const thumb = getImageData(asset.id);
+            return (
+              <div key={asset.id} style={{ border: `1px solid ${asset.enabled ? 'var(--accent)' : 'var(--border-subtle)'}`, borderRadius: 6, overflow: 'hidden', background: 'var(--bg-elevated)', opacity: asset.enabled ? 1 : 0.5 }}>
+                <div style={{ height: 40, background: '#0a0f1a', overflow: 'hidden' }}>
+                  {thumb && <img src={thumb} alt={asset.alt} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                </div>
+                <div style={{ padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-primary)', fontWeight: 600 }}>{asset.label}</span>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button onClick={() => handleToggle(asset.id, !asset.enabled)} style={{ fontSize: 9, padding: '2px 6px', background: asset.enabled ? '#38a16920' : 'var(--bg-base)', color: asset.enabled ? '#38a169' : 'var(--text-muted)', border: `1px solid ${asset.enabled ? '#38a16940' : 'var(--border-subtle)'}`, borderRadius: 3, cursor: 'pointer' }}>
+                      {asset.enabled ? 'ON' : 'OFF'}
+                    </button>
+                    <button onClick={() => handleRemove(asset.id)} style={{ fontSize: 9, padding: '2px 6px', background: 'none', border: '1px solid #c5303040', borderRadius: 3, cursor: 'pointer', color: '#c53030' }}>✕</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Infographic Controls
+// ---------------------------------------------------------------------------
+
+function InfographicControls() {
+  const globalFallback = useAppStore(s => s.globalInfographicFallback);
+  const setGlobalFallback = useAppStore(s => s.setGlobalInfographicFallback);
+  const types = useAppStore(s => s.enabledInfographicTypes);
+  const setTypes = useAppStore(s => s.setEnabledInfographicTypes);
+
+  const toggleType = (type: string) => {
+    if (types.includes(type)) {
+      setTypes(types.filter(t => t !== type));
+    } else {
+      setTypes([...types, type]);
+    }
+  };
+
+  return (
+    <div className="admin-card" style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Infographic Fallback</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+            When enabled, empty slots show data visualisations instead of hiding.
+          </p>
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <span style={{ fontSize: 11, color: globalFallback ? '#38a169' : 'var(--text-muted)', fontWeight: 600 }}>
+            {globalFallback ? 'ON' : 'OFF'}
+          </span>
+          <input type="checkbox" checked={globalFallback} onChange={e => setGlobalFallback(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+        </label>
       </div>
 
-      <div className="admin-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2>Campaigns</h2>
-          <button className="btn btn-primary" disabled={activeCount >= 6} onClick={() => setShowAddForm(v => !v)}>+ Add sponsor</button>
+      {globalFallback && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+          {Object.entries(INFOGRAPHIC_LABELS).map(([key, label]) => (
+            <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px 8px', background: types.includes(key) ? '#c9a84c10' : 'transparent', borderRadius: 4, border: `1px solid ${types.includes(key) ? '#c9a84c40' : 'var(--border-subtle)'}` }}>
+              <input type="checkbox" checked={types.includes(key)} onChange={() => toggleType(key)} style={{ width: 13, height: 13 }} />
+              {label}
+            </label>
+          ))}
         </div>
+      )}
+    </div>
+  );
+}
 
-        {showAddForm && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap' }}>
-            <div>
-              <label className="form-label" style={{ marginBottom: 2 }}>Name</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Sponsor name"
-                value={newSponsor.name}
-                onChange={e => setNewSponsor(s => ({ ...s, name: e.target.value }))}
-                style={{ width: 180, fontSize: 13 }}
-              />
-            </div>
-            <div>
-              <label className="form-label" style={{ marginBottom: 2 }}>Tagline</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Short tagline"
-                value={newSponsor.tagline}
-                onChange={e => setNewSponsor(s => ({ ...s, tagline: e.target.value }))}
-                style={{ width: 200, fontSize: 13 }}
-              />
-            </div>
-            <div>
-              <label className="form-label" style={{ marginBottom: 2 }}>Size</label>
-              <select
-                className="form-input"
-                value={newSponsor.size}
-                onChange={e => setNewSponsor(s => ({ ...s, size: e.target.value }))}
-                style={{ width: 130, fontSize: 13 }}
-              >
-                <option value="compact">Compact</option>
-                <option value="standard">Standard</option>
-                <option value="banner">Banner</option>
-                <option value="premium">Premium</option>
+// ---------------------------------------------------------------------------
+// Campaigns Table
+// ---------------------------------------------------------------------------
+
+function CampaignsTable() {
+  const [ads, setAds] = useState<SponsorAd[]>(() => {
+    const stored = getStoredAdminAds();
+    if (stored) return stored;
+    return [...MOCK_SPONSOR_ADS];
+  });
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newTagline, setNewTagline] = useState('');
+  const [newUrl, setNewUrl] = useState('');
+  const [newSize, setNewSize] = useState<string>('standard');
+  const [newSlot, setNewSlot] = useState<SlotKey>('layers_featured');
+
+  const updateAds = useCallback((updated: SponsorAd[]) => {
+    setAds(updated);
+    syncToFrontend(updated);
+  }, []);
+
+  const toggleAd = (id: string) => {
+    const updated = ads.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a);
+    updateAds(updated);
+  };
+
+  const setDuration = (id: string, duration: AdDuration) => {
+    const now = new Date().toISOString();
+    const ms: Record<string, number> = { '24h': 86400000, '48h': 172800000, '7d': 604800000, '30d': 2592000000 };
+    const updated = ads.map(a => {
+      if (a.id !== id) return a;
+      return { ...a, duration, startedAt: now, expiresAt: new Date(Date.now() + (ms[duration] ?? 604800000)).toISOString(), paidZAR: calcPrice(duration, a.size) };
+    });
+    updateAds(updated);
+  };
+
+  const handleAdd = async () => {
+    if (!newName.trim()) return;
+    const ad = await createMockCampaign(newName, newTagline, newSize, newSlot, newUrl);
+    const updated = [...ads, ad];
+    updateAds(updated);
+    setShowAddForm(false);
+    setNewName('');
+    setNewTagline('');
+    setNewUrl('');
+  };
+
+  const removeAd = (id: string) => {
+    updateAds(ads.filter(a => a.id !== id));
+  };
+
+  const totalImpressions = ads.reduce((s, a) => s + a.impressions, 0);
+  const totalClicks = ads.reduce((s, a) => s + a.clicks, 0);
+  const totalRevenue = ads.reduce((s, a) => s + a.paidZAR, 0);
+  const activeCount = ads.filter(a => getStatus(a) === 'active').length;
+
+  return (
+    <div className="admin-card" style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Campaigns</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+            {activeCount}/{ads.length} active · R{totalRevenue.toLocaleString()} revenue · {totalImpressions.toLocaleString()} impressions · {totalClicks.toLocaleString()} clicks
+          </p>
+        </div>
+        <button className="btn-primary" onClick={() => setShowAddForm(!showAddForm)} style={{ fontSize: 12, padding: '6px 14px' }}>
+          {showAddForm ? 'Cancel' : '+ Add sponsor'}
+        </button>
+      </div>
+
+      {showAddForm && (
+        <div style={{ padding: 16, background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)', marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <input placeholder="Sponsor name" value={newName} onChange={e => setNewName(e.target.value)} style={{ fontSize: 12, padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)' }} />
+            <input placeholder="Tagline" value={newTagline} onChange={e => setNewTagline(e.target.value)} style={{ fontSize: 12, padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)' }} />
+            <input placeholder="Website URL" value={newUrl} onChange={e => setNewUrl(e.target.value)} style={{ fontSize: 12, padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)' }} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select value={newSize} onChange={e => setNewSize(e.target.value)} style={{ flex: 1, fontSize: 12, padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)' }}>
+                {Object.entries(SIZE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+              <select value={newSlot} onChange={e => setNewSlot(e.target.value as SlotKey)} style={{ flex: 1, fontSize: 12, padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)' }}>
+                {ALL_SLOT_KEYS.map(k => <option key={k} value={k}>{SLOT_LABELS[k]}</option>)}
               </select>
             </div>
-            <button className="btn btn-primary" onClick={addSponsor} disabled={!newSponsor.name.trim()}>Create</button>
-            <button className="btn btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
           </div>
-        )}
+          <button onClick={handleAdd} className="btn-primary" style={{ fontSize: 12, padding: '6px 14px' }}>Create campaign</button>
+        </div>
+      )}
 
-        <table className="admin-table">
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
           <thead>
-            <tr>
-              <th>Sponsor</th>
-              <th>Slot / Size</th>
-              <th>Status</th>
-              <th>Duration</th>
-              <th>Time Left</th>
-              <th>Price (ZAR)</th>
-              <th>Stats</th>
-              <th>Actions</th>
+            <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Sponsor</th>
+              <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Slot</th>
+              <th style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Status</th>
+              <th style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Duration</th>
+              <th style={{ textAlign: 'right', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Price</th>
+              <th style={{ textAlign: 'right', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Stats</th>
+              <th style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontWeight: 600, fontSize: 10 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {ads.map((ad) => {
+            {ads.map(ad => {
               const status = getStatus(ad);
-              const st = STATUS_STYLES[status]!;
-              const remaining = timeRemaining(ad.expiresAt);
-              const isExpired = status === 'expired';
-              const isEditing = editId === ad.id;
-
+              const style = STATUS_STYLES[status]!;
               return (
-                <tr key={ad.id} style={{ opacity: isExpired ? 0.6 : 1 }}>
-                  <td className="td-title">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {ad.name}
-                      {ad.size === 'premium' && (
-                        <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#c9a84c22', color: '#c9a84c', fontWeight: 700 }}>
-                          PREMIUM
-                        </span>
-                      )}
-                    </div>
+                <tr key={ad.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                  <td style={{ padding: '8px 6px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{ad.name}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{ad.tagline}</div>
                   </td>
-                  <td>
-                    <div style={{ fontSize: 11 }}>{SLOT_LABELS[ad.slot]}</div>
-                    <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>Slot {ad.slot} · {SIZE_LABELS[ad.size]}</div>
+                  <td style={{ padding: '8px 6px', color: 'var(--text-secondary)' }}>
+                    {SLOT_LABELS[ad.slot]}
                   </td>
-                  <td>
-                    <span className="table-badge" style={{ background: st.bg, color: st.color }}>
+                  <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 3, background: style.bg, color: style.color, textTransform: 'uppercase' }}>
                       {status}
                     </span>
+                    {status === 'active' && <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2 }}>{timeRemaining(ad.expiresAt)}</div>}
                   </td>
-                  <td>
-                    {isEditing ? (
-                      <select
-                        className="form-input"
-                        value={ad.duration}
-                        onChange={(e) => {
-                          setDuration(ad.id, e.target.value as AdDuration);
-                          setEditId(null);
-                        }}
-                        style={{ fontSize: 11, padding: '2px 4px', width: 'auto' }}
-                      >
-                        {Object.entries(DURATION_LABELS).map(([k, v]) => (
-                          <option key={k} value={k}>
-                            {v} — R{calcPrice(k as AdDuration, ad.size)}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      DURATION_LABELS[ad.duration]
-                    )}
+                  <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                    <select value={ad.duration} onChange={e => setDuration(ad.id, e.target.value as AdDuration)} style={{ fontSize: 10, padding: '2px 4px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 3, color: 'var(--text-primary)' }}>
+                      {Object.entries(DURATION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
                   </td>
-                  <td>
-                    <span style={{ color: isExpired ? '#e53e3e' : remaining.includes('h ') && !remaining.includes('d') ? '#d69e2e' : 'var(--text-secondary)', fontSize: 11 }}>
-                      {remaining}
-                    </span>
+                  <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    R{ad.paidZAR.toLocaleString()}
                   </td>
-                  <td>
-                    <span style={{ fontWeight: 600 }}>R{ad.paidZAR.toLocaleString()}</span>
-                    {ad.size === 'premium' && (
-                      <span style={{ fontSize: 9, color: '#c9a84c', display: 'block' }}>×3 multiplier</span>
-                    )}
+                  <td style={{ padding: '8px 6px', textAlign: 'right' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{ad.impressions.toLocaleString()} imp</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{ad.clicks} clicks ({ad.impressions > 0 ? ((ad.clicks / ad.impressions) * 100).toFixed(1) : '0'}%)</div>
                   </td>
-                  <td style={{ fontSize: 11 }}>
-                    {ad.impressions.toLocaleString()} views · {ad.clicks} clicks
-                    {ad.impressions > 0 && (
-                      <span style={{ color: 'var(--text-muted)', display: 'block' }}>
-                        {((ad.clicks / ad.impressions) * 100).toFixed(1)}% CTR
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                      <button className="btn btn-small" onClick={() => toggleAd(ad.id)}>
+                  <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+                      <button onClick={() => toggleAd(ad.id)} style={{ fontSize: 9, padding: '3px 8px', background: ad.enabled ? '#d69e2e20' : '#38a16920', color: ad.enabled ? '#d69e2e' : '#38a169', border: `1px solid ${ad.enabled ? '#d69e2e40' : '#38a16940'}`, borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
                         {ad.enabled ? 'Pause' : 'Activate'}
                       </button>
-                      <button className="btn btn-small btn-secondary" onClick={() => setEditId(isEditing ? null : ad.id)}>
-                        {isEditing ? 'Cancel' : 'Duration'}
-                      </button>
+                      <button onClick={() => removeAd(ad.id)} style={{ fontSize: 9, padding: '3px 6px', background: 'none', border: '1px solid #c5303040', borderRadius: 3, cursor: 'pointer', color: '#c53030' }}>✕</button>
                     </div>
                   </td>
                 </tr>
@@ -344,48 +429,172 @@ export function AdminSponsors() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
 
-      <div className="admin-card">
-        <h2>Pricing tiers</h2>
-        <table className="admin-table" style={{ maxWidth: 600 }}>
-          <thead>
-            <tr><th>Duration</th><th>Compact (×0.5)</th><th>Standard (×1)</th><th>Banner (×2)</th><th>Premium (×3)</th></tr>
-          </thead>
-          <tbody>
-            {(Object.entries(DURATION_PRICES) as [AdDuration, number][])
-              .filter(([k]) => k !== 'custom')
-              .map(([k, base]) => (
-                <tr key={k}>
-                  <td>{DURATION_LABELS[k]}</td>
-                  <td>R{Math.round(base * 0.5)}</td>
-                  <td>R{base}</td>
-                  <td style={{ color: '#ed8936', fontWeight: 600 }}>R{base * 2}</td>
-                  <td style={{ color: '#c9a84c', fontWeight: 600 }}>R{base * 3}</td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
-          Custom durations negotiated directly.
-        </p>
+// ---------------------------------------------------------------------------
+// Placement Map Wireframe
+// ---------------------------------------------------------------------------
+
+function PlacementMap({ ads }: { ads: SponsorAd[] }) {
+  const slotAssignments = useAppStore(s => s.slotAssignments);
+
+  function slotStatus(key: SlotKey): 'active' | 'empty' | 'hidden' {
+    const assignment = slotAssignments[key];
+    if (assignment?.mode === 'hidden') return 'hidden';
+    const campaign = ads.find(a => a.slot === key && a.enabled);
+    if (campaign && getStatus(campaign) === 'active') return 'active';
+    return 'empty';
+  }
+
+  const statusColor = (key: SlotKey) => {
+    const s = slotStatus(key);
+    if (s === 'active') return '#38a169';
+    if (s === 'hidden') return '#636366';
+    return '#d69e2e';
+  };
+
+  const statusBg = (key: SlotKey) => {
+    const s = slotStatus(key);
+    if (s === 'active') return '#38a16918';
+    if (s === 'hidden') return '#63636618';
+    return '#d69e2e18';
+  };
+
+  const slotBox = (key: SlotKey, label: string) => (
+    <div style={{ padding: '6px 10px', border: `2px solid ${statusColor(key)}`, borderRadius: 4, background: statusBg(key), fontSize: 9, fontWeight: 700, color: statusColor(key), textAlign: 'center', whiteSpace: 'nowrap' }}>
+      {label}
+      <div style={{ fontSize: 7, fontWeight: 400, opacity: 0.8, marginTop: 2, textTransform: 'uppercase' }}>{slotStatus(key)}</div>
+    </div>
+  );
+
+  return (
+    <div className="admin-card" style={{ marginBottom: 24, padding: 20 }}>
+      <h2 style={{ margin: '0 0 12px', fontSize: 14 }}>Placement Map</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr 140px', gridTemplateRows: '1fr 60px', gap: 8, height: 220, background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)', padding: 12 }}>
+        {/* Sidebar (Layers panel) */}
+        <div style={{ gridRow: '1 / 3', display: 'flex', flexDirection: 'column', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>LAYERS PANEL</div>
+          {slotBox('layers_featured', 'Featured')}
+          <div style={{ flex: 1 }} />
+          {slotBox('layers_footer', 'Footer')}
+        </div>
+        {/* Map area */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', borderRadius: 4, color: 'var(--text-muted)', fontSize: 11 }}>
+          MAP AREA
+        </div>
+        {/* Right dashboard */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>RIGHT PANEL</div>
+          <div style={{ flex: 1 }} />
+          {slotBox('right_dashboard_sponsor', 'Sponsor')}
+        </div>
+        {/* Bottom bar */}
+        <div style={{ gridColumn: '2 / 4', display: 'flex', alignItems: 'center', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
+          {slotBox('bottom_intelligence_left', 'Bottom Left')}
+          <div style={{ flex: 1, height: 16, background: 'var(--border-subtle)', borderRadius: 3 }} />
+          <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>News Feed</div>
+          <div style={{ flex: 1, height: 16, background: 'var(--border-subtle)', borderRadius: 3 }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Capacity Indicator
+// ---------------------------------------------------------------------------
+
+function CapacityIndicator({ ads }: { ads: SponsorAd[] }) {
+  const activeCount = ALL_SLOT_KEYS.filter(key => {
+    const campaign = ads.find(a => a.slot === key && a.enabled);
+    return campaign && getStatus(campaign) === 'active';
+  }).length;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>CAPACITY</div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        {ALL_SLOT_KEYS.map((key, i) => (
+          <div key={key} style={{ width: 24, height: 8, borderRadius: 2, background: i < activeCount ? '#38a169' : 'var(--border-subtle)' }} />
+        ))}
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: activeCount === 4 ? '#38a169' : 'var(--text-secondary)' }}>
+        {activeCount}/4
+      </div>
+      {activeCount === 4 && <span style={{ fontSize: 9, padding: '2px 6px', background: '#38a16920', color: '#38a169', borderRadius: 3, fontWeight: 700 }}>FULL</span>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main Admin Page
+// ---------------------------------------------------------------------------
+
+export function AdminSponsors() {
+  const sponsorsEnabled = useAppStore(s => s.sponsorsEnabled);
+  const setSponsorsEnabled = useAppStore(s => s.setSponsorsEnabled);
+  const storage = useMemo(() => getStorageUsage(), []);
+
+  const ads = useMemo(() => {
+    const stored = getStoredAdminAds();
+    return stored ?? [...MOCK_SPONSOR_ADS];
+  }, []);
+
+  return (
+    <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 22 }}>Content Manager</h1>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
+            4-slot content system — paid ads, placeholders, and infographics
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <CapacityIndicator ads={ads} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 14px', background: sponsorsEnabled ? '#38a16915' : '#c5303015', border: `1px solid ${sponsorsEnabled ? '#38a16940' : '#c5303040'}`, borderRadius: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: sponsorsEnabled ? '#38a169' : '#c53030' }}>
+              Public display: {sponsorsEnabled ? 'ON' : 'OFF'}
+            </span>
+            <input type="checkbox" checked={sponsorsEnabled} onChange={e => setSponsorsEnabled(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+          </label>
+        </div>
       </div>
 
-      <div className="admin-card">
-        <h2>Sponsor rules</h2>
-        <ul className="admin-rules">
-          <li>Maximum <strong>6 active sponsors</strong> across 6 slots (enforced by database trigger)</li>
-          <li><strong>4 size tiers</strong>: Premium (×3), Banner (×2), Standard (×1), Compact (×0.5)</li>
-          <li><strong>6 placement zones</strong>: 2 sidebar, 2 dashboard, 2 bottom banners</li>
-          <li><strong>Timed durations</strong>: 24h, 48h, 7 days, 1 month, or custom — clock starts on activation, auto-expires</li>
-          <li>When a sponsor expires or is paused, the slot <strong>reverts to data visualizations</strong></li>
-          <li>Each sponsor is <strong>independently pausable/disableable</strong></li>
-          <li>Impressions tracked as <strong>aggregates only</strong> — no individual user tracking</li>
-          <li>Sponsor conflicts checked against incident content — sponsors are never displayed alongside incidents involving their organisation</li>
-        </ul>
+      {/* Placement Map + Slot Cards side by side */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
+        <PlacementMap ads={ads} />
+        <div>
+          <h2 style={{ margin: '0 0 12px', fontSize: 14 }}>Slot Controls</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {ALL_SLOT_KEYS.map(key => (
+              <SlotCard key={key} slotKey={key} ads={ads} />
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="admin-note">
-        Sponsor data is loaded from the database. When Supabase is not configured, synthetic fallback data is shown.
+      {/* Campaigns */}
+      <CampaignsTable />
+
+      {/* Asset Library + Infographic side by side */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        <AssetLibrary />
+        <InfographicControls />
+      </div>
+
+      {/* Storage & Info */}
+      <div className="admin-card" style={{ padding: 16, marginTop: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            Storage: {formatBytes(storage.used)} used ({storage.items} items)
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+            Max 4 content slots · Demo mode (localStorage)
+          </div>
+        </div>
       </div>
     </div>
   );

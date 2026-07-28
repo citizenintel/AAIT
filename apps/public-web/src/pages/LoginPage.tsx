@@ -68,6 +68,10 @@ export function LoginPage() {
                   <code>editor@altafrikaner.com</code> / <code>demo</code>
                   <span className="demo-role">Senior Editor</span>
                 </div>
+                <div className="demo-account">
+                  <code>mod.demo@example.com</code> / <code>demo</code>
+                  <span className="demo-role">Moderator (limited)</span>
+                </div>
               </div>
             )}
           </div>
