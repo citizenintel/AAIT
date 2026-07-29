@@ -168,13 +168,12 @@
   overflow: hidden;
 }
 
-/* Left-center: Ad panel — fills entire grid cell */
+/* Left-center: Ad panel — fills entire grid cell, minimal chrome */
 .bottom-ad-panel {
   background: var(--bg-elevated, #232328);
-  border: 1px solid rgba(214, 158, 46, 0.35);
-  border-top: 3px solid #d69e2e;
-  border-radius: 0 0 4px 4px;
-  margin: 0 4px 4px 0;
+  border: none;
+  border-top: 2px solid #d69e2e;
+  margin: 0;
   padding: 0;
   display: flex;
   align-items: stretch;

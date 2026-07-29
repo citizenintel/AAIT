@@ -314,9 +314,9 @@ function SponsorFrame({ slotKey, children }: { slotKey: PlacementId; children: R
         minWidth: 0,
         minHeight: 0,
         overflow: 'hidden',
-        borderRadius: 6,
+        borderRadius: isBottom ? 0 : 6,
         background: 'var(--bg-elevated, #111827)',
-        border: '1px solid #c9a84c33',
+        border: isBottom ? 'none' : '1px solid #c9a84c33',
       }}
     >
       {children}
