@@ -569,22 +569,23 @@ body {
   position: relative;
 }
 
-/* Glance: 3-column CSS Grid — §5
-   left-rail (priorities + sponsor slots) | map + bottom | right-rail (dashboard + sponsor)
-   Health strip spans center only. */
+/* Glance: 4-column CSS Grid — §3
+   left-rail | map (spans 2 center cols) | right-rail
+   Bottom row: two side-by-side billboards in center columns
+   Health strip spans center columns below billboards */
 .glance-view {
   display: grid;
-  grid-template-columns: var(--left-rail-width) minmax(0, 1fr) var(--right-rail-width);
-  grid-template-rows: 1fr auto auto;
+  grid-template-columns: var(--left-rail-width) minmax(0, 1.4fr) minmax(0, 1fr) var(--right-rail-width);
+  grid-template-rows: minmax(0, 1fr) clamp(190px, 32vh, 280px) auto;
   grid-template-areas:
-    "left-rail  map     right-rail"
-    "left-rail  bottom  right-rail"
-    "left-rail  health  health";
+    "left-rail  map              map               right-rail"
+    "left-rail  bottom-primary   bottom-secondary   right-rail"
+    "left-rail  health           health             right-rail";
   height: 100%;
   overflow: hidden;
 }
 
-/* Left rail — always present, contains priorities + sponsor slots */
+/* Left rail — priorities above, ad below */
 .left-rail {
   grid-area: left-rail;
   display: flex;
@@ -600,27 +601,33 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
+  min-height: 0;
 }
 
-.left-rail-sponsors {
+.left-rail-ad {
   flex-shrink: 0;
+  flex-grow: 1;
+  min-height: 200px;
+  max-height: 50%;
   border-top: 1px solid var(--border);
-}
-
-/* Legacy alias — still used in some layouts */
-.glance-priorities {
-  grid-area: left-rail;
-  overflow-y: auto;
-  border-right: 1px solid var(--border);
-  padding: var(--sp-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
 }
 
 .glance-map {
   grid-area: map;
   position: relative;
+  overflow: hidden;
+}
+
+.glance-bottom-primary {
+  grid-area: bottom-primary;
+  border-top: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.glance-bottom-secondary {
+  grid-area: bottom-secondary;
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
   overflow: hidden;
 }
 

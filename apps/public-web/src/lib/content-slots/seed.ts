@@ -17,7 +17,7 @@ export function seedTestData(): SponsorAd[] {
     name: spec.sponsorName,
     slot: spec.placementId,
     enabled: true,
-    size: spec.placementId === 'GLANCE_RAIL_FEATURED' ? 'premium' as const : 'standard' as const,
+    size: spec.placementId === 'LEFT_RAIL_HALF_PAGE' ? 'premium' as const : 'standard' as const,
     tagline: `Test creative #${spec.number} — ${spec.placementId}`,
     websiteUrl: '',
     imageUrl: TEST_CREATIVE_URIS[spec.placementId],

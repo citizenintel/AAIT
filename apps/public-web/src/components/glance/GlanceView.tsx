@@ -7,6 +7,7 @@ import { useIncidentData } from '@/lib/hooks/useIncidentData';
 import ConfidenceAnatomy from '@/components/shared/ConfidenceAnatomy';
 import { WidgetPanel } from '@/components/widgets/WidgetPanel';
 import { LeftRail } from '@/components/shell/LeftRail';
+import { ManagedContentSlot } from '@/components/widgets/ManagedContentSlot';
 import type { IntelligenceEvent } from '@/types/ontology';
 
 const PROVINCES = [
@@ -153,8 +154,16 @@ export function GlanceView() {
         />
       </div>
 
-      {/* Widget zones rendered as grid children — §5: no absolute positioning */}
+      {/* Right rail: dashboard summary + ad */}
       <WidgetPanel />
+
+      {/* Bottom billboards — two side-by-side ad zones */}
+      <div className="glance-bottom-primary">
+        <ManagedContentSlot slotKey="BOTTOM_PRIMARY_BILLBOARD" />
+      </div>
+      <div className="glance-bottom-secondary">
+        <ManagedContentSlot slotKey="BOTTOM_SECONDARY_BILLBOARD" />
+      </div>
 
       <div className="glance-health">
         <div className="province-strip">

@@ -6,10 +6,10 @@
 export const MAX_PUBLIC_PLACEMENTS = 4;
 
 export type PlacementId =
-  | 'GLANCE_RAIL_FEATURED'
-  | 'LEFT_RAIL_COMPACT'
-  | 'RIGHT_DASHBOARD_RECTANGLE'
-  | 'BOTTOM_INTELLIGENCE_LEADERBOARD';
+  | 'LEFT_RAIL_HALF_PAGE'
+  | 'BOTTOM_PRIMARY_BILLBOARD'
+  | 'BOTTOM_SECONDARY_BILLBOARD'
+  | 'RIGHT_RAIL_HALF_PAGE';
 
 // Backward-compat alias — will be removed once all legacy references are gone
 export type SlotKey = PlacementId;
@@ -38,7 +38,7 @@ export type AssignmentStatus = 'DRAFT' | 'SCHEDULED' | 'ACTIVE' | 'PAUSED' | 'EX
 
 export type FitMode = 'cover' | 'contain' | 'manual-crop' | 'adaptive';
 
-export type AspectRatio = '6:5' | '32:5' | '364:45' | 'fluid';
+export type AspectRatio = '1:2' | '97:25' | '364:125' | 'fluid';
 
 // ---------------------------------------------------------------------------
 // Placement definition — the four structural slots (§3)

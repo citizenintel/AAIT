@@ -521,16 +521,16 @@ export const useAppStore = create<AppStore>()(
     setEnabledInfographicTypes: (types) => set((s) => { s.enabledInfographicTypes = types; try { localStorage.setItem('aait_infographic_types', JSON.stringify(types)); } catch {} }),
     slotAssignments: (() => {
       const defaults: Record<string, { slotKey: string; assetId: string | null; campaignId: string | null; mode: string }> = {
-        'GLANCE_RAIL_FEATURED': { slotKey: 'GLANCE_RAIL_FEATURED', assetId: null, campaignId: null, mode: 'auto' },
-        'LEFT_RAIL_COMPACT': { slotKey: 'LEFT_RAIL_COMPACT', assetId: null, campaignId: null, mode: 'auto' },
-        'RIGHT_DASHBOARD_RECTANGLE': { slotKey: 'RIGHT_DASHBOARD_RECTANGLE', assetId: null, campaignId: null, mode: 'auto' },
-        'BOTTOM_INTELLIGENCE_LEADERBOARD': { slotKey: 'BOTTOM_INTELLIGENCE_LEADERBOARD', assetId: null, campaignId: null, mode: 'auto' },
+        'LEFT_RAIL_HALF_PAGE': { slotKey: 'LEFT_RAIL_HALF_PAGE', assetId: null, campaignId: null, mode: 'auto' },
+        'BOTTOM_PRIMARY_BILLBOARD': { slotKey: 'BOTTOM_PRIMARY_BILLBOARD', assetId: null, campaignId: null, mode: 'auto' },
+        'BOTTOM_SECONDARY_BILLBOARD': { slotKey: 'BOTTOM_SECONDARY_BILLBOARD', assetId: null, campaignId: null, mode: 'auto' },
+        'RIGHT_RAIL_HALF_PAGE': { slotKey: 'RIGHT_RAIL_HALF_PAGE', assetId: null, campaignId: null, mode: 'auto' },
       };
       try {
         const v = localStorage.getItem('aait_slot_assignments');
         if (v) {
           const parsed = JSON.parse(v);
-          if (parsed['layers_featured'] || parsed['LEFT_RAIL_FEATURED'] || parsed['RIGHT_RAIL_RECTANGLE'] || parsed['BOTTOM_LEADERBOARD']) {
+          if (parsed['GLANCE_RAIL_FEATURED'] || parsed['LEFT_RAIL_COMPACT'] || parsed['RIGHT_DASHBOARD_RECTANGLE'] || parsed['BOTTOM_INTELLIGENCE_LEADERBOARD'] || parsed['layers_featured'] || parsed['LEFT_RAIL_FEATURED'] || parsed['RIGHT_RAIL_RECTANGLE'] || parsed['BOTTOM_LEADERBOARD']) {
             localStorage.removeItem('aait_slot_assignments');
             return defaults;
           }

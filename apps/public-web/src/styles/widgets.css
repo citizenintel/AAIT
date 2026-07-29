@@ -1,4 +1,4 @@
-/* Widget zones — CSS Grid areas (§5: no absolute positioning for ads) */
+/* Widget zones — CSS Grid areas */
 
 .widget-panel-toggle.collapsed {
   grid-area: right-rail;
@@ -15,15 +15,6 @@
   transition: all 0.15s;
 }
 .widget-panel-toggle.collapsed:hover { background: var(--bg-hover); color: var(--accent); }
-
-.widget-zone-top {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 12;
-  pointer-events: auto;
-}
 
 .widget-zone-right {
   grid-area: right-rail;
@@ -61,6 +52,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 8px;
+  min-height: 0;
 }
 
 .widget-card {
@@ -71,9 +63,12 @@
   margin-bottom: 8px;
 }
 
-.widget-zone-bottom {
-  grid-area: bottom;
-  overflow: hidden;
+.right-rail-ad {
+  flex-shrink: 0;
+  flex-grow: 1;
+  min-height: 200px;
+  max-height: 50%;
+  border-top: 1px solid var(--border);
 }
 
 /* Stats bar */
@@ -143,286 +138,8 @@
 .widget-casualty-counts .deceased { color: #c53030; font-weight: 600; }
 .widget-casualty-counts .injured { color: #ed8936; font-weight: 600; }
 
-/* Bottom zone grid — switches between 3-col (no sponsor) and 4-col (with sponsor) */
-.bottom-zone-grid {
-  display: grid;
-  grid-template-columns: 100px 1fr 140px;
-  background: var(--bg-surface);
-  border-top: 1px solid var(--border);
-  max-height: 180px;
-  overflow: hidden;
-  padding-left: 4px;
-}
-.bottom-zone-grid[data-has-sponsor="true"] {
-  grid-template-columns: 100px 3fr 2fr 140px;
-}
-.bottom-zone-grid.expanded { max-height: 360px; }
-
-/* Left: Infographics panel — standalone card */
-.bottom-infographics-panel {
-  background: var(--bg-elevated, #232328);
-  border: 1px solid rgba(56, 161, 105, 0.35);
-  border-top: 3px solid #38a169;
-  border-radius: 0 0 4px 4px;
-  margin: 0 4px 4px 0;
-  overflow: hidden;
-}
-
-/* Left-center: Ad panel — fills entire grid cell, minimal chrome */
-.bottom-ad-panel {
-  background: var(--bg-elevated, #232328);
-  border: none;
-  border-top: 2px solid #d69e2e;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  align-items: stretch;
-  overflow: hidden;
-}
-.bottom-ad-panel > * {
-  flex: 1;
-  min-width: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/* Left: LIVE panel */
-.bottom-panel-live {
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow: hidden;
-}
-.bottom-live-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.bottom-live-label {
-  font-size: 9px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.bottom-live-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-}
-.bottom-live-stat {
-  display: flex;
-  flex-direction: column;
-}
-.bottom-live-stat-value {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1.1;
-}
-.bottom-live-stat-label {
-  font-size: 8px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-/* Center: News feed */
-.bottom-panel-news {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.widget-news-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 14px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.widget-news-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.widget-news-live {
-  font-size: 9px;
-  font-weight: 700;
-  color: #c53030;
-  background: #c5303015;
-  padding: 2px 6px;
-  border-radius: 3px;
-  letter-spacing: 0.06em;
-  animation: pulse-live 2s infinite;
-}
-@keyframes pulse-live { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-.widget-news-toggle {
-  font-size: 11px;
-  color: var(--text-muted);
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 2px 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.widget-news-toggle:hover { border-color: var(--text-muted); }
-.widget-news-toggle.expand { color: #38a169; border-color: #38a16944; }
-.widget-news-toggle.expand:hover { background: #38a16915; border-color: #38a169; color: #48bb78; }
-.widget-news-toggle.collapse { color: #d69e2e; border-color: #d69e2e44; }
-.widget-news-toggle.collapse:hover { background: #d69e2e15; border-color: #d69e2e; color: #ecc94b; }
-.widget-news-list { flex: 1; overflow-y: auto; }
-.widget-news-item {
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--border);
-  transition: background 0.15s;
-  cursor: pointer;
-}
-.widget-news-item:hover { background: var(--bg-hover); }
-.widget-news-item-header { display: flex; gap: 8px; align-items: center; margin-bottom: 2px; }
-.widget-news-module { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
-.widget-news-source { font-size: 10px; color: var(--text-muted); }
-.widget-news-time { font-size: 10px; color: var(--text-muted); margin-left: auto; }
-.widget-news-item-title { font-size: 12px; color: var(--text-primary); font-weight: 500; line-height: 1.4; }
-.widget-news-source-addr {
-  font-size: 10px;
-  color: var(--accent);
-  opacity: 0.75;
-  margin-top: 3px;
-  font-family: var(--font-mono, monospace);
-  cursor: default;
-  user-select: text;
-}
-.widget-news-footer {
-  padding: 4px 14px;
-  font-size: 9px;
-  color: var(--text-muted);
-  border-top: 1px solid var(--border);
-  font-style: italic;
-  flex-shrink: 0;
-}
-
-/* Right: Recent activity */
-.bottom-panel-activity {
-  border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.bottom-activity-header {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.bottom-activity-list {
-  flex: 1;
-  overflow-y: auto;
-}
-.bottom-activity-item {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-}
-.bottom-activity-item:last-child { border-bottom: none; }
-.bottom-activity-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  margin-top: 4px;
-}
-.bottom-activity-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.bottom-activity-title {
-  font-size: 11px;
-  color: var(--text-primary);
-  font-weight: 500;
-  line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.bottom-activity-meta {
-  font-size: 9px;
-  color: var(--text-muted);
-  margin-top: 1px;
-}
-
-/* Bottom ad panels */
-.bottom-panel-ad {
-  display: flex;
-  align-items: stretch;
-  border-left: 1px solid var(--border);
-  overflow: hidden;
-  padding: 6px;
-}
-.bottom-panel-ad .sponsor-slot {
-  flex: 1;
-  margin: 0;
-  min-height: 0;
-}
-.bottom-panel-ad .sponsor-slot.banner {
-  margin: 0;
-  border: none;
-  border-radius: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  align-items: center;
-  text-align: center;
-  padding: 24px 8px 8px;
-  gap: 6px;
-  overflow: hidden;
-}
-.sponsor-banner-text {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: center;
-}
-.sponsor-slot.banner .sponsor-slot-name {
-  font-size: 10px;
-}
-.sponsor-slot.banner .sponsor-slot-tagline {
-  font-size: 9px;
-  line-height: 1;
-  opacity: 0.85;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 120px;
-}
-
-/* No-sponsor state handled by data-has-sponsor attribute on grid container */
-
 /* Responsive */
-@media (max-width: 900px) {
-  :root { --right-rail-width: 240px; }
-  .bottom-zone-grid { grid-template-columns: 80px 1fr 120px; }
-  .bottom-zone-grid[data-has-sponsor="true"] { grid-template-columns: 80px 3fr 2fr 120px; }
-}
 @media (max-width: 768px) {
   .widget-zone-right { display: none; }
-  .widget-zone-bottom { display: none; }
-  .widget-zone-top { display: none; }
   .widget-panel-toggle.collapsed { display: none; }
-  .bottom-zone-grid { grid-template-columns: 1fr; }
-  .bottom-infographics-panel, .bottom-ad-panel, .bottom-panel-activity { display: none; }
 }

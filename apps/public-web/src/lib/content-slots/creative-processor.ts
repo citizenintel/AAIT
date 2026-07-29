@@ -137,10 +137,10 @@ export async function generateAllVariants(
   backgroundColor = '#000000',
 ): Promise<ProcessedVariant[]> {
   const placements: PlacementId[] = [
-    'GLANCE_RAIL_FEATURED',
-    'LEFT_RAIL_COMPACT',
-    'RIGHT_DASHBOARD_RECTANGLE',
-    'BOTTOM_INTELLIGENCE_LEADERBOARD',
+    'LEFT_RAIL_HALF_PAGE',
+    'BOTTOM_PRIMARY_BILLBOARD',
+    'BOTTOM_SECONDARY_BILLBOARD',
+    'RIGHT_RAIL_HALF_PAGE',
   ];
 
   const results = await Promise.all(

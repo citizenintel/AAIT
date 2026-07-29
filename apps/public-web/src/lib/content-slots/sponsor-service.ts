@@ -54,10 +54,21 @@ export function saveStore(store: SponsorStore): void {
 // Migration: flat SponsorAd[] → separated model
 // ---------------------------------------------------------------------------
 
+const LEGACY_ID_MAP: Record<string, PlacementId> = {
+  'GLANCE_RAIL_FEATURED': 'LEFT_RAIL_HALF_PAGE',
+  'LEFT_RAIL_COMPACT': 'BOTTOM_SECONDARY_BILLBOARD',
+  'BOTTOM_INTELLIGENCE_LEADERBOARD': 'BOTTOM_PRIMARY_BILLBOARD',
+  'RIGHT_DASHBOARD_RECTANGLE': 'RIGHT_RAIL_HALF_PAGE',
+};
+
+function migratePlacementId(id: string): PlacementId {
+  return (LEGACY_ID_MAP[id] ?? id) as PlacementId;
+}
+
 interface LegacySponsorAd {
   id: string;
   name: string;
-  slot: PlacementId;
+  slot: string;
   enabled: boolean;
   size: string;
   tagline: string;
@@ -148,7 +159,7 @@ export function migrateFromLegacy(): SponsorStore | null {
       store.assignments.push({
         id: `assign-${ad.id}`,
         campaignId,
-        placementId: ad.slot,
+        placementId: migratePlacementId(ad.slot),
         status: ad.enabled ? 'ACTIVE' : 'PAUSED',
         startAt: ad.startedAt,
         endAt: ad.expiresAt,
@@ -192,7 +203,7 @@ export function getActiveCampaignRows(store?: SponsorStore): CampaignRow[] {
       id: campaign.id,
       sponsor_id: campaign.sponsorId,
       name: campaign.name,
-      size: assignment.placementId === 'GLANCE_RAIL_FEATURED' ? 'premium' : 'standard',
+      size: assignment.placementId === 'LEFT_RAIL_HALF_PAGE' ? 'premium' : 'standard',
       placement: assignment.placementId,
       status: 'active',
       starts_at: campaign.startAt,

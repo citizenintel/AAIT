@@ -539,30 +539,31 @@ function PlacementMap({ ads, onSelectPlacement }: { ads: SponsorAd[]; onSelectPl
     <div className="admin-card" style={{ marginBottom: 24, padding: 20 }}>
       <h2 style={{ margin: '0 0 12px', fontSize: 14 }}>Placement Map</h2>
       <p style={{ margin: '0 0 12px', fontSize: 10, color: 'var(--text-muted)' }}>Click any placement to manage it</p>
-      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr 140px', gridTemplateRows: '1fr 60px', gap: 8, height: 220, background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)', padding: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '160px 1.4fr 1fr 120px', gridTemplateRows: '1fr 80px', gap: 8, height: 240, background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)', padding: 12 }}>
         {/* Left rail */}
         <div style={{ gridRow: '1 / 3', display: 'flex', flexDirection: 'column', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
-          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>GLANCE / LEFT RAIL</div>
-          {slotBox('GLANCE_RAIL_FEATURED', 'Featured')}
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>LEFT RAIL</div>
+          <div style={{ fontSize: 8, color: 'var(--text-muted)' }}>Priority Developments</div>
           <div style={{ flex: 1 }} />
-          {slotBox('LEFT_RAIL_COMPACT', 'Compact')}
+          {slotBox('LEFT_RAIL_HALF_PAGE', 'Half Page')}
         </div>
-        {/* Map area */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', borderRadius: 4, color: 'var(--text-muted)', fontSize: 11 }}>
+        {/* Map area — spans 2 center columns */}
+        <div style={{ gridColumn: '2 / 4', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', borderRadius: 4, color: 'var(--text-muted)', fontSize: 11 }}>
           MAP AREA
         </div>
         {/* Right rail */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
-          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>RIGHT DASHBOARD</div>
+        <div style={{ gridRow: '1 / 3', display: 'flex', flexDirection: 'column', gap: 6, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>RIGHT RAIL</div>
+          <div style={{ fontSize: 8, color: 'var(--text-muted)' }}>Dashboard Summary</div>
           <div style={{ flex: 1 }} />
-          {slotBox('RIGHT_DASHBOARD_RECTANGLE', 'Sponsor')}
+          {slotBox('RIGHT_RAIL_HALF_PAGE', 'Half Page')}
         </div>
-        {/* Bottom bar */}
-        <div style={{ gridColumn: '2 / 4', display: 'flex', alignItems: 'center', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
-          {slotBox('BOTTOM_INTELLIGENCE_LEADERBOARD', 'Leaderboard')}
-          <div style={{ flex: 1, height: 16, background: 'var(--border-subtle)', borderRadius: 3 }} />
-          <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>News Feed</div>
-          <div style={{ flex: 1, height: 16, background: 'var(--border-subtle)', borderRadius: 3 }} />
+        {/* Bottom billboards — two side-by-side */}
+        <div style={{ display: 'flex', alignItems: 'center', padding: 8, border: '2px dashed #ed8936', borderRadius: 4, background: '#ed893610' }}>
+          {slotBox('BOTTOM_PRIMARY_BILLBOARD', 'Primary')}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', padding: 8, border: '2px dashed #e53e3e', borderRadius: 4, background: '#e53e3e10' }}>
+          {slotBox('BOTTOM_SECONDARY_BILLBOARD', 'Secondary')}
         </div>
       </div>
     </div>
@@ -821,7 +822,7 @@ function CampaignsTable({ ads, onUpdateAds }: { ads: SponsorAd[]; onUpdateAds: (
   const [newTagline, setNewTagline] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const [newSize, setNewSize] = useState<string>('standard');
-  const [newSlot, setNewSlot] = useState<PlacementId>('GLANCE_RAIL_FEATURED');
+  const [newSlot, setNewSlot] = useState<PlacementId>('LEFT_RAIL_HALF_PAGE');
 
   const toggleAd = (id: string) => {
     const updated = ads.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a);

@@ -18,14 +18,11 @@ export function LeftRail({ glanceContent }: LeftRailProps) {
         {showLayers ? (
           <Sidebar />
         ) : (
-          <>
-            {glanceContent}
-            <ManagedContentSlot slotKey="GLANCE_RAIL_FEATURED" />
-          </>
+          glanceContent
         )}
       </div>
-      <div className="left-rail-sponsors">
-        <ManagedContentSlot slotKey="LEFT_RAIL_COMPACT" />
+      <div className="left-rail-ad">
+        <ManagedContentSlot slotKey="LEFT_RAIL_HALF_PAGE" />
       </div>
     </div>
   );
