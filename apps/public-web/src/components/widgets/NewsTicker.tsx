@@ -84,7 +84,7 @@ export function NewsTicker() {
   const news = MOCK_NEWS.slice(0, expanded ? 12 : 4);
 
   return (
-    <div className={`bottom-zone-grid${expanded ? ' expanded' : ''}`}>
+    <div className={`bottom-zone-grid${expanded ? ' expanded' : ''}`} data-has-sponsor={bottomVisible}>
       <div className="bottom-infographics-panel">
         <LivePanel />
       </div>

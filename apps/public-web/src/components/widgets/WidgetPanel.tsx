@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useAppStore, type WidgetId } from '@/stores/app-store';
 import { MODULE_META, SEVERITY_META, VERIFICATION_META } from '../../data/mock-incidents';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
@@ -89,11 +89,15 @@ export function WidgetPanel() {
           </div>
           <div className="widget-zone-scroll">
             {rightWidgets.map((w) => (
-              <div key={w.id} className="widget-card">
-                <WidgetRenderer id={w.id} />
-              </div>
+              <React.Fragment key={w.id}>
+                <div className="widget-card">
+                  <WidgetRenderer id={w.id} />
+                </div>
+                {w.id === 'province_bar' && (
+                  <ManagedContentSlot slotKey="RIGHT_DASHBOARD_RECTANGLE" />
+                )}
+              </React.Fragment>
             ))}
-            <ManagedContentSlot slotKey="RIGHT_DASHBOARD_RECTANGLE" />
           </div>
         </div>
       )}

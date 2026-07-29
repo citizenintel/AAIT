@@ -297,8 +297,9 @@ function AdOverlay({ content, onClose }: { content: Extract<ResolvedContent, { t
 
 function SponsorFrame({ slotKey, children }: { slotKey: PlacementId; children: React.ReactNode }) {
   const def = getPlacementDefinition(slotKey);
-  const ratio = getAspectRatioCss(slotKey);
-  const maxW = def.referenceWidth;
+  const isBottom = slotKey === 'BOTTOM_INTELLIGENCE_LEADERBOARD';
+  const ratio = isBottom ? undefined : getAspectRatioCss(slotKey);
+  const maxW = isBottom ? undefined : def.referenceWidth;
 
   return (
     <div
@@ -307,6 +308,7 @@ function SponsorFrame({ slotKey, children }: { slotKey: PlacementId; children: R
       style={{
         position: 'relative',
         width: '100%',
+        height: isBottom ? '100%' : undefined,
         maxWidth: maxW,
         aspectRatio: ratio,
         minWidth: 0,
