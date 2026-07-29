@@ -5,7 +5,6 @@ import { useIncidentData } from '../../lib/hooks/useIncidentData';
 import { PieChart } from './PieChart';
 import { StatsBar } from './StatsBar';
 import { ProvinceBar } from './ProvinceBar';
-import { ManagedContentSlot } from './ManagedContentSlot';
 
 const SUMMARY_WIDGETS: WidgetId[] = ['stats_bar', 'severity_pie', 'module_pie', 'province_bar'];
 
@@ -64,9 +63,6 @@ export function WidgetPanel() {
             <WidgetRenderer id={w.id} />
           </div>
         ))}
-      </div>
-      <div className="right-rail-ad">
-        <ManagedContentSlot slotKey="RIGHT_RAIL_HALF_PAGE" />
       </div>
     </div>
   );

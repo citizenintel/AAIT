@@ -17,7 +17,7 @@ export function useResolvedContentSlot(slotKey: SlotKey) {
   const slotAssignments = useAppStore((s) => s.slotAssignments);
   const { campaigns } = useIncidentData();
 
-  const assignment = slotAssignments[slotKey] ?? { slotKey, assetId: null, campaignId: null, mode: 'auto' as const };
+  const assignment = slotAssignments[slotKey] ?? { slotKey, assetId: null, campaignId: null, mode: 'hidden' as const };
 
   return useMemo(() => resolveSlotContent({
     assignment: assignment as import('../../lib/content-slots').SlotAssignment,

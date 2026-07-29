@@ -252,6 +252,7 @@ interface AppStore {
   setEnabledInfographicTypes: (types: string[]) => void;
   slotAssignments: Record<string, { slotKey: string; assetId: string | null; campaignId: string | null; mode: string }>;
   setSlotMode: (slotKey: string, mode: string) => void;
+  setSlotCampaign: (slotKey: string, campaignId: string | null) => void;
 
   // --- Dismissed alerts (legacy) ---
   dismissedAlertIds: Record<string, true>;
@@ -542,6 +543,12 @@ export const useAppStore = create<AppStore>()(
     setSlotMode: (slotKey, mode) => set((s) => {
       if (s.slotAssignments[slotKey]) {
         s.slotAssignments[slotKey]!.mode = mode;
+        try { localStorage.setItem('aait_slot_assignments', JSON.stringify(s.slotAssignments)); } catch {}
+      }
+    }),
+    setSlotCampaign: (slotKey, campaignId) => set((s) => {
+      if (s.slotAssignments[slotKey]) {
+        s.slotAssignments[slotKey]!.campaignId = campaignId;
         try { localStorage.setItem('aait_slot_assignments', JSON.stringify(s.slotAssignments)); } catch {}
       }
     }),

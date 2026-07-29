@@ -1,10 +1,9 @@
 /* Widget zones — CSS Grid areas */
 
 .widget-panel-toggle.collapsed {
-  grid-area: right-rail;
-  align-self: start;
-  justify-self: end;
-  margin: 8px;
+  position: absolute;
+  top: 8px;
+  right: 8px;
   z-index: 20;
   background: var(--bg-surface);
   border: 1px solid var(--border);
@@ -17,12 +16,11 @@
 .widget-panel-toggle.collapsed:hover { background: var(--bg-hover); color: var(--accent); }
 
 .widget-zone-right {
-  grid-area: right-rail;
   background: var(--bg-surface);
-  border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: 100%;
 }
 
 .widget-zone-header {
@@ -61,14 +59,6 @@
   border-radius: var(--radius-md);
   padding: 12px;
   margin-bottom: 8px;
-}
-
-.right-rail-ad {
-  flex-shrink: 0;
-  flex-grow: 1;
-  min-height: 200px;
-  max-height: 50%;
-  border-top: 1px solid var(--border);
 }
 
 /* Stats bar */

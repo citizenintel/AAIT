@@ -13,6 +13,7 @@ export interface PlacementContext {
   campaigns: CampaignRow[];
   globalInfographicFallback: boolean;
   enabledInfographicTypes: string[];
+  assignedCampaignId?: string | null;
   emergencySuppression?: boolean;
   viewportWidth?: number;
 }
@@ -118,15 +119,23 @@ function resolveSponsor(
 
   if (eligible.length === 0) return null;
 
-  // §17 — Session-stable selection
-  const cached = sessionSelectionCache.get(slotId);
-  let selected = cached ? eligible.find(c => c.id === cached) : null;
+  // §13 — Manual assignment takes precedence
+  let selected: CampaignRow | undefined | null = null;
+  if (context.assignedCampaignId) {
+    selected = eligible.find(c => c.id === context.assignedCampaignId);
+  }
 
   if (!selected) {
-    // §17 — Select by priority (implicit from campaign order), then delivery weight
-    selected = eligible[0]!;
-    sessionSelectionCache.set(slotId, selected.id);
+    // §17 — Session-stable selection
+    const cached = sessionSelectionCache.get(slotId);
+    selected = cached ? eligible.find(c => c.id === cached) : null;
   }
+
+  if (!selected) {
+    selected = eligible[0]!;
+  }
+
+  sessionSelectionCache.set(slotId, selected.id);
 
   return {
     type: 'sponsor',
@@ -187,6 +196,7 @@ export function resolveSlotContent(input: ResolverInput): ResolvedContent {
       campaigns: input.campaigns,
       globalInfographicFallback: input.globalInfographicFallback,
       enabledInfographicTypes: input.enabledInfographicTypes,
+      assignedCampaignId: input.assignment.campaignId,
     },
     input.assignment.slotKey,
   );

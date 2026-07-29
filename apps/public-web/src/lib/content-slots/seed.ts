@@ -1,7 +1,11 @@
 import { ALL_PLACEMENT_IDS } from './registry';
 import { TEST_CREATIVE_URIS, TEST_CREATIVE_SPECS } from './test-creatives';
-import { saveAdminAds, saveCampaigns, type CampaignRow } from '../api/sponsors';
+import { saveAdminAds, getStoredAdminAds, saveCampaigns, type CampaignRow } from '../api/sponsors';
 import type { SponsorAd } from '../../data/mock-sponsors';
+
+const BACKUP_ADS_KEY = 'aait_backup_admin_ads';
+const BACKUP_CAMPAIGNS_KEY = 'aait_backup_campaigns';
+const BACKUP_ASSIGNMENTS_KEY = 'aait_backup_slot_assignments';
 
 function rollingDate(daysAgo: number): string {
   return new Date(Date.now() - daysAgo * 86400000).toISOString();
@@ -11,6 +15,20 @@ function rollingExpiry(daysFromNow: number): string {
 }
 
 export function seedTestData(): SponsorAd[] {
+  // §11 — save real data before overwriting
+  const existingAds = localStorage.getItem('aait_admin_ads');
+  const existingCampaigns = localStorage.getItem('aait_campaigns');
+  const existingAssignments = localStorage.getItem('aait_slot_assignments');
+  if (existingAds && !hasTestRecords(existingAds)) {
+    localStorage.setItem(BACKUP_ADS_KEY, existingAds);
+  }
+  if (existingCampaigns && !hasTestRecords(existingCampaigns)) {
+    localStorage.setItem(BACKUP_CAMPAIGNS_KEY, existingCampaigns);
+  }
+  if (existingAssignments) {
+    localStorage.setItem(BACKUP_ASSIGNMENTS_KEY, existingAssignments);
+  }
+
   const icons: SponsorAd['icon'][] = ['shield', 'farm', 'lock', 'web'];
   const ads: SponsorAd[] = TEST_CREATIVE_SPECS.map((spec, i) => ({
     id: `test-${spec.number}`,
@@ -54,21 +72,60 @@ export function seedTestData(): SponsorAd[] {
   }));
   saveCampaigns(campaigns);
 
+  const assignments: Record<string, { slotKey: string; assetId: string | null; campaignId: string | null; mode: string }> = {};
+  for (const spec of TEST_CREATIVE_SPECS) {
+    assignments[spec.placementId] = {
+      slotKey: spec.placementId,
+      assetId: null,
+      campaignId: `test-${spec.number}`,
+      mode: 'auto',
+    };
+  }
+  localStorage.setItem('aait_slot_assignments', JSON.stringify(assignments));
   localStorage.setItem('aait_sponsors_enabled', 'true');
 
   return ads;
 }
 
 export function clearTestData(): void {
-  localStorage.removeItem('aait_admin_ads');
-  localStorage.removeItem('aait_campaigns');
+  // §11 — restore real data if backed up, otherwise remove
+  const backupAds = localStorage.getItem(BACKUP_ADS_KEY);
+  const backupCampaigns = localStorage.getItem(BACKUP_CAMPAIGNS_KEY);
+  const backupAssignments = localStorage.getItem(BACKUP_ASSIGNMENTS_KEY);
+
+  if (backupAds) {
+    localStorage.setItem('aait_admin_ads', backupAds);
+    localStorage.removeItem(BACKUP_ADS_KEY);
+  } else {
+    localStorage.removeItem('aait_admin_ads');
+  }
+
+  if (backupCampaigns) {
+    localStorage.setItem('aait_campaigns', backupCampaigns);
+    localStorage.removeItem(BACKUP_CAMPAIGNS_KEY);
+  } else {
+    localStorage.removeItem('aait_campaigns');
+  }
+
+  if (backupAssignments) {
+    localStorage.setItem('aait_slot_assignments', backupAssignments);
+    localStorage.removeItem(BACKUP_ASSIGNMENTS_KEY);
+  } else {
+    localStorage.removeItem('aait_slot_assignments');
+  }
 }
 
 export function isTestDataSeeded(): boolean {
   try {
     const raw = localStorage.getItem('aait_admin_ads');
     if (!raw) return false;
-    const ads = JSON.parse(raw);
-    return Array.isArray(ads) && ads.some((a: { id?: string }) => a.id?.startsWith('test-'));
+    return hasTestRecords(raw);
+  } catch { return false; }
+}
+
+function hasTestRecords(json: string): boolean {
+  try {
+    const arr = JSON.parse(json);
+    return Array.isArray(arr) && arr.some((a: { id?: string }) => a.id?.startsWith('test-'));
   } catch { return false; }
 }

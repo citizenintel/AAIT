@@ -569,28 +569,43 @@ body {
   position: relative;
 }
 
-/* Glance: 4-column CSS Grid — §3
-   left-rail | map (spans 2 center cols) | right-rail
-   Bottom row: two side-by-side billboards in center columns
-   Health strip spans center columns below billboards */
-.glance-view {
+/* Glance: 6-area commercial layout — §2
+   Row 1: priority | map (spans 2) | dashboard
+   Row 2: left-ad | primary-ad | secondary-ad | right-ad
+   All 4 ad cells are explicit top-level grid areas. */
+.glance-commercial-layout {
   display: grid;
-  grid-template-columns: var(--left-rail-width) minmax(0, 1.4fr) minmax(0, 1fr) var(--right-rail-width);
-  grid-template-rows: minmax(0, 1fr) clamp(190px, 32vh, 280px) auto;
+  grid-template-columns:
+    var(--left-rail-width)
+    minmax(0, 1.4fr)
+    minmax(0, 1fr)
+    var(--right-rail-width);
+  grid-template-rows:
+    minmax(0, 1fr)
+    clamp(180px, 26vh, 250px);
   grid-template-areas:
-    "left-rail  map              map               right-rail"
-    "left-rail  bottom-primary   bottom-secondary   right-rail"
-    "left-rail  health           health             right-rail";
+    "priority    map          map            dashboard"
+    "left-ad     primary-ad   secondary-ad   right-ad";
+  width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
-/* Left rail — priorities above, ad below */
+.glance-priority {
+  grid-area: priority;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+}
+
+/* Left rail — scrollable content, no embedded ad */
 .left-rail {
-  grid-area: left-rail;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--border);
+  height: 100%;
   overflow: hidden;
 }
 
@@ -604,38 +619,83 @@ body {
   min-height: 0;
 }
 
-.left-rail-ad {
-  flex-shrink: 0;
-  flex-grow: 1;
-  min-height: 200px;
-  max-height: 50%;
-  border-top: 1px solid var(--border);
-}
-
 .glance-map {
   grid-area: map;
   position: relative;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
-.glance-bottom-primary {
-  grid-area: bottom-primary;
+.glance-dashboard-summary {
+  grid-area: dashboard;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+}
+
+.glance-ad-left,
+.glance-ad-primary,
+.glance-ad-secondary,
+.glance-ad-right {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.glance-ad-left {
+  grid-area: left-ad;
   border-top: 1px solid var(--border);
-  overflow: hidden;
+  border-right: 1px solid var(--border);
 }
 
-.glance-bottom-secondary {
-  grid-area: bottom-secondary;
+.glance-ad-primary {
+  grid-area: primary-ad;
+  border-top: 1px solid var(--border);
+}
+
+.glance-ad-secondary {
+  grid-area: secondary-ad;
   border-top: 1px solid var(--border);
   border-left: 1px solid var(--border);
-  overflow: hidden;
 }
 
-.glance-health {
-  grid-area: health;
+.glance-ad-right {
+  grid-area: right-ad;
   border-top: 1px solid var(--border);
-  background: var(--surface-1);
-  padding: var(--sp-2) var(--sp-4);
+  border-left: 1px solid var(--border);
+}
+
+/* Full-cell creative rendering — §8 */
+[data-sponsor-slot] {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+[data-sponsor-slot] .sponsor-frame {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+}
+
+[data-sponsor-slot] .sponsor-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 
 /* Investigate: map fills space, right panel, bottom bar */
@@ -831,66 +891,7 @@ body {
   background: rgba(249, 115, 22, 0.1);
 }
 
-/* ---------------------------------------------------------------------------
-   Province health strip
-   --------------------------------------------------------------------------- */
-
-.province-strip {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  overflow-x: auto;
-}
-
-.province-indicator {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  flex-shrink: 0;
-}
-
-.province-abbr {
-  font-size: 10px;
-  font-family: var(--font-mono);
-  font-weight: 600;
-  color: var(--text-tertiary);
-}
-
-.province-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-
-/* ---------------------------------------------------------------------------
-   Data freshness strip
-   --------------------------------------------------------------------------- */
-
-.data-freshness {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  margin-top: var(--sp-2);
-}
-
-.source-health-dot {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  font-size: 10px;
-  color: var(--text-tertiary);
-}
-
-.source-health-dot::before {
-  content: '';
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-}
-
-.source-health-dot[data-health="healthy"]::before { background: var(--status-low); }
-.source-health-dot[data-health="degraded"]::before { background: var(--status-medium); }
-.source-health-dot[data-health="down"]::before { background: var(--status-critical); }
+/* Province/source health moved to admin diagnostics — §4 */
 
 /* ---------------------------------------------------------------------------
    Investigate panel tabs
@@ -1417,19 +1418,26 @@ body {
    --------------------------------------------------------------------------- */
 
 @media (max-width: 768px) {
-  .glance-view {
+  .glance-commercial-layout {
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto auto;
+    grid-template-rows: 1fr auto;
     grid-template-areas:
       "map"
-      "left-rail"
-      "health";
+      "priority";
   }
 
-  .left-rail {
+  .glance-priority {
     border-right: none;
     border-top: 1px solid var(--border);
     max-height: 40vh;
+  }
+
+  .glance-dashboard-summary,
+  .glance-ad-left,
+  .glance-ad-primary,
+  .glance-ad-secondary,
+  .glance-ad-right {
+    display: none;
   }
 
   .glance-priorities {

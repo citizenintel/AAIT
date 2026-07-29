@@ -1,6 +1,5 @@
 import { useAppStore } from '@/stores/app-store';
 import { Sidebar } from '@/components/Sidebar';
-import { ManagedContentSlot } from '@/components/widgets/ManagedContentSlot';
 import type { ReactNode } from 'react';
 
 interface LeftRailProps {
@@ -20,9 +19,6 @@ export function LeftRail({ glanceContent }: LeftRailProps) {
         ) : (
           glanceContent
         )}
-      </div>
-      <div className="left-rail-ad">
-        <ManagedContentSlot slotKey="LEFT_RAIL_HALF_PAGE" />
       </div>
     </div>
   );

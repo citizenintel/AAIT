@@ -127,6 +127,7 @@ function getPublicResult(
   slotMode: string,
   globalInfographicFallback: boolean,
   enabledInfographicTypes: string[],
+  assignedCampaignId?: string | null,
 ): { label: string; detail: string; color: string } {
   const mode = normalizeLegacyMode(slotMode);
   const campaigns: CampaignRow[] = ads
@@ -144,6 +145,7 @@ function getPublicResult(
     campaigns,
     globalInfographicFallback,
     enabledInfographicTypes,
+    assignedCampaignId,
   };
   const resolved = resolvePublicPlacement(ctx, placementId);
 
@@ -207,12 +209,13 @@ function PlacementDrawer({
   const globalInfographicFallback = useAppStore(s => s.globalInfographicFallback);
   const enabledInfographicTypes = useAppStore(s => s.enabledInfographicTypes);
   const setSlotMode = useAppStore(s => s.setSlotMode);
+  const setSlotCampaign = useAppStore(s => s.setSlotCampaign);
   const assignment = slotAssignments[placementId];
   const mode = normalizeLegacyMode(assignment?.mode ?? 'auto');
 
   const campaign = ads.find(a => a.slot === placementId && a.enabled && getStatus(a) === 'active');
   const allForSlot = ads.filter(a => a.slot === placementId);
-  const result = getPublicResult(placementId, ads, sponsorsEnabled, mode, globalInfographicFallback, enabledInfographicTypes);
+  const result = getPublicResult(placementId, ads, sponsorsEnabled, mode, globalInfographicFallback, enabledInfographicTypes, assignment?.campaignId);
 
   const [assigning, setAssigning] = useState(false);
   const [assignCampaignId, setAssignCampaignId] = useState('');
@@ -228,12 +231,15 @@ function PlacementDrawer({
   const handleAssignExisting = (campaignId: string) => {
     const updated = ads.map(a => a.id === campaignId ? { ...a, slot: placementId } : a);
     onUpdateAds(updated);
+    setSlotCampaign(placementId, campaignId);
+    setSlotMode(placementId, 'paid_ad');
     setAssigning(false);
   };
 
   const handleClearAssignment = () => {
     const updated = ads.map(a => a.slot === placementId ? { ...a, enabled: false } : a);
     onUpdateAds(updated);
+    setSlotCampaign(placementId, null);
   };
 
   const handleAssignImage = (imageData: string) => {
@@ -496,7 +502,7 @@ function DrawerBackdrop({ onClick }: { onClick: () => void }) {
 // Placement Map — clickable wireframe
 // ---------------------------------------------------------------------------
 
-function PlacementMap({ ads, onSelectPlacement }: { ads: SponsorAd[]; onSelectPlacement: (id: PlacementId) => void }) {
+function PlacementMap({ ads, onSelectPlacement, onDropCampaign }: { ads: SponsorAd[]; onSelectPlacement: (id: PlacementId) => void; onDropCampaign?: (campaignId: string, placementId: PlacementId) => void }) {
   const slotAssignments = useAppStore(s => s.slotAssignments);
   const sponsorsEnabled = useAppStore(s => s.sponsorsEnabled);
   const globalInfographicFallback = useAppStore(s => s.globalInfographicFallback);
@@ -505,14 +511,10 @@ function PlacementMap({ ads, onSelectPlacement }: { ads: SponsorAd[]; onSelectPl
   function slotStatus(id: PlacementId): 'active' | 'creative-required' | 'empty' | 'hidden' {
     const assignment = slotAssignments[id];
     const mode = normalizeLegacyMode(assignment?.mode ?? 'auto');
-    if (mode === 'disabled') return 'hidden';
-    if (!sponsorsEnabled && mode !== 'fallback_only') return 'hidden';
-    const campaign = ads.find(a => a.slot === id && a.enabled);
-    if (campaign && getStatus(campaign) === 'active') {
-      const def = PLACEMENT_REGISTRY.find(p => p.id === id);
-      if (!def?.allowsTextCard && !campaign.imageUrl) return 'creative-required';
-      return 'active';
-    }
+    const result = getPublicResult(id, ads, sponsorsEnabled, mode, globalInfographicFallback, enabledInfographicTypes, assignment?.campaignId);
+    if (result.label === 'VISIBLE') return 'active';
+    if (result.label === 'CREATIVE REQUIRED') return 'creative-required';
+    if (result.label === 'DISABLED' || result.label === 'NOT VISIBLE') return 'hidden';
     return 'empty';
   }
 
@@ -537,9 +539,31 @@ function PlacementMap({ ads, onSelectPlacement }: { ads: SponsorAd[]; onSelectPl
     const campaign = ads.find(a => a.slot === id && a.enabled && getStatus(a) === 'active');
     const hasValidCreative = !!(campaign?.imageUrl);
 
+    const handleDragOver = (e: React.DragEvent) => {
+      if (e.dataTransfer.types.includes('application/x-campaign-id')) {
+        e.preventDefault();
+        e.currentTarget.style.borderColor = '#c9a84c';
+        e.currentTarget.style.borderStyle = 'dashed';
+      }
+    };
+    const handleDragLeave = (e: React.DragEvent) => {
+      e.currentTarget.style.borderColor = color;
+      e.currentTarget.style.borderStyle = 'solid';
+    };
+    const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.currentTarget.style.borderColor = color;
+      e.currentTarget.style.borderStyle = 'solid';
+      const campaignId = e.dataTransfer.getData('application/x-campaign-id');
+      if (campaignId && onDropCampaign) onDropCampaign(campaignId, id);
+    };
+
     return (
       <button
         onClick={() => onSelectPlacement(id)}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         style={{
           gridArea: def.previewArea,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -549,7 +573,7 @@ function PlacementMap({ ads, onSelectPlacement }: { ads: SponsorAd[]; onSelectPl
         }}
         onMouseEnter={e => { e.currentTarget.style.borderColor = '#c9a84c'; }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = color; }}
-        title={`Click to manage: ${def.publicLabel}`}
+        title={`Click to manage — or drag a campaign here`}
       >
         {hasValidCreative ? (
           <img src={campaign!.imageUrl} alt={campaign!.name} style={{
@@ -574,7 +598,7 @@ function PlacementMap({ ads, onSelectPlacement }: { ads: SponsorAd[]; onSelectPl
     <div className="admin-card" style={{ marginBottom: 24, padding: 20 }}>
       <h2 style={{ margin: '0 0 12px', fontSize: 14 }}>Placement Map</h2>
       <p style={{ margin: '0 0 12px', fontSize: 10, color: 'var(--text-muted)' }}>
-        Click any placement to manage it. Layout matches the public frontend.
+        Click any placement to manage it, or drag a campaign row here. Layout matches the public frontend.
       </p>
       <div className="placement-preview" style={{
         display: 'grid',
@@ -646,7 +670,7 @@ function SlotCard({ placementId, ads, onSelect }: { placementId: PlacementId; ad
   const mode = normalizeLegacyMode(rawMode);
   const campaign = ads.find(a => a.slot === placementId && a.enabled);
   const status = campaign ? getStatus(campaign) : null;
-  const result = getPublicResult(placementId, ads, sponsorsEnabled, mode, globalInfographicFallback, enabledInfographicTypes);
+  const result = getPublicResult(placementId, ads, sponsorsEnabled, mode, globalInfographicFallback, enabledInfographicTypes, assignment?.campaignId);
 
   return (
     <div className="admin-card" style={{ padding: 14, cursor: 'pointer', transition: 'border-color 0.15s' }} onClick={onSelect}>
@@ -960,7 +984,12 @@ function CampaignsTable({ ads, onUpdateAds }: { ads: SponsorAd[]; onUpdateAds: (
               const style = STATUS_STYLES[status]!;
               const publicResult = getCampaignPublicResult(ad);
               return (
-                <tr key={ad.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <tr
+                  key={ad.id}
+                  draggable
+                  onDragStart={e => { e.dataTransfer.setData('application/x-campaign-id', ad.id); e.dataTransfer.effectAllowed = 'move'; }}
+                  style={{ borderBottom: '1px solid var(--border-subtle)', cursor: 'grab' }}
+                >
                   <td style={{ padding: '8px 6px' }}>
                     <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{ad.name}</div>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{ad.tagline}</div>
@@ -1089,7 +1118,16 @@ export function AdminSponsors() {
   const storage = useMemo(() => getStorageUsage(), []);
 
   const { ads, updateAds } = useAdminAds();
+  const setSlotMode = useAppStore(s => s.setSlotMode);
+  const setSlotCampaign = useAppStore(s => s.setSlotCampaign);
   const [drawerPlacement, setDrawerPlacement] = useState<PlacementId | null>(null);
+
+  const handleDropCampaign = useCallback((campaignId: string, placementId: PlacementId) => {
+    const updated = ads.map(a => a.id === campaignId ? { ...a, slot: placementId } : a);
+    updateAds(updated);
+    setSlotCampaign(placementId, campaignId);
+    setSlotMode(placementId, 'paid_ad');
+  }, [ads, updateAds, setSlotCampaign, setSlotMode]);
 
   const occupiedCount = ALL_PLACEMENT_IDS.filter(id => {
     const campaign = ads.find(a => a.slot === id && a.enabled);
@@ -1127,7 +1165,7 @@ export function AdminSponsors() {
 
       {/* Placement Map + Slot Cards side by side */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
-        <PlacementMap ads={ads} onSelectPlacement={setDrawerPlacement} />
+        <PlacementMap ads={ads} onSelectPlacement={setDrawerPlacement} onDropCampaign={handleDropCampaign} />
         <div>
           <h2 style={{ margin: '0 0 12px', fontSize: 14 }}>Placement Controls</h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
