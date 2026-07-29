@@ -449,7 +449,7 @@ export function ManagedContentSlot({ slotKey, resolved: preResolved }: { slotKey
   }
 
   return (
-    <div data-sponsor-slot={slotKey} data-render-type={renderType} data-visibility="visible">
+    <div data-sponsor-slot={slotKey} data-render-type={renderType} data-visibility="visible" style={{ width: '100%', height: '100%' }}>
       {inner}
     </div>
   );

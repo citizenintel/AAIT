@@ -78,7 +78,7 @@ function RecentActivity() {
 
 export function NewsTicker() {
   const [expanded, setExpanded] = useState(false);
-  const bottomSlot = useResolvedContentSlot('BOTTOM_INTELLIGENCE_LEADERBOARD');
+  const bottomSlot = useResolvedContentSlot('BOTTOM_PRIMARY_BILLBOARD');
   const bottomVisible = bottomSlot.type !== 'hidden';
 
   const news = MOCK_NEWS.slice(0, expanded ? 12 : 4);
@@ -90,7 +90,7 @@ export function NewsTicker() {
       </div>
       {bottomVisible && (
         <div className="bottom-ad-panel">
-          <ManagedContentSlot slotKey="BOTTOM_INTELLIGENCE_LEADERBOARD" resolved={bottomSlot} />
+          <ManagedContentSlot slotKey="BOTTOM_PRIMARY_BILLBOARD" resolved={bottomSlot} />
         </div>
       )}
 

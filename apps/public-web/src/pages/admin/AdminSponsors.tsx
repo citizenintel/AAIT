@@ -329,7 +329,7 @@ function PlacementDrawer({
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{campaign.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{campaign.tagline}</div>
                 </div>
-                <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 3, background: STATUS_STYLES.active.bg, color: STATUS_STYLES.active.color, textTransform: 'uppercase' }}>
+                <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 3, background: STATUS_STYLES.active?.bg, color: STATUS_STYLES.active?.color, textTransform: 'uppercase' }}>
                   {getStatus(campaign)}
                 </span>
               </div>
