@@ -10,6 +10,9 @@ export const PLACEMENT_REGISTRY: PlacementDefinition[] = [
     aspectRatio: '1:2',
     placementGroup: 'left_rail',
     defaultFitMode: 'cover',
+    allowsTextCard: false,
+    previewArea: 'left-ad',
+    creativeFamily: 'portrait-half-page',
   },
   {
     id: 'BOTTOM_PRIMARY_BILLBOARD',
@@ -19,6 +22,9 @@ export const PLACEMENT_REGISTRY: PlacementDefinition[] = [
     aspectRatio: '97:25',
     placementGroup: 'bottom',
     defaultFitMode: 'cover',
+    allowsTextCard: false,
+    previewArea: 'primary',
+    creativeFamily: 'landscape-billboard',
   },
   {
     id: 'BOTTOM_SECONDARY_BILLBOARD',
@@ -28,6 +34,9 @@ export const PLACEMENT_REGISTRY: PlacementDefinition[] = [
     aspectRatio: '364:125',
     placementGroup: 'bottom',
     defaultFitMode: 'cover',
+    allowsTextCard: false,
+    previewArea: 'secondary',
+    creativeFamily: 'landscape-billboard',
   },
   {
     id: 'RIGHT_RAIL_HALF_PAGE',
@@ -37,6 +46,9 @@ export const PLACEMENT_REGISTRY: PlacementDefinition[] = [
     aspectRatio: '1:2',
     placementGroup: 'right_rail',
     defaultFitMode: 'cover',
+    allowsTextCard: false,
+    previewArea: 'right-ad',
+    creativeFamily: 'portrait-half-page',
   },
 ];
 

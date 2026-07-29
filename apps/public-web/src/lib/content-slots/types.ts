@@ -52,6 +52,9 @@ export interface PlacementDefinition {
   aspectRatio: AspectRatio;
   placementGroup: string | null;
   defaultFitMode: FitMode;
+  allowsTextCard: boolean;
+  previewArea: string;
+  creativeFamily: string;
 }
 
 // Legacy alias

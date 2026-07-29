@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { saveAdminAds, getStoredAdminAds, saveCampaigns, createMockCampaign, type CampaignRow } from '@/lib/api/sponsors';
 import {
@@ -148,6 +148,10 @@ function getPublicResult(
   const resolved = resolvePublicPlacement(ctx, placementId);
 
   if (resolved.type === 'sponsor') {
+    const placementDef = PLACEMENT_REGISTRY.find(p => p.id === placementId);
+    if (!placementDef?.allowsTextCard && !resolved.imageUrl) {
+      return { label: 'CREATIVE REQUIRED', detail: `${resolved.displayName} — compatible ${placementDef?.referenceWidth}×${placementDef?.referenceHeight} creative needed`, color: '#d69e2e' };
+    }
     return { label: 'VISIBLE', detail: resolved.displayName, color: '#38a169' };
   }
   if (resolved.type === 'infographic') {
@@ -280,25 +284,39 @@ function PlacementDrawer({
               <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{def.referenceWidth}×{def.referenceHeight}</div>
             </div>
             <div style={{ padding: '8px 10px', background: 'var(--bg-base)', borderRadius: 4, border: '1px solid var(--border-subtle)' }}>
-              <div style={{ color: 'var(--text-muted)', fontSize: 9, marginBottom: 2 }}>ASPECT RATIO</div>
-              <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{def.aspectRatio}</div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 9, marginBottom: 2 }}>CREATIVE FAMILY</div>
+              <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{def.creativeFamily}</div>
             </div>
             <div style={{ padding: '8px 10px', background: 'var(--bg-base)', borderRadius: 4, border: '1px solid var(--border-subtle)' }}>
               <div style={{ color: 'var(--text-muted)', fontSize: 9, marginBottom: 2 }}>FIT MODE</div>
               <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{def.defaultFitMode}</div>
             </div>
             <div style={{ padding: '8px 10px', background: 'var(--bg-base)', borderRadius: 4, border: '1px solid var(--border-subtle)' }}>
-              <div style={{ color: 'var(--text-muted)', fontSize: 9, marginBottom: 2 }}>GROUP</div>
-              <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{def.placementGroup ?? 'None'}</div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 9, marginBottom: 2 }}>TEXT CARD</div>
+              <div style={{ color: def.allowsTextCard ? '#38a169' : '#d69e2e', fontWeight: 600 }}>
+                {def.allowsTextCard ? 'Allowed' : 'Image required'}
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Creative compatibility warning */}
+        {campaign && !campaign.imageUrl && !def.allowsTextCard && (
+          <div style={{ padding: '10px 14px', background: '#d69e2e12', border: '1px solid #d69e2e40', borderRadius: 8, marginBottom: 16 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#d69e2e', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+              Creative Required
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+              This placement requires a {def.referenceWidth}×{def.referenceHeight} ({def.creativeFamily}) image creative. Text-only cards are not supported. Upload or assign a creative to make this campaign visible.
+            </div>
+          </div>
+        )}
 
         {/* Placement mode */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Placement Mode</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {MODE_OPTIONS.map(m => (
+            {MODE_OPTIONS.filter(m => m !== 'fallback_only' || def.allowsTextCard).map(m => (
               <label key={m} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: mode === m ? '#c9a84c12' : 'var(--bg-base)', border: `1px solid ${mode === m ? '#c9a84c40' : 'var(--border-subtle)'}`, borderRadius: 6, cursor: 'pointer' }}>
                 <input
                   type="radio"
@@ -484,53 +502,70 @@ function PlacementMap({ ads, onSelectPlacement }: { ads: SponsorAd[]; onSelectPl
   const globalInfographicFallback = useAppStore(s => s.globalInfographicFallback);
   const enabledInfographicTypes = useAppStore(s => s.enabledInfographicTypes);
 
-  function slotStatus(id: PlacementId): 'active' | 'empty' | 'hidden' | 'fallback' {
+  function slotStatus(id: PlacementId): 'active' | 'creative-required' | 'empty' | 'hidden' {
     const assignment = slotAssignments[id];
     const mode = normalizeLegacyMode(assignment?.mode ?? 'auto');
     if (mode === 'disabled') return 'hidden';
     if (!sponsorsEnabled && mode !== 'fallback_only') return 'hidden';
     const campaign = ads.find(a => a.slot === id && a.enabled);
-    if (campaign && getStatus(campaign) === 'active') return 'active';
-    if (globalInfographicFallback || mode === 'fallback_only') return 'fallback';
+    if (campaign && getStatus(campaign) === 'active') {
+      const def = PLACEMENT_REGISTRY.find(p => p.id === id);
+      if (!def?.allowsTextCard && !campaign.imageUrl) return 'creative-required';
+      return 'active';
+    }
     return 'empty';
   }
 
   const statusColor = (s: string) => {
     if (s === 'active') return '#38a169';
     if (s === 'hidden') return '#636366';
-    if (s === 'fallback') return '#4299e1';
-    return '#d69e2e';
+    if (s === 'creative-required') return '#d69e2e';
+    return '#64748b';
   };
 
-  const slotBox = (id: PlacementId, label: string) => {
+  const statusLabel = (s: string) => {
+    if (s === 'active') return 'ACTIVE';
+    if (s === 'hidden') return 'DISABLED';
+    if (s === 'creative-required') return 'CREATIVE REQUIRED';
+    return 'EMPTY';
+  };
+
+  const renderPlacementZone = (id: PlacementId) => {
+    const def = PLACEMENT_REGISTRY.find(p => p.id === id)!;
     const s = slotStatus(id);
     const color = statusColor(s);
     const campaign = ads.find(a => a.slot === id && a.enabled && getStatus(a) === 'active');
+    const hasValidCreative = !!(campaign?.imageUrl);
 
     return (
       <button
         onClick={() => onSelectPlacement(id)}
         style={{
-          padding: '6px 10px', border: `2px solid ${color}`, borderRadius: 4,
-          background: `${color}18`, fontSize: 9, fontWeight: 700, color,
-          textAlign: 'center', whiteSpace: 'nowrap', cursor: 'pointer',
-          transition: 'all 0.15s', minWidth: 0,
+          gridArea: def.previewArea,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 4, padding: 6, border: `2px solid ${color}`, borderRadius: 4,
+          background: `${color}12`, cursor: 'pointer', transition: 'border-color 0.15s',
+          overflow: 'hidden', minWidth: 0, minHeight: 0,
         }}
-        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderWidth = '3px'; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderWidth = '2px'; }}
-        title={`Click to manage ${PLACEMENT_LABELS[id]}`}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = '#c9a84c'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = color; }}
+        title={`Click to manage: ${def.publicLabel}`}
       >
-        {campaign ? (
-          <>
-            {campaign.imageUrl ? (
-              <img src={campaign.imageUrl} alt="" style={{ width: '100%', maxHeight: 40, objectFit: 'contain', borderRadius: 2, marginBottom: 3 }} />
-            ) : null}
-            <div>{campaign.name}</div>
-          </>
-        ) : (
-          label
-        )}
-        <div style={{ fontSize: 7, fontWeight: 400, opacity: 0.8, marginTop: 2, textTransform: 'uppercase' }}>{s}</div>
+        {hasValidCreative ? (
+          <img src={campaign!.imageUrl} alt={campaign!.name} style={{
+            width: '100%', flex: 1, minHeight: 0, objectFit: 'contain',
+            borderRadius: 2, background: '#0a0f1a',
+          }} />
+        ) : null}
+        <div style={{ fontSize: 8, fontWeight: 700, color, textAlign: 'center', lineHeight: 1.2 }}>
+          {campaign ? campaign.name : def.publicLabel.split('—')[1]?.trim() || def.publicLabel}
+        </div>
+        <div style={{
+          fontSize: 7, fontWeight: 700, padding: '1px 6px', borderRadius: 2,
+          background: `${color}22`, color, textTransform: 'uppercase', letterSpacing: '0.04em',
+        }}>
+          {statusLabel(s)}
+        </div>
       </button>
     );
   };
@@ -538,33 +573,58 @@ function PlacementMap({ ads, onSelectPlacement }: { ads: SponsorAd[]; onSelectPl
   return (
     <div className="admin-card" style={{ marginBottom: 24, padding: 20 }}>
       <h2 style={{ margin: '0 0 12px', fontSize: 14 }}>Placement Map</h2>
-      <p style={{ margin: '0 0 12px', fontSize: 10, color: 'var(--text-muted)' }}>Click any placement to manage it</p>
-      <div style={{ display: 'grid', gridTemplateColumns: '160px 1.4fr 1fr 120px', gridTemplateRows: '1fr 80px', gap: 8, height: 240, background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)', padding: 12 }}>
-        {/* Left rail */}
-        <div style={{ gridRow: '1 / 3', display: 'flex', flexDirection: 'column', gap: 8, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
-          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>LEFT RAIL</div>
-          <div style={{ fontSize: 8, color: 'var(--text-muted)' }}>Priority Developments</div>
-          <div style={{ flex: 1 }} />
-          {slotBox('LEFT_RAIL_HALF_PAGE', 'Half Page')}
+      <p style={{ margin: '0 0 12px', fontSize: 10, color: 'var(--text-muted)' }}>
+        Click any placement to manage it. Layout matches the public frontend.
+      </p>
+      <div className="placement-preview" style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(100px, 0.7fr) minmax(220px, 1.7fr) minmax(180px, 1.2fr) minmax(100px, 0.7fr)',
+        gridTemplateRows: 'minmax(130px, 1fr) minmax(90px, 0.55fr)',
+        gridTemplateAreas: `
+          "left-top   map       map        right-top"
+          "left-ad    primary   secondary  right-ad"
+        `,
+        width: '100%', aspectRatio: '16 / 8', gap: 4,
+        background: 'var(--bg-base)', borderRadius: 8,
+        border: '1px solid var(--border-subtle)', padding: 8,
+      }}>
+        {/* Top-left: label area above left ad */}
+        <div style={{
+          gridArea: 'left-top', display: 'flex', flexDirection: 'column',
+          justifyContent: 'center', alignItems: 'center', padding: 8,
+          border: '1px dashed var(--border)', borderRadius: 4,
+          fontSize: 8, color: 'var(--text-muted)', textAlign: 'center',
+        }}>
+          <div style={{ fontWeight: 700, fontSize: 9, marginBottom: 4 }}>LEFT RAIL</div>
+          <div>Priority Developments</div>
         </div>
-        {/* Map area — spans 2 center columns */}
-        <div style={{ gridColumn: '2 / 4', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', borderRadius: 4, color: 'var(--text-muted)', fontSize: 11 }}>
+
+        {/* Map area — spans two center columns, top row */}
+        <div style={{
+          gridArea: 'map', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: '1px dashed var(--border)', borderRadius: 4,
+          color: 'var(--text-muted)', fontSize: 11, fontWeight: 600,
+        }}>
           MAP AREA
         </div>
-        {/* Right rail */}
-        <div style={{ gridRow: '1 / 3', display: 'flex', flexDirection: 'column', gap: 6, padding: 8, border: '1px dashed var(--border)', borderRadius: 4 }}>
-          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>RIGHT RAIL</div>
-          <div style={{ fontSize: 8, color: 'var(--text-muted)' }}>Dashboard Summary</div>
-          <div style={{ flex: 1 }} />
-          {slotBox('RIGHT_RAIL_HALF_PAGE', 'Half Page')}
+
+        {/* Top-right: label area above right ad */}
+        <div style={{
+          gridArea: 'right-top', display: 'flex', flexDirection: 'column',
+          justifyContent: 'center', alignItems: 'center', padding: 8,
+          border: '1px dashed var(--border)', borderRadius: 4,
+          fontSize: 8, color: 'var(--text-muted)', textAlign: 'center',
+        }}>
+          <div style={{ fontWeight: 700, fontSize: 9, marginBottom: 4 }}>RIGHT RAIL</div>
+          <div>Dashboard Summary</div>
         </div>
-        {/* Bottom billboards — two side-by-side */}
-        <div style={{ display: 'flex', alignItems: 'center', padding: 8, border: '2px dashed #ed8936', borderRadius: 4, background: '#ed893610' }}>
-          {slotBox('BOTTOM_PRIMARY_BILLBOARD', 'Primary')}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', padding: 8, border: '2px dashed #e53e3e', borderRadius: 4, background: '#e53e3e10' }}>
-          {slotBox('BOTTOM_SECONDARY_BILLBOARD', 'Secondary')}
-        </div>
+
+        {/* Four ad placements — driven from registry */}
+        {PLACEMENT_REGISTRY.map(def => (
+          <React.Fragment key={def.id}>
+            {renderPlacementZone(def.id)}
+          </React.Fragment>
+        ))}
       </div>
     </div>
   );
@@ -621,7 +681,7 @@ function SlotCard({ placementId, ads, onSelect }: { placementId: PlacementId; ad
           onClick={e => e.stopPropagation()}
           style={{ fontSize: 11, padding: '2px 6px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)', cursor: 'pointer' }}
         >
-          {MODE_OPTIONS.map(m => <option key={m} value={m}>{MODE_LABELS[m]}</option>)}
+          {MODE_OPTIONS.filter(m => m !== 'fallback_only' || def.allowsTextCard).map(m => <option key={m} value={m}>{MODE_LABELS[m]}</option>)}
         </select>
       </div>
 
@@ -764,46 +824,21 @@ function AssetLibrary({ ads, onUpdateAds }: { ads: SponsorAd[]; onUpdateAds: (ad
 // ---------------------------------------------------------------------------
 
 function InfographicControls() {
-  const globalFallback = useAppStore(s => s.globalInfographicFallback);
-  const setGlobalFallback = useAppStore(s => s.setGlobalInfographicFallback);
-  const types = useAppStore(s => s.enabledInfographicTypes);
-  const setTypes = useAppStore(s => s.setEnabledInfographicTypes);
-
-  const toggleType = (type: string) => {
-    if (types.includes(type)) {
-      setTypes(types.filter(t => t !== type));
-    } else {
-      setTypes([...types, type]);
-    }
-  };
+  const hasTextCardPlacements = PLACEMENT_REGISTRY.some(p => p.allowsTextCard);
 
   return (
-    <div className="admin-card" style={{ marginBottom: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+    <div className="admin-card" style={{ marginBottom: 24, opacity: hasTextCardPlacements ? 1 : 0.6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ margin: 0 }}>Platform Fallback Content</h2>
           <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-            When enabled, empty slots show data visualisations instead of hiding.
+            {hasTextCardPlacements
+              ? 'When enabled, empty slots show data visualisations instead of hiding.'
+              : 'Not available — all placements require full-size image creatives.'}
           </p>
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-          <span style={{ fontSize: 11, color: globalFallback ? '#38a169' : 'var(--text-muted)', fontWeight: 600 }}>
-            {globalFallback ? 'ON' : 'OFF'}
-          </span>
-          <input type="checkbox" checked={globalFallback} onChange={e => setGlobalFallback(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
-        </label>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>N/A</span>
       </div>
-
-      {globalFallback && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
-          {Object.entries(INFOGRAPHIC_LABELS).map(([key, label]) => (
-            <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px 8px', background: types.includes(key) ? '#c9a84c10' : 'transparent', borderRadius: 4, border: `1px solid ${types.includes(key) ? '#c9a84c40' : 'var(--border-subtle)'}` }}>
-              <input type="checkbox" checked={types.includes(key)} onChange={() => toggleType(key)} style={{ width: 13, height: 13 }} />
-              {label}
-            </label>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -865,6 +900,10 @@ function CampaignsTable({ ads, onUpdateAds }: { ads: SponsorAd[]; onUpdateAds: (
     const assignment = slotAssignments[ad.slot];
     const mode = normalizeLegacyMode(assignment?.mode ?? 'auto');
     if (mode === 'disabled') return { label: 'NOT VISIBLE — Placement disabled', color: '#636366' };
+    const def = PLACEMENT_REGISTRY.find(p => p.id === ad.slot);
+    if (def && !def.allowsTextCard && !ad.imageUrl) {
+      return { label: `CREATIVE REQUIRED — ${def.referenceWidth}×${def.referenceHeight}`, color: '#d69e2e' };
+    }
     return { label: 'VISIBLE', color: '#38a169' };
   }
 

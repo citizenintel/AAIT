@@ -358,7 +358,35 @@ function SponsorIcon({ icon, color, size = 28 }: { icon: string; color: string; 
   }
 }
 
+function ReservedState({ slotKey }: { slotKey: PlacementId }) {
+  const def = getPlacementDefinition(slotKey);
+  return (
+    <SponsorFrame slotKey={slotKey}>
+      <div style={{
+        width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 6,
+        background: '#0d1117', color: '#4a5568',
+      }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b' }}>
+          Advertising Space
+        </div>
+        <div style={{ fontSize: 9, color: '#475569' }}>
+          {def.publicLabel}
+        </div>
+        <div style={{ fontSize: 8, color: '#374151' }}>
+          {def.referenceWidth}×{def.referenceHeight} creative required
+        </div>
+        <div style={{ fontSize: 8, color: '#374151', marginTop: 4 }}>
+          Available for approved partners
+        </div>
+      </div>
+    </SponsorFrame>
+  );
+}
+
 function RenderPaidAd({ content, slotKey, onExpand }: { content: Extract<ResolvedContent, { type: 'sponsor' }>; slotKey: PlacementId; onExpand: () => void }) {
+  const def = getPlacementDefinition(slotKey);
+
   if (content.imageUrl) {
     return (
       <SponsorFrame slotKey={slotKey}>
@@ -371,6 +399,10 @@ function RenderPaidAd({ content, slotKey, onExpand }: { content: Extract<Resolve
         </div>
       </SponsorFrame>
     );
+  }
+
+  if (!def.allowsTextCard) {
+    return <ReservedState slotKey={slotKey} />;
   }
 
   if (content.size === 'premium') {

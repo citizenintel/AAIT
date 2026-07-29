@@ -1,7 +1,7 @@
 import type { PlacementId, SlotAssignment, ResolvedContent } from './types';
 import type { CampaignRow } from '../api/sponsors';
 import { getEnabledAssetsByType, getImageData } from './asset-library';
-import { ALL_PLACEMENT_IDS } from './registry';
+import { ALL_PLACEMENT_IDS, getPlacementDefinition } from './registry';
 
 // ---------------------------------------------------------------------------
 // Public context — everything the resolver needs from the outside world
@@ -61,6 +61,8 @@ export function resolvePublicPlacement(
     return resolveSponsor(slotId, context) ?? { type: 'hidden' };
   }
   if (context.placementMode === 'infographic') {
+    const placementDef = getPlacementDefinition(slotId);
+    if (!placementDef.allowsTextCard) return { type: 'hidden' };
     return resolveInfographic(slotId, context.enabledInfographicTypes) ?? { type: 'hidden' };
   }
   if (context.placementMode === 'placeholder') {
@@ -71,7 +73,8 @@ export function resolvePublicPlacement(
   const sponsor = resolveSponsor(slotId, context);
   if (sponsor) return sponsor;
 
-  if (context.globalInfographicFallback) {
+  const def = getPlacementDefinition(slotId);
+  if (context.globalInfographicFallback && def.allowsTextCard) {
     const infographic = resolveInfographic(slotId, context.enabledInfographicTypes);
     if (infographic) return infographic;
   }

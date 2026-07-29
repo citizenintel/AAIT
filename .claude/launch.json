@@ -4,8 +4,8 @@
     {
       "name": "public-web",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["--yes", "pnpm", "exec", "vite", "--host"],
-      "port": 5175
+      "runtimeArgs": ["vite", "--host", "--port", "5190"],
+      "port": 5190
     },
     {
       "name": "supabase",
