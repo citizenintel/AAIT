@@ -78,7 +78,7 @@ export function seedTestData(): SponsorAd[] {
       slotKey: spec.placementId,
       assetId: null,
       campaignId: `test-${spec.number}`,
-      mode: 'auto',
+      mode: 'paid_ad',
     };
   }
   localStorage.setItem('aait_slot_assignments', JSON.stringify(assignments));

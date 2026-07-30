@@ -31,6 +31,11 @@ import {
 } from '@/lib/content-slots';
 import { INFOGRAPHIC_LABELS } from '@/components/widgets/ManagedContentSlot';
 
+const SLOT_CHANGE_CHANNEL = 'aait-slot-change';
+function notifySlotChange() {
+  try { new BroadcastChannel(SLOT_CHANGE_CHANNEL).postMessage({ type: 'slot-updated', ts: Date.now() }); } catch {}
+}
+
 const SIZE_LABELS: Record<string, string> = { premium: 'Premium', standard: 'Standard', compact: 'Compact' };
 
 const MODE_LABELS: Record<string, string> = {
@@ -210,8 +215,9 @@ function PlacementDrawer({
   const enabledInfographicTypes = useAppStore(s => s.enabledInfographicTypes);
   const setSlotMode = useAppStore(s => s.setSlotMode);
   const setSlotCampaign = useAppStore(s => s.setSlotCampaign);
+  const setSlotCreative = useAppStore(s => s.setSlotCreative);
   const assignment = slotAssignments[placementId];
-  const mode = normalizeLegacyMode(assignment?.mode ?? 'auto');
+  const mode = normalizeLegacyMode(assignment?.mode ?? 'hidden');
 
   const campaign = ads.find(a => a.slot === placementId && a.enabled && getStatus(a) === 'active');
   const allForSlot = ads.filter(a => a.slot === placementId);
@@ -229,17 +235,22 @@ function PlacementDrawer({
   });
 
   const handleAssignExisting = (campaignId: string) => {
+    const ad = ads.find(a => a.id === campaignId);
     const updated = ads.map(a => a.id === campaignId ? { ...a, slot: placementId } : a);
     onUpdateAds(updated);
     setSlotCampaign(placementId, campaignId);
     setSlotMode(placementId, 'paid_ad');
+    setSlotCreative(placementId, { imageUrl: ad?.imageUrl ?? null });
     setAssigning(false);
+    notifySlotChange();
   };
 
   const handleClearAssignment = () => {
     const updated = ads.map(a => a.slot === placementId ? { ...a, enabled: false } : a);
     onUpdateAds(updated);
     setSlotCampaign(placementId, null);
+    setSlotCreative(placementId, { imageUrl: null, creativeId: null, creativeVariantId: null });
+    notifySlotChange();
   };
 
   const handleAssignImage = (imageData: string) => {
@@ -510,7 +521,7 @@ function PlacementMap({ ads, onSelectPlacement, onDropCampaign }: { ads: Sponsor
 
   function slotStatus(id: PlacementId): 'active' | 'creative-required' | 'empty' | 'hidden' {
     const assignment = slotAssignments[id];
-    const mode = normalizeLegacyMode(assignment?.mode ?? 'auto');
+    const mode = normalizeLegacyMode(assignment?.mode ?? 'hidden');
     const result = getPublicResult(id, ads, sponsorsEnabled, mode, globalInfographicFallback, enabledInfographicTypes, assignment?.campaignId);
     if (result.label === 'VISIBLE') return 'active';
     if (result.label === 'CREATIVE REQUIRED') return 'creative-required';
@@ -539,18 +550,18 @@ function PlacementMap({ ads, onSelectPlacement, onDropCampaign }: { ads: Sponsor
     const campaign = ads.find(a => a.slot === id && a.enabled && getStatus(a) === 'active');
     const hasValidCreative = !!(campaign?.imageUrl);
 
-    const handleDragOver = (e: React.DragEvent) => {
+    const handleDragOver = (e: React.DragEvent<HTMLButtonElement>) => {
       if (e.dataTransfer.types.includes('application/x-campaign-id')) {
         e.preventDefault();
         e.currentTarget.style.borderColor = '#c9a84c';
         e.currentTarget.style.borderStyle = 'dashed';
       }
     };
-    const handleDragLeave = (e: React.DragEvent) => {
+    const handleDragLeave = (e: React.DragEvent<HTMLButtonElement>) => {
       e.currentTarget.style.borderColor = color;
       e.currentTarget.style.borderStyle = 'solid';
     };
-    const handleDrop = (e: React.DragEvent) => {
+    const handleDrop = (e: React.DragEvent<HTMLButtonElement>) => {
       e.preventDefault();
       e.currentTarget.style.borderColor = color;
       e.currentTarget.style.borderStyle = 'solid';
@@ -666,7 +677,7 @@ function SlotCard({ placementId, ads, onSelect }: { placementId: PlacementId; ad
   const globalInfographicFallback = useAppStore(s => s.globalInfographicFallback);
   const enabledInfographicTypes = useAppStore(s => s.enabledInfographicTypes);
   const assignment = slotAssignments[placementId];
-  const rawMode = assignment?.mode ?? 'auto';
+  const rawMode = assignment?.mode ?? 'hidden';
   const mode = normalizeLegacyMode(rawMode);
   const campaign = ads.find(a => a.slot === placementId && a.enabled);
   const status = campaign ? getStatus(campaign) : null;
@@ -922,7 +933,7 @@ function CampaignsTable({ ads, onUpdateAds }: { ads: SponsorAd[]; onUpdateAds: (
     if (status !== 'active') return { label: `NOT VISIBLE — Campaign ${status}`, color: '#636366' };
     if (!sponsorsEnabled) return { label: 'NOT VISIBLE — Public sponsorship OFF', color: '#c53030' };
     const assignment = slotAssignments[ad.slot];
-    const mode = normalizeLegacyMode(assignment?.mode ?? 'auto');
+    const mode = normalizeLegacyMode(assignment?.mode ?? 'hidden');
     if (mode === 'disabled') return { label: 'NOT VISIBLE — Placement disabled', color: '#636366' };
     const def = PLACEMENT_REGISTRY.find(p => p.id === ad.slot);
     if (def && !def.allowsTextCard && !ad.imageUrl) {
@@ -1122,12 +1133,16 @@ export function AdminSponsors() {
   const setSlotCampaign = useAppStore(s => s.setSlotCampaign);
   const [drawerPlacement, setDrawerPlacement] = useState<PlacementId | null>(null);
 
+  const setSlotCreative = useAppStore(s => s.setSlotCreative);
   const handleDropCampaign = useCallback((campaignId: string, placementId: PlacementId) => {
+    const ad = ads.find(a => a.id === campaignId);
     const updated = ads.map(a => a.id === campaignId ? { ...a, slot: placementId } : a);
     updateAds(updated);
     setSlotCampaign(placementId, campaignId);
     setSlotMode(placementId, 'paid_ad');
-  }, [ads, updateAds, setSlotCampaign, setSlotMode]);
+    setSlotCreative(placementId, { imageUrl: ad?.imageUrl ?? null });
+    notifySlotChange();
+  }, [ads, updateAds, setSlotCampaign, setSlotMode, setSlotCreative]);
 
   const occupiedCount = ALL_PLACEMENT_IDS.filter(id => {
     const campaign = ads.find(a => a.slot === id && a.enabled);

@@ -253,6 +253,8 @@ interface AppStore {
   slotAssignments: Record<string, { slotKey: string; assetId: string | null; campaignId: string | null; mode: string }>;
   setSlotMode: (slotKey: string, mode: string) => void;
   setSlotCampaign: (slotKey: string, campaignId: string | null) => void;
+  setSlotCreative: (slotKey: string, data: { imageUrl?: string | null; fitMode?: string | null; focalX?: number | null; focalY?: number | null; creativeId?: string | null; creativeVariantId?: string | null; width?: number | null; height?: number | null; cropData?: { x: number; y: number; width: number; height: number } | null }) => void;
+  reloadSlotAssignments: () => void;
 
   // --- Dismissed alerts (legacy) ---
   dismissedAlertIds: Record<string, true>;
@@ -522,10 +524,10 @@ export const useAppStore = create<AppStore>()(
     setEnabledInfographicTypes: (types) => set((s) => { s.enabledInfographicTypes = types; try { localStorage.setItem('aait_infographic_types', JSON.stringify(types)); } catch {} }),
     slotAssignments: (() => {
       const defaults: Record<string, { slotKey: string; assetId: string | null; campaignId: string | null; mode: string }> = {
-        'LEFT_RAIL_HALF_PAGE': { slotKey: 'LEFT_RAIL_HALF_PAGE', assetId: null, campaignId: null, mode: 'auto' },
-        'BOTTOM_PRIMARY_BILLBOARD': { slotKey: 'BOTTOM_PRIMARY_BILLBOARD', assetId: null, campaignId: null, mode: 'auto' },
-        'BOTTOM_SECONDARY_BILLBOARD': { slotKey: 'BOTTOM_SECONDARY_BILLBOARD', assetId: null, campaignId: null, mode: 'auto' },
-        'RIGHT_RAIL_HALF_PAGE': { slotKey: 'RIGHT_RAIL_HALF_PAGE', assetId: null, campaignId: null, mode: 'auto' },
+        'LEFT_RAIL_HALF_PAGE': { slotKey: 'LEFT_RAIL_HALF_PAGE', assetId: null, campaignId: null, mode: 'hidden' },
+        'BOTTOM_PRIMARY_BILLBOARD': { slotKey: 'BOTTOM_PRIMARY_BILLBOARD', assetId: null, campaignId: null, mode: 'hidden' },
+        'BOTTOM_SECONDARY_BILLBOARD': { slotKey: 'BOTTOM_SECONDARY_BILLBOARD', assetId: null, campaignId: null, mode: 'hidden' },
+        'RIGHT_RAIL_HALF_PAGE': { slotKey: 'RIGHT_RAIL_HALF_PAGE', assetId: null, campaignId: null, mode: 'hidden' },
       };
       try {
         const v = localStorage.getItem('aait_slot_assignments');
@@ -551,6 +553,22 @@ export const useAppStore = create<AppStore>()(
         s.slotAssignments[slotKey]!.campaignId = campaignId;
         try { localStorage.setItem('aait_slot_assignments', JSON.stringify(s.slotAssignments)); } catch {}
       }
+    }),
+    setSlotCreative: (slotKey, data) => set((s) => {
+      const slot = s.slotAssignments[slotKey];
+      if (slot) {
+        Object.assign(slot, data);
+        try { localStorage.setItem('aait_slot_assignments', JSON.stringify(s.slotAssignments)); } catch {}
+      }
+    }),
+    reloadSlotAssignments: () => set((s) => {
+      try {
+        const v = localStorage.getItem('aait_slot_assignments');
+        if (v) {
+          const parsed = JSON.parse(v);
+          s.slotAssignments = parsed;
+        }
+      } catch {}
     }),
 
     // --- Dismissed alerts (legacy) ---
@@ -618,3 +636,8 @@ export const useAppStore = create<AppStore>()(
     },
   })),
 );
+
+try {
+  const _ch = new BroadcastChannel('aait-slot-change');
+  _ch.onmessage = () => { useAppStore.getState().reloadSlotAssignments(); };
+} catch {}

@@ -155,6 +155,15 @@ export type SlotAssignment = {
   assetId: string | null;
   campaignId: string | null;
   mode: SlotMode;
+  creativeId?: string | null;
+  creativeVariantId?: string | null;
+  imageUrl?: string | null;
+  fitMode?: FitMode | null;
+  cropData?: { x: number; y: number; width: number; height: number } | null;
+  focalX?: number | null;
+  focalY?: number | null;
+  width?: number | null;
+  height?: number | null;
 };
 
 // ---------------------------------------------------------------------------

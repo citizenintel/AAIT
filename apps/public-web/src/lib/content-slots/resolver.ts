@@ -189,7 +189,7 @@ function resolvePlaceholder(slotId: PlacementId): ResolvedContent | null {
 // ---------------------------------------------------------------------------
 
 export function resolveSlotContent(input: ResolverInput): ResolvedContent {
-  return resolvePublicPlacement(
+  const result = resolvePublicPlacement(
     {
       globalPublicMode: input.globalDisplayEnabled,
       placementMode: input.assignment.mode,
@@ -200,4 +200,13 @@ export function resolveSlotContent(input: ResolverInput): ResolvedContent {
     },
     input.assignment.slotKey,
   );
+
+  if (result.type === 'sponsor' && input.assignment.imageUrl) {
+    result.imageUrl = input.assignment.imageUrl;
+    if (input.assignment.fitMode) result.fitMode = input.assignment.fitMode;
+    if (input.assignment.focalX != null) result.focalX = input.assignment.focalX;
+    if (input.assignment.focalY != null) result.focalY = input.assignment.focalY;
+  }
+
+  return result;
 }

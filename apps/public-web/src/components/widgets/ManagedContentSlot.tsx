@@ -325,6 +325,17 @@ function SponsorCreative({ content, slotKey }: { content: Extract<ResolvedConten
   const fit = content.fitMode === 'contain' ? 'contain' : 'cover';
   const pos = `${content.focalX}% ${content.focalY}%`;
   const bg = content.fitMode === 'contain' ? (content.backgroundColor || '#000') : undefined;
+  const [imgError, setImgError] = useState<string | null>(null);
+
+  if (imgError) {
+    return (
+      <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, background: '#1a0000', color: '#e53e3e', padding: 8 }}
+        data-image-error={imgError}>
+        <div style={{ fontSize: 11, fontWeight: 700 }}>Image failed</div>
+        <div style={{ fontSize: 9, color: '#a0aec0', textAlign: 'center', wordBreak: 'break-all' }}>{imgError}</div>
+      </div>
+    );
+  }
 
   return (
     <img
@@ -339,6 +350,13 @@ function SponsorCreative({ content, slotKey }: { content: Extract<ResolvedConten
         backgroundColor: bg,
       }}
       loading="lazy"
+      onError={() => setImgError(content.imageUrl ? `Failed to load: ${content.imageUrl.substring(0, 120)}` : 'No image URL provided')}
+      onLoad={(e) => {
+        const img = e.currentTarget;
+        if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+          setImgError(`Zero dimensions: ${img.naturalWidth}x${img.naturalHeight}`);
+        }
+      }}
     />
   );
 }
