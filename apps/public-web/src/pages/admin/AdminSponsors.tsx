@@ -40,6 +40,29 @@ const SLOT_COLORS: Record<number, string> = {
   4: '#38a169',
 };
 
+function compressImage(file: File, maxDim: number, quality: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const ratio = Math.min(maxDim / width, maxDim / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas not supported')); return; }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 function syncToFrontend(adsList: SponsorAd[]) {
   saveAdminAds(adsList);
   const now = Date.now();
@@ -59,7 +82,7 @@ function syncToFrontend(adsList: SponsorAd[]) {
       tagline: a.tagline,
       link_url: a.websiteUrl,
       logo_path: null,
-      image_url: a.imageUrl,
+      image_url: undefined,
       impressions: a.impressions,
       clicks: a.clicks,
     };
@@ -258,21 +281,17 @@ function AdSlotCard({
     if (!file) return;
     setUploading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        if (ad) {
-          const updated = ads.map(a => a.id === ad.id ? { ...a, imageUrl: dataUrl } : a);
-          onUpdateAds(updated);
-          setSlotCreative(slotId, { imageUrl: dataUrl });
-          notifySlotChange();
-        }
-        setUploading(false);
-      };
-      reader.readAsDataURL(file);
+      const dataUrl = await compressImage(file, 800, 0.7);
+      if (ad) {
+        const updated = ads.map(a => a.id === ad.id ? { ...a, imageUrl: dataUrl } : a);
+        onUpdateAds(updated);
+        setSlotCreative(slotId, { imageUrl: dataUrl });
+        notifySlotChange();
+      }
     } catch {
-      setUploading(false);
+      // compression or storage failed
     }
+    setUploading(false);
     if (fileRef.current) fileRef.current.value = '';
   };
 
