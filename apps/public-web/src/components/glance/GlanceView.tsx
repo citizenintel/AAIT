@@ -42,6 +42,7 @@ export function GlanceView() {
   const selectEvent = useAppStore((s) => s.selectEvent);
   const setInterfaceLevel = useAppStore((s) => s.setInterfaceLevel);
   const selectedEventId = useAppStore((s) => s.selectedEventId);
+  const sponsorsEnabled = useAppStore((s) => s.sponsorsEnabled);
 
   const eventArray = useMemo(() => Array.from(events.values()), [events]);
   const assetArray = useMemo(() => Array.from(assets.values()), [assets]);
@@ -59,7 +60,7 @@ export function GlanceView() {
   const isLoading = eventArray.length === 0;
 
   return (
-    <div className="glance-commercial-layout">
+    <div className={`glance-commercial-layout${sponsorsEnabled ? '' : ' infographic-mode'}`}>
 
       <section className="glance-priority">
         <LeftRail glanceContent={

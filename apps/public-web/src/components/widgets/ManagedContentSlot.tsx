@@ -327,18 +327,18 @@ function ImpactSummary({ incidents }: { incidents: any[] }) {
     return { deceased, injured, critical, total: incidents.length };
   }, [incidents]);
   return (
-    <div className="sponsor-slot" style={{ background: '#111827', border: '1px solid #c9a84c22', borderRadius: 8, padding: '10px 12px' }}>
+    <div className="sponsor-slot" style={{ background: '#111827', border: '1px solid #c9a84c22', borderRadius: 8, padding: '10px 12px', alignSelf: 'start' }}>
       <div style={{ fontSize: 9, fontWeight: 700, color: '#c9a84c', marginBottom: 8, letterSpacing: '0.05em' }}>IMPACT SUMMARY</div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <div style={{ flex: 1, background: '#1e293b', borderRadius: 6, padding: '8px 6px', textAlign: 'center', borderTop: '2px solid #e53e3e' }}>
+      <div style={{ display: 'flex', gap: 8, height: 50 }}>
+        <div style={{ flex: 1, background: '#1e293b', borderRadius: 6, padding: '8px 6px', textAlign: 'center', borderTop: '2px solid #e53e3e', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#e53e3e' }}>{stats.deceased}</div>
           <div style={{ fontSize: 7, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Deceased</div>
         </div>
-        <div style={{ flex: 1, background: '#1e293b', borderRadius: 6, padding: '8px 6px', textAlign: 'center', borderTop: '2px solid #ed8936' }}>
+        <div style={{ flex: 1, background: '#1e293b', borderRadius: 6, padding: '8px 6px', textAlign: 'center', borderTop: '2px solid #ed8936', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#ed8936' }}>{stats.injured}</div>
           <div style={{ fontSize: 7, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Injured</div>
         </div>
-        <div style={{ flex: 1, background: '#1e293b', borderRadius: 6, padding: '8px 6px', textAlign: 'center', borderTop: '2px solid #d69e2e' }}>
+        <div style={{ flex: 1, background: '#1e293b', borderRadius: 6, padding: '8px 6px', textAlign: 'center', borderTop: '2px solid #d69e2e', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#d69e2e' }}>{stats.critical}</div>
           <div style={{ fontSize: 7, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Critical</div>
         </div>

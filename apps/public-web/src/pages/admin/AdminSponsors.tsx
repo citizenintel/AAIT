@@ -228,6 +228,9 @@ function AdSlotCard({
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [editTagline, setEditTagline] = useState('');
+  const [editUrl, setEditUrl] = useState('');
+  const [editDuration, setEditDuration] = useState('30d');
+  const [editPaid, setEditPaid] = useState('0');
 
   const isOn = !!ad;
 
@@ -297,7 +300,19 @@ function AdSlotCard({
 
   const handleSaveEdit = () => {
     if (ad && editName.trim()) {
-      const updated = ads.map(a => a.id === ad.id ? { ...a, name: editName, tagline: editTagline } : a);
+      const durationMs: Record<string, number> = { '24h': 86400000, '48h': 172800000, '7d': 604800000, '30d': 2592000000 };
+      const ms = durationMs[editDuration] ?? 604800000;
+      const now = new Date();
+      const updated = ads.map(a => a.id === ad.id ? {
+        ...a,
+        name: editName,
+        tagline: editTagline,
+        websiteUrl: editUrl,
+        duration: editDuration as SponsorAd['duration'],
+        paidZAR: Number(editPaid) || 0,
+        startedAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + ms).toISOString(),
+      } : a);
       onUpdateAds(updated);
     }
     setEditing(false);
@@ -306,6 +321,9 @@ function AdSlotCard({
   const startEdit = () => {
     setEditName(ad?.name ?? `Ad ${num}`);
     setEditTagline(ad?.tagline ?? '');
+    setEditUrl(ad?.websiteUrl ?? '');
+    setEditDuration(ad?.duration ?? '30d');
+    setEditPaid(String(ad?.paidZAR ?? 0));
     setEditing(true);
   };
 
@@ -379,10 +397,25 @@ function AdSlotCard({
           </div>
         )}
 
-        {/* Edit name/tagline */}
+        {/* Campaign details + edit */}
         {isOn && !editing && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={startEdit} style={{ flex: 1, fontSize: 10, padding: '4px 8px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-muted)', cursor: 'pointer' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {(ad?.tagline || ad?.websiteUrl || (ad?.paidZAR ?? 0) > 0) && (
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: 2, padding: '4px 0' }}>
+                {ad?.tagline && <div style={{ fontStyle: 'italic' }}>{ad.tagline}</div>}
+                {ad?.websiteUrl && <div style={{ color: '#4299e1' }}>{ad.websiteUrl}</div>}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  {ad?.duration && <span>Duration: {ad.duration}</span>}
+                  {(ad?.paidZAR ?? 0) > 0 && <span>Paid: R{ad!.paidZAR.toLocaleString()}</span>}
+                </div>
+                {ad?.expiresAt && (
+                  <div style={{ fontSize: 9, color: new Date(ad.expiresAt).getTime() < Date.now() ? '#c53030' : 'var(--text-muted)' }}>
+                    {new Date(ad.expiresAt).getTime() < Date.now() ? 'Expired' : `Expires: ${new Date(ad.expiresAt).toLocaleDateString()}`}
+                  </div>
+                )}
+              </div>
+            )}
+            <button onClick={startEdit} style={{ fontSize: 10, padding: '4px 8px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-muted)', cursor: 'pointer' }}>
               Edit details
             </button>
           </div>
@@ -392,7 +425,7 @@ function AdSlotCard({
             <input
               value={editName}
               onChange={e => setEditName(e.target.value)}
-              placeholder="Ad name"
+              placeholder="Sponsor / Ad name"
               style={{ fontSize: 11, padding: '4px 8px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)' }}
             />
             <input
@@ -401,6 +434,37 @@ function AdSlotCard({
               placeholder="Tagline (optional)"
               style={{ fontSize: 11, padding: '4px 8px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)' }}
             />
+            <input
+              value={editUrl}
+              onChange={e => setEditUrl(e.target.value)}
+              placeholder="Website URL"
+              style={{ fontSize: 11, padding: '4px 8px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)' }}
+            />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 8, color: 'var(--text-muted)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Duration</div>
+                <select
+                  value={editDuration}
+                  onChange={e => setEditDuration(e.target.value)}
+                  style={{ width: '100%', fontSize: 11, padding: '4px 6px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)' }}
+                >
+                  <option value="24h">24 Hours</option>
+                  <option value="48h">48 Hours</option>
+                  <option value="7d">7 Days</option>
+                  <option value="30d">1 Month</option>
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 8, color: 'var(--text-muted)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Paid (ZAR)</div>
+                <input
+                  type="number"
+                  value={editPaid}
+                  onChange={e => setEditPaid(e.target.value)}
+                  placeholder="0"
+                  style={{ width: '100%', fontSize: 11, padding: '4px 6px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)', boxSizing: 'border-box' }}
+                />
+              </div>
+            </div>
             <div style={{ display: 'flex', gap: 4 }}>
               <button onClick={handleSaveEdit} style={{ flex: 1, fontSize: 10, padding: '4px 8px', background: '#38a16918', border: '1px solid #38a16940', borderRadius: 4, color: '#38a169', cursor: 'pointer', fontWeight: 600 }}>Save</button>
               <button onClick={() => setEditing(false)} style={{ fontSize: 10, padding: '4px 8px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-muted)', cursor: 'pointer' }}>Cancel</button>

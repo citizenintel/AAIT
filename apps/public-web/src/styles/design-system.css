@@ -671,6 +671,19 @@ body {
   border-left: 1px solid var(--border);
 }
 
+/* Infographic mode: right-ad spans full height, dashboard hidden */
+.glance-commercial-layout.infographic-mode {
+  grid-template-areas:
+    "priority    map          map            right-ad"
+    "left-ad     primary-ad   secondary-ad   right-ad";
+}
+.glance-commercial-layout.infographic-mode .glance-dashboard-summary {
+  display: none;
+}
+.glance-commercial-layout.infographic-mode .glance-ad-right {
+  border-top: none;
+}
+
 /* Full-cell creative rendering — §8 */
 [data-sponsor-slot] {
   width: 100%;
