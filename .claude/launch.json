@@ -3,6 +3,7 @@
   "configurations": [
     {
       "name": "public-web",
+      "cwd": "apps/public-web",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--host", "--port", "5190"],
       "port": 5190
