@@ -512,6 +512,80 @@ function TestModeControls() {
 }
 
 // ---------------------------------------------------------------------------
+// Priority Ticker Controls — shown when ads are OFF
+// ---------------------------------------------------------------------------
+
+function PriorityTickerControls() {
+  const pt = useAppStore(s => s.priorityTicker);
+  const update = useAppStore(s => s.updatePriorityTicker);
+
+  const btnStyle = (active: boolean, color?: string) => ({
+    fontSize: 10, padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontWeight: 600 as const,
+    background: active ? `${color || '#c9a84c'}20` : 'var(--bg-base)',
+    border: `1px solid ${active ? `${color || '#c9a84c'}60` : 'var(--border-subtle)'}`,
+    color: active ? (color || '#c9a84c') : 'var(--text-muted)',
+  });
+
+  return (
+    <div style={{ marginTop: 24, background: 'var(--bg-elevated)', border: '1px solid #c9a84c40', borderRadius: 8, padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#c9a84c' }}>Priority Ticker</div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: pt.enabled ? '#38a169' : '#c53030' }}>
+            {pt.enabled ? 'ON' : 'OFF'}
+          </span>
+          <input type="checkbox" checked={pt.enabled} onChange={e => update({ enabled: e.target.checked })} style={{ width: 14, height: 14, cursor: 'pointer' }} />
+        </label>
+      </div>
+
+      {pt.enabled && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Mode toggle */}
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => update({ mode: 'auto' })} style={btnStyle(pt.mode === 'auto')}>
+              Auto (same as top)
+            </button>
+            <button onClick={() => update({ mode: 'manual' })} style={btnStyle(pt.mode === 'manual')}>
+              Manual text
+            </button>
+          </div>
+
+          {/* Manual text input */}
+          {pt.mode === 'manual' && (
+            <input
+              value={pt.manualText}
+              onChange={e => update({ manualText: e.target.value })}
+              placeholder="Enter priority message..."
+              style={{ fontSize: 12, padding: '6px 10px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)' }}
+            />
+          )}
+
+          {/* Size + Color */}
+          <div style={{ display: 'flex', gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 8, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Size</div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button onClick={() => update({ fontSize: 'small' })} style={btnStyle(pt.fontSize === 'small')}>S</button>
+                <button onClick={() => update({ fontSize: 'medium' })} style={btnStyle(pt.fontSize === 'medium')}>M</button>
+                <button onClick={() => update({ fontSize: 'large' })} style={btnStyle(pt.fontSize === 'large')}>L</button>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 8, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Colour</div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button onClick={() => update({ fontColor: 'white' })} style={btnStyle(pt.fontColor === 'white', '#e2e8f0')}>White</button>
+                <button onClick={() => update({ fontColor: 'yellow' })} style={btnStyle(pt.fontColor === 'yellow', '#eab308')}>Yellow</button>
+                <button onClick={() => update({ fontColor: 'red' })} style={btnStyle(pt.fontColor === 'red', '#ef4444')}>Red</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Admin Page — simplified
 // ---------------------------------------------------------------------------
 
@@ -557,6 +631,9 @@ export function AdminSponsors() {
           <AdSlotCard key={id} slotId={id} ads={ads} onUpdateAds={updateAds} />
         ))}
       </div>
+
+      {/* Priority Ticker — only visible when ads OFF */}
+      {!sponsorsEnabled && <PriorityTickerControls />}
     </div>
   );
 }

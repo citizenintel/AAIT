@@ -243,6 +243,16 @@ interface AppStore {
   ticker: TickerConfig;
   updateTicker: (patch: Partial<TickerConfig>) => void;
 
+  // --- Priority ticker (infographic mode) ---
+  priorityTicker: {
+    enabled: boolean;
+    mode: 'auto' | 'manual';
+    manualText: string;
+    fontSize: 'small' | 'medium' | 'large';
+    fontColor: 'white' | 'yellow' | 'red';
+  };
+  updatePriorityTicker: (patch: Partial<AppState['priorityTicker']>) => void;
+
   // --- Content slots ---
   sponsorsEnabled: boolean;
   setSponsorsEnabled: (enabled: boolean) => void;
@@ -514,6 +524,16 @@ export const useAppStore = create<AppStore>()(
       fontColor: 'white',
     },
     updateTicker: (patch) => set((s) => { Object.assign(s.ticker, patch); }),
+
+    // --- Priority ticker (infographic mode) ---
+    priorityTicker: (() => {
+      const defaults = { enabled: true, mode: 'auto' as const, manualText: '', fontSize: 'medium' as const, fontColor: 'white' as const };
+      try { const v = localStorage.getItem('aait_priority_ticker'); return v ? { ...defaults, ...JSON.parse(v) } : defaults; } catch { return defaults; }
+    })(),
+    updatePriorityTicker: (patch) => set((s) => {
+      Object.assign(s.priorityTicker, patch);
+      try { localStorage.setItem('aait_priority_ticker', JSON.stringify(s.priorityTicker)); } catch {}
+    }),
 
     // --- Content slots ---
     sponsorsEnabled: (() => { try { const v = localStorage.getItem('aait_sponsors_enabled'); return v === null ? true : v === 'true'; } catch { return true; } })(),
