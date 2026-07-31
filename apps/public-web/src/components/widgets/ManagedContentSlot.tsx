@@ -365,18 +365,18 @@ function ActivityTimeline({ incidents }: { incidents: any[] }) {
   const sevColor: Record<string, string> = { critical: '#e53e3e', Critical: '#e53e3e', high: '#dd6b20', High: '#dd6b20', medium: '#d69e2e', Medium: '#d69e2e', low: '#38a169', Low: '#38a169' };
   const modLabel: Record<string, string> = { ait: 'Farm', unrest: 'Unrest', bias: 'Bias', infrastructure: 'Infra', natural: 'Natural', traffic: 'Traffic' };
   return (
-    <div className="sponsor-slot" style={{ background: '#111827', border: '1px solid #c9a84c22', borderRadius: 8, padding: '10px 12px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ fontSize: 9, fontWeight: 700, color: '#c9a84c', marginBottom: 8, letterSpacing: '0.05em' }}>RECENT ACTIVITY</div>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
+    <div className="sponsor-slot" style={{ background: '#111827', border: '1px solid #c9a84c22', borderRadius: 8, padding: '14px 16px', height: '100%', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#c9a84c', marginBottom: 12, letterSpacing: '0.05em' }}>RECENT ACTIVITY</div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', overflow: 'hidden' }}>
         {recent.map((inc, idx) => (
-          <div key={inc.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '3px 0', borderBottom: idx < recent.length - 1 ? '1px solid #1e293b' : 'none' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, width: 10, paddingTop: 2 }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: sevColor[inc.severity] || '#718096' }} />
-              {idx < recent.length - 1 && <div style={{ width: 1, flex: 1, minHeight: 8, background: '#1e293b' }} />}
+          <div key={inc.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '6px 0', borderBottom: idx < recent.length - 1 ? '1px solid #1e293b' : 'none', flex: 1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, width: 12, paddingTop: 3 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: sevColor[inc.severity] || '#718096' }} />
+              {idx < recent.length - 1 && <div style={{ width: 1, flex: 1, minHeight: 12, background: '#1e293b' }} />}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 8, color: '#e2e8f0', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.title}</div>
-              <div style={{ fontSize: 7, color: '#64748b' }}>{modLabel[inc.module] || inc.module} · {inc.time} ago</div>
+              <div style={{ fontSize: 11, color: '#e2e8f0', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.title}</div>
+              <div style={{ fontSize: 9, color: '#64748b', marginTop: 2 }}>{modLabel[inc.module] || inc.module} · {inc.time} ago</div>
             </div>
           </div>
         ))}
