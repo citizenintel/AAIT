@@ -189,6 +189,34 @@ function resolvePlaceholder(slotId: PlacementId): ResolvedContent | null {
 // ---------------------------------------------------------------------------
 
 export function resolveSlotContent(input: ResolverInput): ResolvedContent {
+  if (!input.globalDisplayEnabled) return { type: 'hidden' };
+
+  // Direct path: if the assignment has mode='paid_ad' and an imageUrl,
+  // show it immediately — no campaign lookup needed.
+  if (input.assignment.mode === 'paid_ad' && input.assignment.imageUrl) {
+    const campaign = input.campaigns.find(c => c.id === input.assignment.campaignId);
+    return {
+      type: 'sponsor',
+      campaignId: input.assignment.campaignId ?? '',
+      disclosure: 'Sponsored',
+      sponsorName: campaign?.display_name ?? 'Sponsor',
+      displayName: campaign?.display_name ?? 'Sponsor',
+      tagline: campaign?.tagline ?? '',
+      linkUrl: campaign?.link_url ?? '',
+      imageUrl: input.assignment.imageUrl,
+      size: campaign?.size ?? 'standard',
+      icon: 'shield',
+      bgColor: '#1a2332',
+      textColor: '#e2e8f0',
+      accentColor: '#c9a84c',
+      cta: 'Learn more',
+      fitMode: input.assignment.fitMode ?? 'cover',
+      focalX: input.assignment.focalX ?? 50,
+      focalY: input.assignment.focalY ?? 50,
+      backgroundColor: '#000000',
+    };
+  }
+
   const result = resolvePublicPlacement(
     {
       globalPublicMode: input.globalDisplayEnabled,
@@ -200,13 +228,6 @@ export function resolveSlotContent(input: ResolverInput): ResolvedContent {
     },
     input.assignment.slotKey,
   );
-
-  if (result.type === 'sponsor' && input.assignment.imageUrl) {
-    result.imageUrl = input.assignment.imageUrl;
-    if (input.assignment.fitMode) result.fitMode = input.assignment.fitMode;
-    if (input.assignment.focalX != null) result.focalX = input.assignment.focalX;
-    if (input.assignment.focalY != null) result.focalY = input.assignment.focalY;
-  }
 
   return result;
 }
