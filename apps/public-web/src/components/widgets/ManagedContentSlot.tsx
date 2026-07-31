@@ -215,6 +215,176 @@ function MiniStats({ incidents }: { incidents: any[] }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Ads-OFF fallback infographics — 4 unique visuals, one per slot
+// ---------------------------------------------------------------------------
+
+const VERIFICATION_LEVELS = [
+  { key: 'v0_unverified', label: 'Unverified', short: 'V0', color: '#e53e3e' },
+  { key: 'v1_triage', label: 'Triage', short: 'V1', color: '#ed8936' },
+  { key: 'v2_plausible_uncorroborated', label: 'Plausible', short: 'V2', color: '#d69e2e' },
+  { key: 'v3_corroborated', label: 'Corroborated', short: 'V3', color: '#38a169' },
+  { key: 'v4_primary_source_confirmed', label: 'Confirmed', short: 'V4', color: '#3182ce' },
+  { key: 'v5_editorially_verified', label: 'Verified', short: 'V5', color: '#805ad5' },
+];
+
+function VerificationFunnel({ incidents }: { incidents: any[] }) {
+  const data = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const i of incidents) counts[i.verification] = (counts[i.verification] || 0) + 1;
+    return VERIFICATION_LEVELS.map(l => ({ ...l, count: counts[l.key] || 0 }));
+  }, [incidents]);
+  const max = Math.max(...data.map(d => d.count), 1);
+  return (
+    <div className="sponsor-slot" style={{ background: '#111827', border: '1px solid #c9a84c22', borderRadius: 8, padding: '10px 12px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: '#c9a84c', marginBottom: 8, letterSpacing: '0.05em' }}>VERIFICATION PIPELINE</div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 4 }}>
+        {data.map(d => {
+          const pct = Math.max((d.count / max) * 100, 8);
+          return (
+            <div key={d.key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 7, color: d.color, fontWeight: 700, width: 16, flexShrink: 0 }}>{d.short}</span>
+              <div style={{ flex: 1, height: 14, background: '#1e293b', borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
+                <div style={{ width: `${pct}%`, height: '100%', background: `${d.color}40`, borderRadius: 3, borderRight: `2px solid ${d.color}` }} />
+                <span style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 8, fontWeight: 600, color: '#e2e8f0' }}>{d.count}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 7, color: '#64748b', marginTop: 6, textAlign: 'center' }}>
+        {incidents.length} total incidents
+      </div>
+    </div>
+  );
+}
+
+function WeeklyTrend({ incidents }: { incidents: any[] }) {
+  const { points, todayCount, weekTotal, direction } = useMemo(() => {
+    const now = Date.now();
+    const days = 7;
+    const buckets = new Array(days).fill(0);
+    const prevBuckets = new Array(days).fill(0);
+    for (const inc of incidents) {
+      const d = new Date(inc.dateReported || inc.reportedAt || inc.date).getTime();
+      const age = Math.floor((now - d) / 86400000);
+      if (age >= 0 && age < days) buckets[days - 1 - age]++;
+      else if (age >= days && age < days * 2) prevBuckets[days - 1 - (age - days)]++;
+    }
+    const weekTotal = buckets.reduce((a, b) => a + b, 0);
+    const prevTotal = prevBuckets.reduce((a, b) => a + b, 0);
+    return { points: buckets, todayCount: buckets[days - 1] ?? 0, weekTotal, direction: weekTotal > prevTotal ? 'up' : weekTotal < prevTotal ? 'down' : 'flat' };
+  }, [incidents]);
+  const max = Math.max(...points, 1);
+  const w = 160, h = 50;
+  const px = w / (points.length - 1);
+  const path = points.map((v, i) => `${i === 0 ? 'M' : 'L'}${i * px},${h - (v / max) * (h - 4)}`).join(' ');
+  const area = path + ` L${(points.length - 1) * px},${h} L0,${h} Z`;
+  const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const todayIdx = new Date().getDay();
+  const labels = Array.from({ length: 7 }, (_, i) => dayLabels[(todayIdx - 6 + i + 7) % 7]!);
+  return (
+    <div className="sponsor-slot" style={{ background: '#111827', border: '1px solid #c9a84c22', borderRadius: 8, padding: '10px 12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: '#c9a84c', letterSpacing: '0.05em' }}>7-DAY TREND</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0' }}>{weekTotal}</span>
+          <span style={{ fontSize: 12, color: direction === 'up' ? '#e53e3e' : direction === 'down' ? '#38a169' : '#64748b' }}>
+            {direction === 'up' ? '▲' : direction === 'down' ? '▼' : '●'}
+          </span>
+        </div>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+        <defs>
+          <linearGradient id="trend-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3182ce" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#3182ce" stopOpacity="0.05" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill="url(#trend-grad)" />
+        <path d={path} fill="none" stroke="#3182ce" strokeWidth="2" strokeLinejoin="round" />
+        {points.map((v, i) => (
+          <circle key={i} cx={i * px} cy={h - (v / max) * (h - 4)} r={i === points.length - 1 ? 3 : 1.5} fill={i === points.length - 1 ? '#e2e8f0' : '#3182ce'} />
+        ))}
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
+        {labels.map((l, i) => (
+          <span key={i} style={{ fontSize: 7, color: i === 6 ? '#e2e8f0' : '#64748b', fontWeight: i === 6 ? 700 : 400 }}>{l}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ImpactSummary({ incidents }: { incidents: any[] }) {
+  const stats = useMemo(() => {
+    let deceased = 0, injured = 0, critical = 0;
+    for (const i of incidents) {
+      deceased += i.casualties?.deceased || 0;
+      injured += i.casualties?.injured || 0;
+      if (i.severity === 'critical' || i.severity === 'Critical') critical++;
+    }
+    return { deceased, injured, critical, total: incidents.length };
+  }, [incidents]);
+  return (
+    <div className="sponsor-slot" style={{ background: '#111827', border: '1px solid #c9a84c22', borderRadius: 8, padding: '10px 12px' }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: '#c9a84c', marginBottom: 8, letterSpacing: '0.05em' }}>IMPACT SUMMARY</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ flex: 1, background: '#1e293b', borderRadius: 6, padding: '8px 6px', textAlign: 'center', borderTop: '2px solid #e53e3e' }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#e53e3e' }}>{stats.deceased}</div>
+          <div style={{ fontSize: 7, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Deceased</div>
+        </div>
+        <div style={{ flex: 1, background: '#1e293b', borderRadius: 6, padding: '8px 6px', textAlign: 'center', borderTop: '2px solid #ed8936' }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#ed8936' }}>{stats.injured}</div>
+          <div style={{ fontSize: 7, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Injured</div>
+        </div>
+        <div style={{ flex: 1, background: '#1e293b', borderRadius: 6, padding: '8px 6px', textAlign: 'center', borderTop: '2px solid #d69e2e' }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#d69e2e' }}>{stats.critical}</div>
+          <div style={{ fontSize: 7, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Critical</div>
+        </div>
+      </div>
+      <div style={{ fontSize: 8, color: '#64748b', marginTop: 6, textAlign: 'center' }}>
+        Across {stats.total} tracked incidents
+      </div>
+    </div>
+  );
+}
+
+function ActivityTimeline({ incidents }: { incidents: any[] }) {
+  const recent = useMemo(() => {
+    const sorted = [...incidents].sort((a, b) =>
+      new Date(b.dateReported || b.reportedAt || b.date).getTime() -
+      new Date(a.dateReported || a.reportedAt || a.date).getTime()
+    );
+    return sorted.slice(0, 8).map(inc => {
+      const ago = Math.floor((Date.now() - new Date(inc.dateReported || inc.reportedAt || inc.date).getTime()) / 3600000);
+      const timeStr = ago < 1 ? '<1h' : ago < 24 ? `${ago}h` : `${Math.floor(ago / 24)}d`;
+      return { id: inc.id, title: inc.title, severity: inc.severity, module: inc.module, time: timeStr };
+    });
+  }, [incidents]);
+  const sevColor: Record<string, string> = { critical: '#e53e3e', Critical: '#e53e3e', high: '#dd6b20', High: '#dd6b20', medium: '#d69e2e', Medium: '#d69e2e', low: '#38a169', Low: '#38a169' };
+  const modLabel: Record<string, string> = { ait: 'Farm', unrest: 'Unrest', bias: 'Bias', infrastructure: 'Infra', natural: 'Natural', traffic: 'Traffic' };
+  return (
+    <div className="sponsor-slot" style={{ background: '#111827', border: '1px solid #c9a84c22', borderRadius: 8, padding: '10px 12px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: '#c9a84c', marginBottom: 8, letterSpacing: '0.05em' }}>RECENT ACTIVITY</div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
+        {recent.map((inc, idx) => (
+          <div key={inc.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '3px 0', borderBottom: idx < recent.length - 1 ? '1px solid #1e293b' : 'none' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, width: 10, paddingTop: 2 }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: sevColor[inc.severity] || '#718096' }} />
+              {idx < recent.length - 1 && <div style={{ width: 1, flex: 1, minHeight: 8, background: '#1e293b' }} />}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 8, color: '#e2e8f0', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.title}</div>
+              <div style={{ fontSize: 7, color: '#64748b' }}>{modLabel[inc.module] || inc.module} · {inc.time} ago</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const INFOGRAPHIC_COMPONENTS: Record<string, React.FC<{ incidents: any[] }>> = {
   severity: MiniSeverityDonut,
   module: MiniModuleDonut,
@@ -222,6 +392,10 @@ const INFOGRAPHIC_COMPONENTS: Record<string, React.FC<{ incidents: any[] }>> = {
   trend: MiniTrendLine,
   casualties: MiniCasualties,
   stats: MiniStats,
+  verification_funnel: VerificationFunnel,
+  weekly_trend: WeeklyTrend,
+  impact_summary: ImpactSummary,
+  activity_timeline: ActivityTimeline,
 };
 
 export const INFOGRAPHIC_LABELS: Record<string, string> = {
@@ -231,6 +405,10 @@ export const INFOGRAPHIC_LABELS: Record<string, string> = {
   trend: '14-day trend line',
   casualties: 'Casualties summary',
   stats: 'Live statistics',
+  verification_funnel: 'Verification pipeline',
+  weekly_trend: '7-day trend',
+  impact_summary: 'Impact summary',
+  activity_timeline: 'Recent activity',
 };
 
 // ---------------------------------------------------------------------------

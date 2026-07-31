@@ -188,8 +188,19 @@ function resolvePlaceholder(slotId: PlacementId): ResolvedContent | null {
 // Legacy bridge — existing components call resolveSlotContent
 // ---------------------------------------------------------------------------
 
+const ADS_OFF_FALLBACKS: Record<string, string> = {
+  'LEFT_RAIL_HALF_PAGE': 'verification_funnel',
+  'BOTTOM_PRIMARY_BILLBOARD': 'weekly_trend',
+  'BOTTOM_SECONDARY_BILLBOARD': 'impact_summary',
+  'RIGHT_RAIL_HALF_PAGE': 'activity_timeline',
+};
+
 export function resolveSlotContent(input: ResolverInput): ResolvedContent {
-  if (!input.globalDisplayEnabled) return { type: 'hidden' };
+  if (!input.globalDisplayEnabled) {
+    const infographicType = ADS_OFF_FALLBACKS[input.assignment.slotKey];
+    if (infographicType) return { type: 'infographic', infographicType };
+    return { type: 'hidden' };
+  }
 
   // Direct path: if the assignment has mode='paid_ad' and an imageUrl,
   // show it immediately — no campaign lookup needed.
