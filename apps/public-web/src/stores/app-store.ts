@@ -251,7 +251,7 @@ interface AppStore {
     fontSize: 'small' | 'medium' | 'large';
     fontColor: 'white' | 'yellow' | 'red';
   };
-  updatePriorityTicker: (patch: Partial<AppState['priorityTicker']>) => void;
+  updatePriorityTicker: (patch: Partial<AppStore['priorityTicker']>) => void;
 
   // --- Content slots ---
   sponsorsEnabled: boolean;

@@ -112,7 +112,7 @@ async function extractPdfText(file: File): Promise<string[]> {
     let currentLine = '';
     for (const item of content.items) {
       if (!('str' in item)) continue;
-      const y = Math.round((item as { transform: number[] }).transform[5]);
+      const y = Math.round((item as { transform: number[] }).transform[5] ?? 0);
       if (lastY !== null && Math.abs(y - lastY) > 3) {
         if (currentLine.trim()) lines.push(currentLine.trim());
         currentLine = '';
