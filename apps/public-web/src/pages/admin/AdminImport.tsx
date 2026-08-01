@@ -10,17 +10,22 @@ GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 // ---------------------------------------------------------------------------
 
 const TARGET_FIELDS = [
-  { key: 'reporter', label: 'Reporter / name', hints: ['name', 'reporter', 'reported by', 'contact'], confidential: true },
+  { key: 'victimName', label: 'Victim name', hints: ['victim', 'deceased', 'slain', 'murdered'], confidential: false },
   { key: 'dateOccurred', label: 'Date occurred', hints: ['date', 'occurred', 'when', 'datum'], confidential: false },
   { key: 'incidentType', label: 'Incident type', hints: ['type', 'incident', 'category', 'crime'], confidential: false },
   { key: 'location', label: 'Location / where', hints: ['location', 'where', 'town', 'place', 'address', 'farm'], confidential: false },
   { key: 'province', label: 'Province', hints: ['province', 'provinsie', 'region'], confidential: false },
-  { key: 'sapsNumber', label: 'SAPS case number', hints: ['saps', 'case', 'cas', 'docket', 'reference', 'ref'], confidential: true },
   { key: 'severity', label: 'Severity', hints: ['severity', 'priority', 'level'], confidential: false },
   { key: 'summary', label: 'Summary / notes', hints: ['summary', 'notes', 'description', 'detail', 'remarks'], confidential: false },
+  { key: 'casualties', label: 'Casualties', hints: ['casualties', 'killed', 'injured', 'deceased', 'dead'], confidential: false },
+  { key: 'suspectName', label: 'Suspect name', hints: ['suspect', 'accused', 'perpetrator', 'attacker', 'arrested'], confidential: true },
+  { key: 'courtCase', label: 'Court case / docket', hints: ['court', 'case', 'docket', 'saps', 'cas', 'reference', 'ref', 'trial'], confidential: true },
+  { key: 'verdict', label: 'Verdict / outcome', hints: ['verdict', 'guilty', 'acquitted', 'sentenced', 'convicted', 'outcome', 'found'], confidential: false },
+  { key: 'caseStatus', label: 'Case status', hints: ['status', 'resolved', 'unresolved', 'pending', 'closed', 'open', 'cold case'], confidential: false },
+  { key: 'sourceUrl', label: 'Source URL', hints: ['url', 'source', 'link', 'reference', 'article'], confidential: false },
+  { key: 'reporter', label: 'Reporter / contact', hints: ['reporter', 'reported by', 'contact', 'witness'], confidential: true },
   { key: 'contactPhone', label: 'Phone number', hints: ['phone', 'tel', 'cell', 'mobile', 'contact number'], confidential: true },
   { key: 'contactEmail', label: 'Email address', hints: ['email', 'e-mail', 'epos'], confidential: true },
-  { key: 'casualties', label: 'Casualties', hints: ['casualties', 'killed', 'injured', 'deceased', 'dead'], confidential: false },
 ] as const;
 
 type TargetKey = typeof TARGET_FIELDS[number]['key'];
@@ -127,6 +132,63 @@ async function extractPdfText(file: File): Promise<string[]> {
   return pages;
 }
 
+function extractVictimName(text: string): string {
+  const patterns = [
+    /(?:victim|deceased|slain|murdered|killed)\s*(?:was|is|:)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/i,
+    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s*(?:was\s+(?:killed|murdered|slain|shot|stabbed|attacked))/,
+    /(?:farmer|mr|mrs|ms|dr)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/i,
+  ];
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (m?.[1] && !NOT_A_NAME.test(m[1].split(' ')[0] ?? '')) return m[1];
+  }
+  return '';
+}
+
+function extractSuspectInfo(text: string): string {
+  const patterns = [
+    /(?:suspect|accused|perpetrator|attacker|arrested)\s*(?:was|is|:)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/i,
+    /(\d+)\s*(?:suspects?|men|attackers?|intruders?)\s*(?:were|have been)?\s*(?:arrested|apprehended|detained)/i,
+  ];
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (m) return m[0].trim();
+  }
+  return '';
+}
+
+function extractVerdict(text: string): string {
+  const lower = text.toLowerCase();
+  if (/found guilty|convicted|sentenced/i.test(lower)) return 'Guilty';
+  if (/acquitted|found not guilty|charges? dropped/i.test(lower)) return 'Not guilty';
+  if (/pending|awaiting trial|remanded/i.test(lower)) return 'Pending';
+  return '';
+}
+
+function extractCaseStatus(text: string): string {
+  const lower = text.toLowerCase();
+  if (/\bresolved\b|case closed|convicted|sentenced/i.test(lower)) return 'Resolved';
+  if (/\bunresolved\b|cold case|no arrest|unsolved/i.test(lower)) return 'Unresolved';
+  if (/\bpending\b|under investigation|awaiting|remanded|bail/i.test(lower)) return 'Pending';
+  return 'Unresolved';
+}
+
+function extractCasualties(text: string): string {
+  const lower = text.toLowerCase();
+  const killed = lower.match(/(\d+)\s*(?:killed|dead|deceased|died|murder)/);
+  const injured = lower.match(/(\d+)\s*(?:injured|wounded|hospitalised|hospitalized)/);
+  const parts: string[] = [];
+  if (killed) parts.push(`${killed[1]} killed`);
+  if (injured) parts.push(`${injured[1]} injured`);
+  if (parts.length === 0 && /\b(killed|murdered|dead|deceased|fatal)\b/i.test(lower)) parts.push('1 killed');
+  return parts.join(', ');
+}
+
+function extractUrls(text: string): string {
+  const urls = text.match(/https?:\/\/[^\s,)]+/gi);
+  return urls ? urls.join(', ') : '';
+}
+
 function splitPdfIntoIncidents(pages: string[]): string[][] {
   const fullText = pages.join('\n\n');
 
@@ -166,22 +228,28 @@ function splitPdfIntoIncidents(pages: string[]): string[][] {
   return chunks.map(chunk => {
     const dateMatch = chunk.match(/\b(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\d{4}[\/-]\d{2}[\/-]\d{2}|\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{4})\b/i);
     const locationMatch = chunk.match(/(?:in|at|near|from)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})/);
+    const caseRefMatch = chunk.match(CASE_REF_RE);
 
     const date = dateMatch?.[1] ?? '';
     const location = locationMatch?.[1] ?? '';
 
     return [
-      '',           // reporter
-      date,         // dateOccurred
-      '',           // incidentType
-      location,     // location
-      '',           // province
-      '',           // sapsNumber
-      '',           // severity
-      chunk,        // summary — full text goes here for AI Sort to process
-      '',           // contactPhone
-      '',           // contactEmail
-      '',           // casualties
+      extractVictimName(chunk),         // victimName
+      date,                             // dateOccurred
+      '',                               // incidentType
+      location,                         // location
+      '',                               // province
+      '',                               // severity
+      chunk,                            // summary
+      extractCasualties(chunk),         // casualties
+      extractSuspectInfo(chunk),        // suspectName
+      caseRefMatch?.[0] ?? '',          // courtCase
+      extractVerdict(chunk),            // verdict
+      extractCaseStatus(chunk),         // caseStatus
+      extractUrls(chunk),              // sourceUrl
+      '',                               // reporter
+      '',                               // contactPhone
+      '',                               // contactEmail
     ];
   });
 }
@@ -224,10 +292,13 @@ const SEVERITY_KEYWORDS: Record<string, string[]> = {
 
 const PROVINCES = ['Gauteng', 'Limpopo', 'Mpumalanga', 'North West', 'Free State', 'KwaZulu-Natal', 'Eastern Cape', 'Western Cape', 'Northern Cape'];
 
-const FAKE_NEWS_SIGNALS: string[] = [
-  'share before they delete', 'they don\'t want you to know', 'wake up', 'mainstream media won\'t tell',
-  'forwarded as received', 'please share', 'this is being suppressed', 'unconfirmed but', 'a friend told me',
-  'reportedly', 'allegedly happened', 'sources say', 'whatsapp', 'sent via whatsapp',
+const FAKE_NEWS_SIGNALS_STRONG: string[] = [
+  'share before they delete', 'they don\'t want you to know', 'mainstream media won\'t tell',
+  'this is being suppressed', 'a friend told me', 'sent via whatsapp',
+];
+
+const FAKE_NEWS_SIGNALS_WEAK: string[] = [
+  'forwarded as received', 'please share', 'wake up', 'unconfirmed but',
 ];
 
 const SUSPICIOUS_DOMAINS: string[] = [
@@ -237,7 +308,10 @@ const SUSPICIOUS_DOMAINS: string[] = [
 function detectFakeNewsSignals(text: string): string[] {
   const lower = text.toLowerCase();
   const hits: string[] = [];
-  for (const sig of FAKE_NEWS_SIGNALS) {
+  for (const sig of FAKE_NEWS_SIGNALS_STRONG) {
+    if (lower.includes(sig)) hits.push(sig);
+  }
+  for (const sig of FAKE_NEWS_SIGNALS_WEAK) {
     if (lower.includes(sig)) hits.push(sig);
   }
   for (const d of SUSPICIOUS_DOMAINS) {
@@ -353,7 +427,8 @@ function aiSortRow(
   }
 
   const fakeSignals = detectFakeNewsSignals(allText);
-  if (fakeSignals.length > 0) {
+  const hasStrongSignal = FAKE_NEWS_SIGNALS_STRONG.some(s => allText.toLowerCase().includes(s));
+  if (hasStrongSignal || fakeSignals.length >= 2) {
     flags.push({ type: 'fake_news', field: 'Content', message: `Possible fake/unverified content: ${fakeSignals.join(', ')}` });
     warnings.push(`Fake news signals detected (${fakeSignals.length})`);
   }
