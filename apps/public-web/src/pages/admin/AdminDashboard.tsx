@@ -6,9 +6,10 @@ import { useQuery } from '@/lib/hooks/useQuery';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useAppStore } from '@/stores/app-store';
 
-type TimePeriod = '7d' | '48h' | '24h' | '12h' | '6h' | '1h';
+type TimePeriod = 'all' | '7d' | '48h' | '24h' | '12h' | '6h' | '1h';
 
 const TIME_PERIODS: { key: TimePeriod; label: string; hours: number }[] = [
+  { key: 'all', label: 'All Time', hours: 0 },
   { key: '7d', label: '7 Days', hours: 168 },
   { key: '48h', label: '48 Hours', hours: 48 },
   { key: '24h', label: '24 Hours', hours: 24 },
@@ -30,7 +31,7 @@ function buildBaseOption() {
 export function AdminDashboard() {
   const { user } = useAuth();
   const isModerator = user?.role === 'moderator';
-  const [period, setPeriod] = useState<TimePeriod>('7d');
+  const [period, setPeriod] = useState<TimePeriod>('all');
   const { data: apiIncidents, loading } = useQuery(() => fetchIncidents(), []);
   const importedIncidents = useAppStore((s) => s.importedIncidents);
 
@@ -43,6 +44,7 @@ export function AdminDashboard() {
   const periodHours = TIME_PERIODS.find(p => p.key === period)!.hours;
 
   const filtered = useMemo(() => {
+    if (periodHours === 0) return incidents;
     const cutoff = Date.now() - periodHours * 60 * 60 * 1000;
     return incidents.filter(i => {
       if (!i.occurred_at) return false;
