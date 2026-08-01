@@ -6,10 +6,17 @@ import { useQuery } from '@/lib/hooks/useQuery';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useAppStore } from '@/stores/app-store';
 
-type TimePeriod = 'all' | '7d' | '48h' | '24h' | '12h' | '6h' | '1h';
-
-const TIME_PERIODS: { key: TimePeriod; label: string; hours: number }[] = [
+const TIME_PERIODS: { key: string; label: string; hours: number }[] = [
   { key: 'all', label: 'All Time', hours: 0 },
+  { key: '100y', label: '100 Years', hours: 100 * 365.25 * 24 },
+  { key: '50y', label: '50 Years', hours: 50 * 365.25 * 24 },
+  { key: '25y', label: '25 Years', hours: 25 * 365.25 * 24 },
+  { key: '10y', label: '10 Years', hours: 10 * 365.25 * 24 },
+  { key: '5y', label: '5 Years', hours: 5 * 365.25 * 24 },
+  { key: '1y', label: '1 Year', hours: 365.25 * 24 },
+  { key: '6m', label: '6 Months', hours: 182 * 24 },
+  { key: '3m', label: '3 Months', hours: 91 * 24 },
+  { key: '1m', label: '1 Month', hours: 30 * 24 },
   { key: '7d', label: '7 Days', hours: 168 },
   { key: '48h', label: '48 Hours', hours: 48 },
   { key: '24h', label: '24 Hours', hours: 24 },
@@ -31,7 +38,7 @@ function buildBaseOption() {
 export function AdminDashboard() {
   const { user } = useAuth();
   const isModerator = user?.role === 'moderator';
-  const [period, setPeriod] = useState<TimePeriod>('all');
+  const [period, setPeriod] = useState('all');
   const { data: apiIncidents, loading } = useQuery(() => fetchIncidents(), []);
   const importedIncidents = useAppStore((s) => s.importedIncidents);
 
@@ -257,16 +264,18 @@ export function AdminDashboard() {
         <p>Incident overview {isModerator ? '(moderator view)' : ''}</p>
       </div>
 
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
-        {TIME_PERIODS.map(tp => (
-          <button
-            key={tp.key}
-            className={`btn btn-small ${period === tp.key ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setPeriod(tp.key)}
-          >
-            {tp.label}
-          </button>
-        ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+        <label style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Time range</label>
+        <select
+          className="form-input"
+          value={period}
+          onChange={(e) => setPeriod(e.target.value)}
+          style={{ maxWidth: 200 }}
+        >
+          {TIME_PERIODS.map(tp => (
+            <option key={tp.key} value={tp.key}>{tp.label}</option>
+          ))}
+        </select>
       </div>
 
       {loading && <p style={{ textAlign: 'center', padding: '2rem', opacity: 0.6 }}>Loading dashboard data...</p>}

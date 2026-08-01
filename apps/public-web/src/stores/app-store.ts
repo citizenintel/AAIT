@@ -42,11 +42,10 @@ function getDb() {
 
 const persistTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 
-function debouncePersist(storeName: string, data: unknown) {
-  // Snapshot immediately — immer draft proxies are revoked after set() returns
+function debouncePersist(storeName: string, data: unknown, immediate = false) {
   const snapshot = JSON.parse(JSON.stringify(data));
   if (persistTimers[storeName]) clearTimeout(persistTimers[storeName]);
-  persistTimers[storeName] = setTimeout(async () => {
+  const write = async () => {
     try {
       const db = await getDb();
       const tx = db.transaction(storeName, 'readwrite');
@@ -55,7 +54,9 @@ function debouncePersist(storeName: string, data: unknown) {
     } catch {
       // IndexedDB may be unavailable in private browsing
     }
-  }, 1000);
+  };
+  if (immediate) { write(); return; }
+  persistTimers[storeName] = setTimeout(write, 1000);
 }
 
 async function hydrateStore<T>(storeName: string): Promise<T | undefined> {
@@ -663,11 +664,11 @@ export const useAppStore = create<AppStore>()(
           s.importedIncidents.push(inc);
         }
       }
-      debouncePersist('importedIncidents', s.importedIncidents);
+      debouncePersist('importedIncidents', s.importedIncidents, true);
     }),
     clearImportedIncidents: () => set((s) => {
       s.importedIncidents = [];
-      debouncePersist('importedIncidents', []);
+      debouncePersist('importedIncidents', [], true);
     }),
     getStorageEstimate: () => {
       const incidents = get().importedIncidents;
