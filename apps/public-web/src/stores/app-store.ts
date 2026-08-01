@@ -15,13 +15,14 @@ import type {
   SourceHealthCheck,
 } from '@/types/ontology';
 import type { ModuleKey, IncidentSeverity, AppRole } from '@/data/types';
+import type { MockIncident } from '@/data/mock-incidents';
 
 // ---------------------------------------------------------------------------
 // IndexedDB persistence
 // ---------------------------------------------------------------------------
 
 const DB_NAME = 'inteltwin';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
@@ -32,6 +33,7 @@ function getDb() {
         if (!db.objectStoreNames.contains('events')) db.createObjectStore('events');
         if (!db.objectStoreNames.contains('assets')) db.createObjectStore('assets');
         if (!db.objectStoreNames.contains('watchAreas')) db.createObjectStore('watchAreas');
+        if (!db.objectStoreNames.contains('importedIncidents')) db.createObjectStore('importedIncidents');
       },
     });
   }
@@ -284,6 +286,12 @@ interface AppStore {
   feedLastRefresh: Record<string, number>;
   markFeedRefreshed: (feedId: string) => void;
   cleanStaleFeeds: () => string[];
+
+  // --- Imported incidents ---
+  importedIncidents: MockIncident[];
+  addImportedIncidents: (incidents: MockIncident[]) => void;
+  clearImportedIncidents: () => void;
+  getStorageEstimate: () => { incidentCount: number; estimatedBytes: number };
 
   // --- Hydration ---
   hydrate: () => Promise<void>;
@@ -641,17 +649,43 @@ export const useAppStore = create<AppStore>()(
       return stale;
     },
 
+    // --- Imported incidents ---
+    importedIncidents: [],
+    addImportedIncidents: (incidents) => set((s) => {
+      const existingIds = new Set(s.importedIncidents.map(i => i.id));
+      for (const inc of incidents) {
+        if (existingIds.has(inc.id)) {
+          const idx = s.importedIncidents.findIndex(i => i.id === inc.id);
+          if (idx !== -1) s.importedIncidents[idx] = inc;
+        } else {
+          s.importedIncidents.push(inc);
+        }
+      }
+      debouncePersist('importedIncidents', s.importedIncidents);
+    }),
+    clearImportedIncidents: () => set((s) => {
+      s.importedIncidents = [];
+      debouncePersist('importedIncidents', []);
+    }),
+    getStorageEstimate: () => {
+      const incidents = get().importedIncidents;
+      const estimatedBytes = new Blob([JSON.stringify(incidents)]).size;
+      return { incidentCount: incidents.length, estimatedBytes };
+    },
+
     // --- Hydration ---
     hydrate: async () => {
-      const [events, assets, watchAreas] = await Promise.all([
+      const [events, assets, watchAreas, imported] = await Promise.all([
         hydrateStore<IntelligenceEvent[]>('events'),
         hydrateStore<InfrastructureAsset[]>('assets'),
         hydrateStore<WatchArea[]>('watchAreas'),
+        hydrateStore<MockIncident[]>('importedIncidents'),
       ]);
       set((s) => {
         if (events) for (const e of events) s.events.set(e.id, e);
         if (assets) for (const a of assets) s.assets.set(a.id, a);
         if (watchAreas) s.watchAreas = watchAreas;
+        if (imported) s.importedIncidents = imported;
       });
     },
   })),

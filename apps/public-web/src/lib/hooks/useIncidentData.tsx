@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import { fetchIncidents, type IncidentRow } from '../api/incidents';
 import { fetchActiveCampaigns, type CampaignRow } from '../api/sponsors';
 import type { MockIncident } from '../../data/mock-incidents';
+import { useAppStore } from '../../stores/app-store';
 
 interface IncidentDataContextValue {
   incidents: MockIncident[];
@@ -43,16 +44,17 @@ function rowToMock(r: IncidentRow): MockIncident {
 }
 
 export function IncidentDataProvider({ children }: { children: ReactNode }) {
-  const [incidents, setIncidents] = useState<MockIncident[]>([]);
+  const [apiIncidents, setApiIncidents] = useState<MockIncident[]>([]);
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const importedIncidents = useAppStore((s) => s.importedIncidents);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([fetchIncidents(), fetchActiveCampaigns()])
       .then(([rows, camps]) => {
         if (cancelled) return;
-        setIncidents(rows.map(rowToMock));
+        setApiIncidents(rows.map(rowToMock));
         setCampaigns(camps);
         setLoading(false);
       })
@@ -61,6 +63,8 @@ export function IncidentDataProvider({ children }: { children: ReactNode }) {
       });
     return () => { cancelled = true; };
   }, []);
+
+  const incidents = [...apiIncidents, ...importedIncidents];
 
   return (
     <IncidentDataContext.Provider value={{ incidents, campaigns, loading }}>

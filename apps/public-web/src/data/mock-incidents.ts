@@ -18,7 +18,7 @@ export interface MockIncident {
   sourceCount: number;
   sources: string[];
   tags: string[];
-  isSynthetic: true;
+  isSynthetic: boolean;
   casualties?: { deceased: number; injured: number };
 }
 

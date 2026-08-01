@@ -624,8 +624,8 @@ export function IntelligenceMap({
         .setLngLat(coords)
         .setHTML(
           `<div style="font-family:var(--font-body);padding:6px 2px">` +
-          `<div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px">${escapeHtml(title)}</div>` +
-          `<div style="display:flex;gap:8px;font-size:11px;color:var(--text-secondary)">` +
+          `<div style="font-size:13px;font-weight:600;color:#1a1a1a;margin-bottom:4px">${escapeHtml(title)}</div>` +
+          `<div style="display:flex;gap:8px;font-size:11px;color:#555">` +
           `<span style="text-transform:capitalize">${escapeHtml(confidenceLevel.replace(/_/g, ' '))}</span>` +
           `<span>${escapeHtml(timeAgo)}</span>` +
           `</div></div>`,
@@ -663,13 +663,13 @@ export function IntelligenceMap({
         .setHTML(
           `<div style="font-family:var(--font-body);padding:6px 2px">` +
           `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:${escapeHtml(String(p.moduleColour))}">${escapeHtml(String(p.moduleLabel))}</div>` +
-          `<div style="font-size:13px;font-weight:600;color:var(--text-primary);margin:3px 0 4px">${escapeHtml(String(p.title))}</div>` +
-          `<div style="display:flex;gap:8px;font-size:11px;color:var(--text-secondary)">` +
+          `<div style="font-size:13px;font-weight:600;color:#1a1a1a;margin:3px 0 4px">${escapeHtml(String(p.title))}</div>` +
+          `<div style="display:flex;gap:8px;font-size:11px;color:#555">` +
           `<span style="padding:1px 6px;border-radius:3px;background:${escapeHtml(String(p.severityColour))}22;color:${escapeHtml(String(p.severityColour))};font-weight:600">${escapeHtml(String(p.severityLabel))}</span>` +
           `<span>${escapeHtml(String(p.town))}, ${escapeHtml(String(p.province))}</span>` +
           `</div>` +
           casualtyHtml +
-          `<div style="margin-top:8px"><a href="${import.meta.env.BASE_URL}incident/${escapeHtml(String(p.id))}" style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600">View full details →</a></div>` +
+          `<div style="margin-top:8px"><a href="${import.meta.env.BASE_URL}incident/${escapeHtml(String(p.id))}" style="font-size:11px;color:#2563eb;text-decoration:none;font-weight:600">View full details →</a></div>` +
           `</div>`,
         )
         .addTo(map);

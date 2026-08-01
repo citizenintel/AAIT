@@ -2,6 +2,8 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import mammoth from 'mammoth';
+import { useAppStore } from '../../stores/app-store';
+import type { MockIncident } from '../../data/mock-incidents';
 
 GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
@@ -548,12 +550,135 @@ const SEV_COLOURS: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Province centroids for geocoding imported incidents onto the map
+// ---------------------------------------------------------------------------
+
+const PROVINCE_CENTROIDS: Record<string, { lat: number; lng: number }> = {
+  'Gauteng': { lat: -26.27, lng: 28.11 },
+  'Limpopo': { lat: -23.40, lng: 29.42 },
+  'Mpumalanga': { lat: -25.57, lng: 30.30 },
+  'North West': { lat: -26.66, lng: 25.28 },
+  'Free State': { lat: -29.08, lng: 26.15 },
+  'KwaZulu-Natal': { lat: -29.01, lng: 30.29 },
+  'Eastern Cape': { lat: -32.00, lng: 26.50 },
+  'Western Cape': { lat: -33.23, lng: 19.32 },
+  'Northern Cape': { lat: -29.10, lng: 21.25 },
+};
+
+const SA_TOWN_COORDS: Record<string, { lat: number; lng: number }> = {
+  'Johannesburg': { lat: -26.20, lng: 28.04 },
+  'Pretoria': { lat: -25.75, lng: 28.19 },
+  'Cape Town': { lat: -33.93, lng: 18.42 },
+  'Durban': { lat: -29.86, lng: 31.02 },
+  'Port Elizabeth': { lat: -33.96, lng: 25.60 },
+  'Gqeberha': { lat: -33.96, lng: 25.60 },
+  'Bloemfontein': { lat: -29.12, lng: 26.21 },
+  'Polokwane': { lat: -23.91, lng: 29.45 },
+  'Nelspruit': { lat: -25.47, lng: 30.97 },
+  'Mbombela': { lat: -25.47, lng: 30.97 },
+  'Kimberley': { lat: -28.74, lng: 24.77 },
+  'Mahikeng': { lat: -25.87, lng: 25.64 },
+  'Pietermaritzburg': { lat: -29.60, lng: 30.38 },
+  'Rustenburg': { lat: -25.67, lng: 27.24 },
+  'Centurion': { lat: -25.86, lng: 28.19 },
+  'Soweto': { lat: -26.27, lng: 27.86 },
+  'Benoni': { lat: -26.19, lng: 28.32 },
+  'Bronkhorstspruit': { lat: -25.81, lng: 28.74 },
+  'Musina': { lat: -22.34, lng: 30.04 },
+  'Lephalale': { lat: -23.69, lng: 27.70 },
+  'Mokopane': { lat: -24.19, lng: 29.01 },
+  'Vaalwater': { lat: -24.30, lng: 28.10 },
+  'Stellenbosch': { lat: -33.94, lng: 18.86 },
+  'Paarl': { lat: -33.72, lng: 18.97 },
+  'George': { lat: -33.96, lng: 22.46 },
+  'Bredasdorp': { lat: -34.53, lng: 20.04 },
+  'Ermelo': { lat: -26.53, lng: 29.99 },
+  'Secunda': { lat: -26.51, lng: 29.17 },
+  'Witbank': { lat: -25.88, lng: 29.23 },
+  'Emalahleni': { lat: -25.88, lng: 29.23 },
+  'Middelburg': { lat: -25.77, lng: 29.47 },
+  'Upington': { lat: -28.45, lng: 21.27 },
+  'Graaff-Reinet': { lat: -32.25, lng: 24.53 },
+  'East London': { lat: -33.02, lng: 27.91 },
+  'Mthatha': { lat: -31.59, lng: 28.78 },
+  'Queenstown': { lat: -31.90, lng: 26.88 },
+  'Potchefstroom': { lat: -26.72, lng: 27.10 },
+  'Klerksdorp': { lat: -26.87, lng: 26.67 },
+  'Welkom': { lat: -27.98, lng: 26.74 },
+  'Kroonstad': { lat: -27.65, lng: 27.23 },
+  'Newcastle': { lat: -27.76, lng: 29.93 },
+  'Richards Bay': { lat: -28.78, lng: 32.04 },
+};
+
+function geocodeIncident(town: string, province: string): { lat: number; lng: number } {
+  const townKey = Object.keys(SA_TOWN_COORDS).find(k => k.toLowerCase() === town.toLowerCase());
+  if (townKey) {
+    const coords = SA_TOWN_COORDS[townKey]!;
+    return { lat: coords.lat + (Math.random() - 0.5) * 0.02, lng: coords.lng + (Math.random() - 0.5) * 0.02 };
+  }
+  const provKey = Object.keys(PROVINCE_CENTROIDS).find(k => k.toLowerCase() === province.toLowerCase());
+  if (provKey) {
+    const coords = PROVINCE_CENTROIDS[provKey]!;
+    return { lat: coords.lat + (Math.random() - 0.5) * 0.5, lng: coords.lng + (Math.random() - 0.5) * 0.5 };
+  }
+  return { lat: -28.5 + (Math.random() - 0.5) * 4, lng: 25.5 + (Math.random() - 0.5) * 6 };
+}
+
+function sortedRowToIncident(row: AISortedRow, index: number): MockIncident {
+  const get = (label: string): string => row.public[label] ?? '';
+  const town = get('Location / where');
+  const province = get('Province');
+  const coords = geocodeIncident(town, province);
+  const dateOccurred = get('Date occurred') || new Date().toISOString().slice(0, 10);
+
+  let deceased = 0;
+  let injured = 0;
+  const casualties = get('Casualties');
+  const killedMatch = casualties.match(/(\d+)\s*killed/i);
+  const injuredMatch = casualties.match(/(\d+)\s*injured/i);
+  if (killedMatch?.[1]) deceased = parseInt(killedMatch[1], 10);
+  if (injuredMatch?.[1]) injured = parseInt(injuredMatch[1], 10);
+
+  const victimName = get('Victim name');
+  const title = victimName
+    ? `${victimName} — ${town || province || 'Unknown location'}`
+    : get('Summary / notes').slice(0, 80) || `Imported incident #${index + 1}`;
+
+  return {
+    id: `imp-${Date.now().toString(36)}-${index.toString(36)}`,
+    title,
+    summary: get('Summary / notes'),
+    module: row.module as MockIncident['module'],
+    category: row.module,
+    severity: row.severity as MockIncident['severity'],
+    verification: 'v1_unverified' as MockIncident['verification'],
+    locationTier: 'l3_area' as MockIncident['locationTier'],
+    lng: coords.lng,
+    lat: coords.lat,
+    province: province,
+    town: town,
+    dateOccurred,
+    dateReported: new Date().toISOString().slice(0, 10),
+    sourceCount: 1,
+    sources: [],
+    tags: [],
+    isSynthetic: false,
+    casualties: deceased > 0 || injured > 0 ? { deceased, injured } : undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function AdminImport() {
   const inputRef = useRef<HTMLInputElement>(null);
   const attachRef = useRef<HTMLInputElement>(null);
+
+  const addImportedIncidents = useAppStore((s) => s.addImportedIncidents);
+  const importedIncidents = useAppStore((s) => s.importedIncidents);
+  const clearImportedIncidents = useAppStore((s) => s.clearImportedIncidents);
+  const getStorageEstimate = useAppStore((s) => s.getStorageEstimate);
 
   // File / CSV state
   const [fileName, setFileName] = useState('');
@@ -746,9 +871,15 @@ export function AdminImport() {
     setSorting(false);
   }, [dataRows, mapping]);
 
-  // Import
+  // Import — converts sorted rows to MockIncident[] and saves to persistent store
   const runImport = () => {
-    setImported(sorted ? sortedRows.length : dataRows.length);
+    if (sorted && sortedRows.length > 0) {
+      const newIncidents = sortedRows.map((row, i) => sortedRowToIncident(row, i));
+      addImportedIncidents(newIncidents);
+      setImported(newIncidents.length);
+    } else {
+      setImported(dataRows.length);
+    }
   };
 
   const mappedCount = useMemo(() => Object.values(mapping).filter((v) => v >= 0).length, [mapping]);
@@ -1294,6 +1425,39 @@ export function AdminImport() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* ── Stored incidents & storage ──────────────────────────────── */}
+      {importedIncidents.length > 0 && (
+        <div className="admin-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h2 style={{ margin: 0 }}>Stored Incidents</h2>
+            <button className="btn btn-secondary" onClick={() => { if (confirm('Clear all imported incidents? This cannot be undone.')) clearImportedIncidents(); }} style={{ fontSize: 11, color: '#c53030' }}>
+              Clear all imported data
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+            <div style={{ background: 'var(--bg-elevated)', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{importedIncidents.length}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Incidents stored</div>
+            </div>
+            <div style={{ background: 'var(--bg-elevated)', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{formatBytes(getStorageEstimate().estimatedBytes)}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Storage used</div>
+            </div>
+            <div style={{ background: 'var(--bg-elevated)', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: importedIncidents.filter(i => !i.isSynthetic).length > 0 ? '#38a169' : 'var(--text-muted)' }}>
+                {importedIncidents.filter(i => !i.isSynthetic).length}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>On map (real data)</div>
+            </div>
+          </div>
+          {getStorageEstimate().estimatedBytes > 4 * 1024 * 1024 && (
+            <div className="import-msg warning" style={{ marginTop: 8 }}>
+              Storage usage is high ({formatBytes(getStorageEstimate().estimatedBytes)}). Consider clearing old data or arranging more space.
+            </div>
+          )}
         </div>
       )}
 
