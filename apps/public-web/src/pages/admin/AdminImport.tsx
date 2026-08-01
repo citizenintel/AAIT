@@ -667,6 +667,62 @@ function sortedRowToIncident(row: AISortedRow, index: number): MockIncident {
   };
 }
 
+function rawRowToIncident(
+  row: string[],
+  mapping: Record<TargetKey, number | -1>,
+  index: number,
+): MockIncident {
+  const get = (key: TargetKey): string => {
+    const idx = mapping[key];
+    return idx >= 0 ? (row[idx] ?? '').trim() : '';
+  };
+
+  const allText = row.join(' ');
+  const town = get('location');
+  const province = get('province') || extractProvinceFromText(allText);
+  const coords = geocodeIncident(town, province);
+  const dateOccurred = get('dateOccurred') || new Date().toISOString().slice(0, 10);
+  const summary = get('summary');
+  const victimName = get('victimName');
+
+  let deceased = 0;
+  let injured = 0;
+  const casualties = get('casualties');
+  const killedMatch = casualties.match(/(\d+)\s*killed/i);
+  const injuredMatch = casualties.match(/(\d+)\s*injured/i);
+  if (killedMatch?.[1]) deceased = parseInt(killedMatch[1], 10);
+  if (injuredMatch?.[1]) injured = parseInt(injuredMatch[1], 10);
+
+  const title = victimName
+    ? `${victimName} — ${town || province || 'Unknown location'}`
+    : summary.slice(0, 80) || `Imported incident #${index + 1}`;
+
+  const module = classifyModule(allText);
+  const severity = classifySeverity(allText);
+
+  return {
+    id: `imp-${Date.now().toString(36)}-${index.toString(36)}`,
+    title,
+    summary,
+    module: module as MockIncident['module'],
+    category: module,
+    severity: severity as MockIncident['severity'],
+    verification: 'v1_unverified' as MockIncident['verification'],
+    locationTier: 'l3_area' as MockIncident['locationTier'],
+    lng: coords.lng,
+    lat: coords.lat,
+    province,
+    town,
+    dateOccurred,
+    dateReported: new Date().toISOString().slice(0, 10),
+    sourceCount: 1,
+    sources: [],
+    tags: [],
+    isSynthetic: false,
+    casualties: deceased > 0 || injured > 0 ? { deceased, injured } : undefined,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
