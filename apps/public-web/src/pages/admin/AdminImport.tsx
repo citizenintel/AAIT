@@ -1,4 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,6 +94,95 @@ function guessMapping(headers: string[]): Record<TargetKey, number | -1> {
     map[f.key] = idx;
   }
   return map;
+}
+
+// ---------------------------------------------------------------------------
+// PDF text extraction
+// ---------------------------------------------------------------------------
+
+async function extractPdfText(file: File): Promise<string[]> {
+  const buffer = await file.arrayBuffer();
+  const pdf = await getDocument({ data: buffer }).promise;
+  const pages: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const lines: string[] = [];
+    let lastY: number | null = null;
+    let currentLine = '';
+    for (const item of content.items) {
+      if (!('str' in item)) continue;
+      const y = Math.round((item as { transform: number[] }).transform[5]);
+      if (lastY !== null && Math.abs(y - lastY) > 3) {
+        if (currentLine.trim()) lines.push(currentLine.trim());
+        currentLine = '';
+      }
+      currentLine += (currentLine ? ' ' : '') + item.str;
+      lastY = y;
+    }
+    if (currentLine.trim()) lines.push(currentLine.trim());
+    pages.push(lines.join('\n'));
+  }
+  return pages;
+}
+
+function splitPdfIntoIncidents(pages: string[]): string[][] {
+  const fullText = pages.join('\n\n');
+
+  const numberedPattern = /(?:^|\n)(?:\d+[\.\)]\s|[-•]\s|Incident\s*[:#]?\s*\d+)/i;
+  const hasNumbered = numberedPattern.test(fullText);
+
+  const chunks: string[] = [];
+
+  if (hasNumbered) {
+    const parts = fullText.split(/\n(?=\d+[\.\)]\s|[-•]\s|Incident\s*[:#]?\s*\d+)/i);
+    for (const part of parts) {
+      const trimmed = part.trim();
+      if (trimmed.length > 20) chunks.push(trimmed);
+    }
+  }
+
+  if (chunks.length === 0) {
+    const paragraphs = fullText.split(/\n{2,}/);
+    let buffer = '';
+    for (const p of paragraphs) {
+      const trimmed = p.trim();
+      if (!trimmed) continue;
+      if (buffer && (buffer.length + trimmed.length > 500 || /\b(date|location|incident|attack|report)\b/i.test(trimmed))) {
+        if (buffer.length > 30) chunks.push(buffer);
+        buffer = trimmed;
+      } else {
+        buffer += (buffer ? '\n' : '') + trimmed;
+      }
+    }
+    if (buffer.length > 30) chunks.push(buffer);
+  }
+
+  if (chunks.length === 0 && fullText.trim().length > 30) {
+    chunks.push(fullText.trim());
+  }
+
+  return chunks.map(chunk => {
+    const dateMatch = chunk.match(/\b(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\d{4}[\/-]\d{2}[\/-]\d{2}|\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{4})\b/i);
+    const locationMatch = chunk.match(/(?:in|at|near|from)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})/);
+
+    const date = dateMatch?.[1] ?? '';
+    const location = locationMatch?.[1] ?? '';
+
+    return [
+      '',           // reporter
+      date,         // dateOccurred
+      '',           // incidentType
+      location,     // location
+      '',           // province
+      '',           // sapsNumber
+      '',           // severity
+      chunk,        // summary — full text goes here for AI Sort to process
+      '',           // contactPhone
+      '',           // contactEmail
+      '',           // casualties
+    ];
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -396,6 +489,11 @@ export function AdminImport() {
   // Import state
   const [imported, setImported] = useState<number | null>(null);
 
+  // PDF state
+  const [pdfExtracting, setPdfExtracting] = useState(false);
+  const [pdfPageCount, setPdfPageCount] = useState(0);
+  const [isPdf, setIsPdf] = useState(false);
+
   // Expanded row detail
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
@@ -403,6 +501,7 @@ export function AdminImport() {
     setHeaders([]); setDataRows([]); setMapping({} as Record<TargetKey, number | -1>);
     setError(''); setNotice(''); setSortedRows([]); setSorting(false); setSorted(false);
     setImported(null); setFileName('');
+    setPdfExtracting(false); setPdfPageCount(0); setIsPdf(false);
     attachments.forEach(a => { if (a.thumbnailUrl) URL.revokeObjectURL(a.thumbnailUrl); });
     setAttachments([]); setExpandedRow(null);
   };
@@ -411,6 +510,33 @@ export function AdminImport() {
     reset();
     setFileName(file.name);
     const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+
+    if (ext === 'pdf') {
+      setIsPdf(true);
+      setPdfExtracting(true);
+      extractPdfText(file)
+        .then(pages => {
+          setPdfPageCount(pages.length);
+          const rows = splitPdfIntoIncidents(pages);
+          if (rows.length === 0) {
+            setError('Could not extract any incident records from this PDF.');
+            setPdfExtracting(false);
+            return;
+          }
+          const pdfHeaders = TARGET_FIELDS.map(f => f.label);
+          setHeaders(pdfHeaders);
+          setDataRows(rows);
+          const autoMap = {} as Record<TargetKey, number | -1>;
+          TARGET_FIELDS.forEach((f, i) => { autoMap[f.key] = i; });
+          setMapping(autoMap);
+          setPdfExtracting(false);
+        })
+        .catch(() => {
+          setError('Failed to read PDF — the file may be encrypted or corrupted.');
+          setPdfExtracting(false);
+        });
+      return;
+    }
 
     if (['xlsx', 'xls'].includes(ext)) {
       setNotice('Spreadsheet detected — XLS/XLSX files are parsed server-side (SheetJS). Export as CSV for local preview and column mapping.');
@@ -421,7 +547,7 @@ export function AdminImport() {
       return;
     }
     if (!['csv', 'tsv', 'txt'].includes(ext)) {
-      setError(`Unsupported file type: .${ext}. Use CSV, TSV, XLS, XLSX, or DOC/DOCX.`);
+      setError(`Unsupported file type: .${ext}. Use CSV, TSV, XLS, XLSX, DOC/DOCX, or PDF.`);
       return;
     }
 
@@ -558,17 +684,28 @@ export function AdminImport() {
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
           </svg>
           <div className="import-dropzone-main">{fileName || 'Drop a file here, or click to choose'}</div>
-          <div className="import-dropzone-sub">CSV / TSV parsed here · XLS / XLSX / DOC handled on upload</div>
+          <div className="import-dropzone-sub">CSV / TSV / PDF parsed here · XLS / XLSX / DOC handled on upload</div>
           <input
             ref={inputRef}
             type="file"
-            accept=".csv,.tsv,.txt,.xls,.xlsx,.doc,.docx"
+            accept=".csv,.tsv,.txt,.xls,.xlsx,.doc,.docx,.pdf"
             style={{ display: 'none' }}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
           />
         </div>
         {error && <div className="import-msg error">{error}</div>}
         {notice && <div className="import-msg notice">{notice}</div>}
+        {pdfExtracting && (
+          <div className="import-msg notice" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="spinner-dot" />
+            Extracting text from PDF — reading pages…
+          </div>
+        )}
+        {isPdf && !pdfExtracting && dataRows.length > 0 && (
+          <div className="import-msg notice">
+            PDF extracted — {pdfPageCount} page{pdfPageCount !== 1 ? 's' : ''} scanned, {dataRows.length} potential incident{dataRows.length !== 1 ? 's' : ''} identified. Fields are auto-mapped. Use <strong>AI Sort</strong> to classify, extract PII, and assess each record.
+          </div>
+        )}
       </div>
 
       {/* ── Attachments / Evidence ────────────────────────────────────── */}
@@ -1049,7 +1186,7 @@ export function AdminImport() {
       )}
 
       <div className="admin-note">
-        <strong>How AI Sort works:</strong> The AI engine scans each row to (1) classify the incident module and severity, (2) extract names, phone numbers, email addresses, and case references from free text and move them to a confidential store visible only to admins, (3) produce a clean public summary safe for map display. In production, this runs through a server-side AI model (Groq/Gemini) with the same PII-separation guardrails. Images attached to submissions are individually approvable — only approved images are ever visible to the public. Originals of large files are kept in a 7-day retention queue; admins can mark specific files for permanent storage.
+        <strong>How AI Sort works:</strong> The AI engine scans each row to (1) classify the incident module and severity, (2) extract names, phone numbers, email addresses, and case references from free text and move them to a confidential store visible only to admins, (3) produce a clean public summary safe for map display. <strong>PDF import:</strong> Text is extracted page-by-page and split into individual incident records using paragraph boundaries and structural markers (numbered lists, headings). Dates and locations are auto-detected where possible. In production, this runs through a server-side AI model (Groq/Gemini) with the same PII-separation guardrails. Images attached to submissions are individually approvable — only approved images are ever visible to the public. Originals of large files are kept in a 7-day retention queue; admins can mark specific files for permanent storage.
       </div>
     </div>
   );
