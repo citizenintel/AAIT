@@ -392,20 +392,20 @@ export function MapView() {
       const popup = new maplibregl.Popup({ offset: 12, closeButton: true, maxWidth: '300px' }).setHTML(`
         <div style="font-family:var(--font-sans);padding:6px 2px">
           <div style="font-size:10px;font-weight:600;color:${modMeta?.colour};text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">${modMeta?.label}</div>
-          <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px">${incident.title}</div>
-          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;line-height:1.4">${incident.summary.slice(0, 120)}${incident.summary.length > 120 ? '...' : ''}</div>
-          <div style="display:flex;gap:8px;font-size:11px;color:var(--text-secondary);flex-wrap:wrap">
+          <div style="font-size:13px;font-weight:600;color:#1a1a1a;margin-bottom:4px">${incident.title}</div>
+          <div style="font-size:11px;color:#555;margin-bottom:6px;line-height:1.4">${incident.summary.slice(0, 120)}${incident.summary.length > 120 ? '...' : ''}</div>
+          <div style="display:flex;gap:8px;font-size:11px;color:#555;flex-wrap:wrap">
             <span style="color:${sevMeta?.colour}">${incident.severity.toUpperCase()}</span>
             <span>${verMeta?.label ?? ''}</span>
             <span>${incident.town}, ${incident.province}</span>
           </div>
-          <div style="display:flex;gap:6px;margin-top:6px;font-size:10px;color:var(--text-muted)">
+          <div style="display:flex;gap:6px;margin-top:6px;font-size:10px;color:#888">
             <span>${incident.sourceCount} source${incident.sourceCount !== 1 ? 's' : ''}</span>
             <span>${incident.dateOccurred}</span>
           </div>
           ${incident.casualties ? `<div style="margin-top:4px;font-size:10px;color:#c53030">${incident.casualties.deceased > 0 ? incident.casualties.deceased + ' deceased' : ''}${incident.casualties.deceased > 0 && incident.casualties.injured > 0 ? ', ' : ''}${incident.casualties.injured > 0 ? incident.casualties.injured + ' injured' : ''}</div>` : ''}
-          ${incident.isSynthetic ? '<div style="margin-top:6px;font-size:9px;color:var(--text-muted);font-style:italic;border-top:1px solid var(--border);padding-top:4px">SYNTHETIC TEST DATA</div>' : ''}
-          <button onclick="window.dispatchEvent(new CustomEvent('select-incident',{detail:'${incident.id}'}))" style="margin-top:8px;padding:4px 10px;font-size:11px;background:var(--accent);color:#0f1117;border:none;border-radius:4px;cursor:pointer;font-weight:500">View details</button>
+          ${incident.isSynthetic ? '<div style="margin-top:6px;font-size:9px;color:#888;font-style:italic;border-top:1px solid #e2e8f0;padding-top:4px">SYNTHETIC TEST DATA</div>' : ''}
+          <button onclick="window.dispatchEvent(new CustomEvent('select-incident',{detail:'${incident.id}'}))" style="margin-top:8px;padding:4px 10px;font-size:11px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:500">View details</button>
         </div>
       `);
 

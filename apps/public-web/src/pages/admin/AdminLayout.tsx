@@ -28,10 +28,13 @@ export function AdminLayout() {
   const { isAuthenticated, user, signOut } = useAuth();
   const modPermissions = useAppStore((s) => s.modPermissions);
   const modEnabled = useAppStore((s) => s.modEnabled);
+  const hydrate = useAppStore((s) => s.hydrate);
 
   useEffect(() => {
     if (!isAuthenticated) navigate('/login');
   }, [isAuthenticated, navigate]);
+
+  useEffect(() => { hydrate(); }, [hydrate]);
 
   if (!isAuthenticated) return null;
 

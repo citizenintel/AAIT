@@ -1,16 +1,24 @@
 import { useState, useMemo } from 'react';
 import { MODULE_META, SEVERITY_META, VERIFICATION_META } from '../../data/mock-incidents';
-import { fetchIncidents } from '@/lib/api/incidents';
+import { fetchIncidents, mockToRow } from '@/lib/api/incidents';
 import { useQuery } from '@/lib/hooks/useQuery';
+import { useAppStore } from '@/stores/app-store';
 
 export function AdminIncidents() {
   const [search, setSearch] = useState('');
   const [moduleFilter, setModuleFilter] = useState('all');
   const [severityFilter, setSeverityFilter] = useState('all');
-  const { data: incidents, loading } = useQuery(() => fetchIncidents(), []);
+  const { data: apiIncidents, loading } = useQuery(() => fetchIncidents(), []);
+  const importedIncidents = useAppStore((s) => s.importedIncidents);
+
+  const incidents = useMemo(() => {
+    const api = apiIncidents ?? [];
+    const imported = importedIncidents.map(mockToRow);
+    return [...api, ...imported];
+  }, [apiIncidents, importedIncidents]);
 
   const filtered = useMemo(() => {
-    return (incidents ?? []).filter(inc => {
+    return incidents.filter(inc => {
       if (moduleFilter !== 'all' && inc.category?.module !== moduleFilter) return false;
       if (severityFilter !== 'all' && inc.severity !== severityFilter) return false;
       if (search) {

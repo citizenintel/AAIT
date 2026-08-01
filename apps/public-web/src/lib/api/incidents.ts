@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../supabase';
-import { MOCK_INCIDENTS } from '../../data/mock-incidents';
+import { MOCK_INCIDENTS, type MockIncident } from '../../data/mock-incidents';
 
 export interface IncidentRow {
   id: string;
@@ -148,7 +148,7 @@ function mockToRows(): IncidentRow[] {
   return MOCK_INCIDENTS.map(mockToRow);
 }
 
-function mockToRow(m: (typeof MOCK_INCIDENTS)[number]): IncidentRow {
+export function mockToRow(m: MockIncident): IncidentRow {
   return {
     id: m.id,
     title: m.title,

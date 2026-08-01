@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { MODULE_META, SEVERITY_META, VERIFICATION_META } from '../../data/mock-incidents';
-import { fetchIncidents } from '@/lib/api/incidents';
+import { fetchIncidents, mockToRow } from '@/lib/api/incidents';
 import { useQuery } from '@/lib/hooks/useQuery';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useAppStore } from '@/stores/app-store';
 
 type TimePeriod = '7d' | '48h' | '24h' | '12h' | '6h' | '1h';
 
@@ -30,14 +31,20 @@ export function AdminDashboard() {
   const { user } = useAuth();
   const isModerator = user?.role === 'moderator';
   const [period, setPeriod] = useState<TimePeriod>('7d');
-  const { data: incidents, loading } = useQuery(() => fetchIncidents(), []);
+  const { data: apiIncidents, loading } = useQuery(() => fetchIncidents(), []);
+  const importedIncidents = useAppStore((s) => s.importedIncidents);
+
+  const incidents = useMemo(() => {
+    const api = apiIncidents ?? [];
+    const imported = importedIncidents.map(mockToRow);
+    return [...api, ...imported];
+  }, [apiIncidents, importedIncidents]);
 
   const periodHours = TIME_PERIODS.find(p => p.key === period)!.hours;
 
   const filtered = useMemo(() => {
-    const all = incidents ?? [];
     const cutoff = Date.now() - periodHours * 60 * 60 * 1000;
-    return all.filter(i => {
+    return incidents.filter(i => {
       if (!i.occurred_at) return false;
       return new Date(i.occurred_at).getTime() >= cutoff;
     });

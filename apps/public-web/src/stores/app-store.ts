@@ -40,15 +40,17 @@ function getDb() {
   return dbPromise;
 }
 
-let persistTimer: ReturnType<typeof setTimeout> | null = null;
+const persistTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 
 function debouncePersist(storeName: string, data: unknown) {
-  if (persistTimer) clearTimeout(persistTimer);
-  persistTimer = setTimeout(async () => {
+  // Snapshot immediately — immer draft proxies are revoked after set() returns
+  const snapshot = JSON.parse(JSON.stringify(data));
+  if (persistTimers[storeName]) clearTimeout(persistTimers[storeName]);
+  persistTimers[storeName] = setTimeout(async () => {
     try {
       const db = await getDb();
       const tx = db.transaction(storeName, 'readwrite');
-      await tx.store.put(data, 'data');
+      await tx.store.put(snapshot, 'data');
       await tx.done;
     } catch {
       // IndexedDB may be unavailable in private browsing

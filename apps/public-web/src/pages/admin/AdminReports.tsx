@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { SEVERITY_META, MODULE_META, VERIFICATION_META } from '../../data/mock-incidents';
-import { fetchIncidents } from '@/lib/api/incidents';
+import { fetchIncidents, mockToRow } from '@/lib/api/incidents';
 import { useQuery } from '@/lib/hooks/useQuery';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useAppStore } from '@/stores/app-store';
@@ -27,9 +27,16 @@ function defaultCols(): Record<ColKey, boolean> {
 }
 
 export function AdminReports() {
-  const { data: incidents, loading, error } = useQuery(fetchIncidents, []);
+  const { data: apiIncidents, loading, error } = useQuery(fetchIncidents, []);
   const { user } = useAuth();
+  const importedIncidents = useAppStore((s) => s.importedIncidents);
   const modPermissions = useAppStore((s) => s.modPermissions);
+
+  const incidents = useMemo(() => {
+    const api = apiIncidents ?? [];
+    const imported = importedIncidents.map(mockToRow);
+    return [...api, ...imported];
+  }, [apiIncidents, importedIncidents]);
 
   const [province, setProvince] = useState(ALL);
   const [moduleFilter, setModuleFilter] = useState(ALL);
