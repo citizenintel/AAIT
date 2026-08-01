@@ -26,6 +26,7 @@
     "idb": "^8.0.3",
     "immer": "^11.1.15",
     "lucide-react": "^1.25.0",
+    "mammoth": "^1.12.0",
     "maplibre-gl": "^6.0.0",
     "pdfjs-dist": "^6.2.108",
     "react": "^19.2.8",

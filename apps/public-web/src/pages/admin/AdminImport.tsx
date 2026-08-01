@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import mammoth from 'mammoth';
 
 GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
@@ -183,6 +184,16 @@ function splitPdfIntoIncidents(pages: string[]): string[][] {
       '',           // casualties
     ];
   });
+}
+
+// ---------------------------------------------------------------------------
+// DOCX text extraction
+// ---------------------------------------------------------------------------
+
+async function extractDocxText(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+  return result.value;
 }
 
 // ---------------------------------------------------------------------------
@@ -542,8 +553,34 @@ export function AdminImport() {
       setNotice('Spreadsheet detected — XLS/XLSX files are parsed server-side (SheetJS). Export as CSV for local preview and column mapping.');
       return;
     }
-    if (['doc', 'docx'].includes(ext)) {
-      setNotice('Word document detected — documents route to assisted extraction (AI reads and structures fields). Upload and use the AI Sort button to process.');
+    if (ext === 'docx') {
+      setIsPdf(true);
+      setPdfExtracting(true);
+      extractDocxText(file)
+        .then(text => {
+          const rows = splitPdfIntoIncidents([text]);
+          if (rows.length === 0) {
+            setError('Could not extract any incident records from this document.');
+            setPdfExtracting(false);
+            return;
+          }
+          const docHeaders = TARGET_FIELDS.map(f => f.label);
+          setHeaders(docHeaders);
+          setDataRows(rows);
+          const autoMap = {} as Record<TargetKey, number | -1>;
+          TARGET_FIELDS.forEach((f, i) => { autoMap[f.key] = i; });
+          setMapping(autoMap);
+          setPdfPageCount(1);
+          setPdfExtracting(false);
+        })
+        .catch(() => {
+          setError('Failed to read document — the file may be corrupted or password-protected.');
+          setPdfExtracting(false);
+        });
+      return;
+    }
+    if (ext === 'doc') {
+      setNotice('Legacy .doc format detected — please save as .docx or .pdf and re-upload for automatic extraction.');
       return;
     }
     if (!['csv', 'tsv', 'txt'].includes(ext)) {
@@ -698,12 +735,12 @@ export function AdminImport() {
         {pdfExtracting && (
           <div className="import-msg notice" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="spinner-dot" />
-            Extracting text from PDF — reading pages…
+            Extracting text from document — reading content…
           </div>
         )}
         {isPdf && !pdfExtracting && dataRows.length > 0 && (
           <div className="import-msg notice">
-            PDF extracted — {pdfPageCount} page{pdfPageCount !== 1 ? 's' : ''} scanned, {dataRows.length} potential incident{dataRows.length !== 1 ? 's' : ''} identified. Fields are auto-mapped. Use <strong>AI Sort</strong> to classify, extract PII, and assess each record.
+            Document extracted — {dataRows.length} potential incident{dataRows.length !== 1 ? 's' : ''} identified. Fields are auto-mapped. Use <strong>AI Sort</strong> to classify, extract PII, and assess each record.
           </div>
         )}
       </div>
