@@ -927,14 +927,15 @@ export function AdminImport() {
     setSorting(false);
   }, [dataRows, mapping]);
 
-  // Import — converts sorted rows to MockIncident[] and saves to persistent store
   const runImport = () => {
     if (sorted && sortedRows.length > 0) {
       const newIncidents = sortedRows.map((row, i) => sortedRowToIncident(row, i));
       addImportedIncidents(newIncidents);
       setImported(newIncidents.length);
-    } else {
-      setImported(dataRows.length);
+    } else if (dataRows.length > 0) {
+      const newIncidents = dataRows.map((row, i) => rawRowToIncident(row, mapping, i));
+      addImportedIncidents(newIncidents);
+      setImported(newIncidents.length);
     }
   };
 
@@ -1509,9 +1510,9 @@ export function AdminImport() {
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>On map (real data)</div>
             </div>
           </div>
-          {getStorageEstimate().estimatedBytes > 4 * 1024 * 1024 && (
+          {getStorageEstimate().estimatedBytes > 20 * 1024 * 1024 && (
             <div className="import-msg warning" style={{ marginTop: 8 }}>
-              Storage usage is high ({formatBytes(getStorageEstimate().estimatedBytes)}). Consider clearing old data or arranging more space.
+              Storage usage is high ({formatBytes(getStorageEstimate().estimatedBytes)}). Consider clearing old data or arranging more space before the next deploy.
             </div>
           )}
         </div>

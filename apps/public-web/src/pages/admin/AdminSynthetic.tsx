@@ -1,10 +1,15 @@
 import { MOCK_INCIDENTS, MODULE_META, SEVERITY_META } from '../../data/mock-incidents';
 import { useAppStore } from '@/stores/app-store';
+import { useMemo } from 'react';
 
 export function AdminSynthetic() {
   const showSynthetic = useAppStore((s) => s.filters.showSynthetic);
   const setShowSynthetic = useAppStore((s) => s.setShowSynthetic);
-  const syntheticCount = MOCK_INCIDENTS.filter(i => i.isSynthetic).length;
+  const importedIncidents = useAppStore((s) => s.importedIncidents);
+
+  const allIncidents = useMemo(() => [...MOCK_INCIDENTS, ...importedIncidents], [importedIncidents]);
+  const syntheticCount = allIncidents.filter(i => i.isSynthetic).length;
+  const realCount = allIncidents.filter(i => !i.isSynthetic).length;
 
   return (
     <div className="admin-page">
@@ -33,7 +38,7 @@ export function AdminSynthetic() {
           <div className="stat-label">Synthetic incidents</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">0</div>
+          <div className="stat-value">{realCount}</div>
           <div className="stat-label">Real incidents</div>
         </div>
       </div>
@@ -52,7 +57,7 @@ export function AdminSynthetic() {
             </tr>
           </thead>
           <tbody>
-            {MOCK_INCIDENTS.filter(i => i.isSynthetic).map(inc => (
+            {allIncidents.filter(i => i.isSynthetic).map(inc => (
               <tr key={inc.id}>
                 <td><code className="id-code">{inc.id}</code></td>
                 <td className="td-title">{inc.title}</td>
