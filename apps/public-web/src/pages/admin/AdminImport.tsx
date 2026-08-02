@@ -12,7 +12,7 @@ GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 // ---------------------------------------------------------------------------
 
 const TARGET_FIELDS = [
-  { key: 'victimName', label: 'Victim name', hints: ['victim', 'deceased', 'slain', 'murdered'], confidential: false },
+  { key: 'victimName', label: 'Victim name', hints: ['victim', 'name', 'slain', 'murdered'], confidential: false },
   { key: 'dateOccurred', label: 'Date occurred', hints: ['date', 'occurred', 'when', 'datum'], confidential: false },
   { key: 'incidentType', label: 'Incident type', hints: ['type', 'incident', 'category', 'crime'], confidential: false },
   { key: 'location', label: 'Location / where', hints: ['location', 'where', 'town', 'place', 'address', 'farm'], confidential: false },
@@ -146,13 +146,20 @@ function parseDelimited(text: string): string[][] {
   let row: string[] = [];
   let field = '';
   let inQuotes = false;
+  const expectedCols = (text.split('\n')[0] ?? '').split(delim).length;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
     if (inQuotes) {
       if (c === '"') {
         if (text[i + 1] === '"') { field += '"'; i++; }
         else inQuotes = false;
-      } else field += c;
+      } else if (c === '\n' && row.length + 1 >= expectedCols) {
+        // Unbalanced quote — force-close at row boundary
+        inQuotes = false;
+        row.push(field); rows.push(row); row = []; field = '';
+      } else {
+        field += c;
+      }
     } else if (c === '"') {
       inQuotes = true;
     } else if (c === delim) {
@@ -163,15 +170,18 @@ function parseDelimited(text: string): string[][] {
       // skip
     } else field += c;
   }
+  if (inQuotes) { row.push(field); }
   if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
   return rows.filter((r) => r.some((cell) => cell.trim() !== ''));
 }
 
 function guessMapping(headers: string[]): Record<TargetKey, number | -1> {
   const map = {} as Record<TargetKey, number | -1>;
+  const claimed = new Set<number>();
   for (const f of TARGET_FIELDS) {
-    const idx = headers.findIndex((h) => f.hints.some((hint) => h.toLowerCase().includes(hint)));
+    const idx = headers.findIndex((h, i) => !claimed.has(i) && f.hints.some((hint) => h.toLowerCase().includes(hint)));
     map[f.key] = idx;
+    if (idx >= 0) claimed.add(idx);
   }
   return map;
 }
@@ -254,7 +264,6 @@ function extractCasualties(text: string): string {
   const parts: string[] = [];
   if (killed) parts.push(`${killed[1]} killed`);
   if (injured) parts.push(`${injured[1]} injured`);
-  if (parts.length === 0 && /\b(killed|murdered|dead|deceased|fatal)\b/i.test(lower)) parts.push('1 killed');
   return parts.join(', ');
 }
 
@@ -1051,6 +1060,84 @@ export function AdminImport() {
     setInternalDupes(prev => prev.filter(d => d.newIncident.id !== id && d.existing.id !== id));
   };
 
+  const [cleanupReport, setCleanupReport] = useState<{ fixed: number; split: number; removed: number } | null>(null);
+
+  const cleanImportedData = () => {
+    const cleaned: MockIncident[] = [];
+    let fixed = 0;
+    let split = 0;
+    let removed = 0;
+
+    for (const inc of importedIncidents) {
+      let needsFix = false;
+
+      // Detect merged rows: summary contains multiple date+name patterns
+      const namePatterns = inc.summary.match(/\d{4}[,;]\s*[A-Z]{2,}/g) ?? [];
+      const lineBreaks = inc.summary.split(/\n/).filter(l => l.trim().length > 10);
+
+      if (namePatterns.length >= 2 || (lineBreaks.length >= 3 && inc.summary.length > 300)) {
+        // Split merged records into individual incidents
+        const lines = inc.summary.split(/\n/).filter(l => l.trim().length > 5);
+        if (lines.length >= 2) {
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i]!.trim();
+            const dateMatch = line.match(/(\d{1,2}\s+\w+\s+\d{4}|\d{4}[-/]\d{2}[-/]\d{2}|\d{2}[-/]\d{2}[-/]\d{4})/);
+            const nameMatch = line.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/);
+            const title = nameMatch?.[0]
+              ? `${nameMatch[0]} — ${inc.town || inc.province || 'Unknown location'}`
+              : line.slice(0, 80);
+            const coords = geocodeIncident(inc.town, inc.province);
+            const jitter = () => (Math.random() - 0.5) * 0.3;
+            cleaned.push({
+              ...inc,
+              id: `${inc.id}-split-${i}`,
+              title,
+              summary: line,
+              lng: coords.lng + jitter(),
+              lat: coords.lat + jitter(),
+              dateOccurred: dateMatch?.[1] ?? inc.dateOccurred,
+              casualties: { deceased: 1, injured: 0 },
+            });
+          }
+          split += lines.length;
+          continue;
+        }
+      }
+
+      // Fix generic/garbage titles
+      if (/^(?:\d+\s*(?:killed|dead)|[A-Z]\s+killed|unknown|imported incident)/i.test(inc.title)) {
+        const nameMatch = inc.summary.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/);
+        if (nameMatch) {
+          inc.title = `${nameMatch[0]} — ${inc.town || inc.province || 'Unknown location'}`;
+        } else if (inc.summary.length > 10) {
+          inc.title = inc.summary.slice(0, 80);
+        }
+        needsFix = true;
+      }
+
+      // Fix casualty count mismatch: if title suggests multiple names but casualties says 1
+      const namesInSummary = inc.summary.match(/[A-Z][a-z]+\s+[A-Z][a-z]+/g) ?? [];
+      if (namesInSummary.length > 1 && inc.casualties?.deceased === 1) {
+        inc.casualties = { deceased: namesInSummary.length, injured: inc.casualties?.injured ?? 0 };
+        needsFix = true;
+      }
+
+      // Fix missing casualties: if title contains "killed"/"murdered" but no casualties set
+      if (!inc.casualties && /\b(killed|murdered|dead|fatal)\b/i.test(inc.summary)) {
+        const countMatch = inc.summary.match(/(\d+)\s*(?:killed|dead|deceased|murdered)/i);
+        inc.casualties = { deceased: countMatch ? parseInt(countMatch[1]!, 10) : 1, injured: 0 };
+        needsFix = true;
+      }
+
+      if (needsFix) fixed++;
+      cleaned.push(inc);
+    }
+
+    clearImportedIncidents();
+    if (cleaned.length > 0) addImportedIncidents(cleaned);
+    setCleanupReport({ fixed, split, removed });
+  };
+
   const mappedCount = useMemo(() => Object.values(mapping).filter((v) => v >= 0).length, [mapping]);
 
   const stats = useMemo(() => {
@@ -1661,6 +1748,9 @@ export function AdminImport() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
             <h2 style={{ margin: 0 }}>Stored Incidents</h2>
             <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn btn-secondary" onClick={cleanImportedData} style={{ fontSize: 11, color: '#2563eb' }}>
+                Clean data
+              </button>
               <button className="btn btn-secondary" onClick={scanForInternalDupes} style={{ fontSize: 11 }}>
                 Scan for duplicates
               </button>
@@ -1685,6 +1775,13 @@ export function AdminImport() {
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>On map (real data)</div>
             </div>
           </div>
+          {cleanupReport && (
+            <div className="import-msg success" style={{ marginTop: 10 }}>
+              Data cleanup complete: {cleanupReport.fixed} titles/casualties fixed{cleanupReport.split > 0 ? `, ${cleanupReport.split} merged rows split into individual incidents` : ''}.
+              Total incidents now: {importedIncidents.length}.
+              <button onClick={() => setCleanupReport(null)} style={{ marginLeft: 8, background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', fontSize: 11 }}>Dismiss</button>
+            </div>
+          )}
           {showDedupScan && (
             <div style={{ marginTop: 12 }}>
               {internalDupes.length === 0 ? (
