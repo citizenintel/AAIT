@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { MODULE_META, SEVERITY_META, VERIFICATION_META } from '../../data/mock-incidents';
-import { fetchIncidents, mockToRow } from '@/lib/api/incidents';
+import { fetchIncidents, mockToRow, type IncidentRow } from '@/lib/api/incidents';
 import { useQuery } from '@/lib/hooks/useQuery';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useAppStore } from '@/stores/app-store';
+import { deduplicateByContent, incidentFingerprint } from '@/lib/utils/deduplicate';
 
 const TIME_PERIODS: { key: string; label: string; hours: number }[] = [
   { key: 'all', label: 'All Time', hours: 0 },
@@ -45,7 +46,11 @@ export function AdminDashboard() {
   const incidents = useMemo(() => {
     const api = apiIncidents ?? [];
     const imported = importedIncidents.map(mockToRow);
-    return [...api, ...imported];
+    return deduplicateByContent(
+      [...api, ...imported],
+      (i: IncidentRow) => incidentFingerprint(i.title, i.occurred_at ?? '', i.location?.town ?? i.location?.province ?? ''),
+      (i: IncidentRow) => i.id,
+    );
   }, [apiIncidents, importedIncidents]);
 
   const periodHours = TIME_PERIODS.find(p => p.key === period)!.hours;

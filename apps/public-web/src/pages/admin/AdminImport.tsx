@@ -815,6 +815,7 @@ export function AdminImport() {
   const addImportedIncidents = useAppStore((s) => s.addImportedIncidents);
   const importedIncidents = useAppStore((s) => s.importedIncidents);
   const clearImportedIncidents = useAppStore((s) => s.clearImportedIncidents);
+  const deduplicateImportedIncidents = useAppStore((s) => s.deduplicateImportedIncidents);
   const getStorageEstimate = useAppStore((s) => s.getStorageEstimate);
 
   // File / CSV state
@@ -1060,7 +1061,13 @@ export function AdminImport() {
     setInternalDupes(prev => prev.filter(d => d.newIncident.id !== id && d.existing.id !== id));
   };
 
-  const [cleanupReport, setCleanupReport] = useState<{ fixed: number; split: number; removed: number } | null>(null);
+  const [cleanupReport, setCleanupReport] = useState<{ fixed: number; split: number; removed: number; deduplicated: number } | null>(null);
+  const [dedupReport, setDedupReport] = useState<number | null>(null);
+
+  const runDedup = () => {
+    const removed = deduplicateImportedIncidents();
+    setDedupReport(removed);
+  };
 
   const cleanImportedData = () => {
     const cleaned: MockIncident[] = [];
@@ -1135,7 +1142,8 @@ export function AdminImport() {
 
     clearImportedIncidents();
     if (cleaned.length > 0) addImportedIncidents(cleaned);
-    setCleanupReport({ fixed, split, removed });
+    const deduplicated = deduplicateImportedIncidents();
+    setCleanupReport({ fixed, split, removed, deduplicated });
   };
 
   const mappedCount = useMemo(() => Object.values(mapping).filter((v) => v >= 0).length, [mapping]);
@@ -1748,6 +1756,9 @@ export function AdminImport() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
             <h2 style={{ margin: 0 }}>Stored Incidents</h2>
             <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn btn-secondary" onClick={runDedup} style={{ fontSize: 11, color: '#d97706' }}>
+                Remove Duplicates
+              </button>
               <button className="btn btn-secondary" onClick={cleanImportedData} style={{ fontSize: 11, color: '#2563eb' }}>
                 Clean data
               </button>
@@ -1775,9 +1786,17 @@ export function AdminImport() {
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>On map (real data)</div>
             </div>
           </div>
+          {dedupReport !== null && (
+            <div className="import-msg success" style={{ marginTop: 10 }}>
+              {dedupReport > 0
+                ? `Removed ${dedupReport} duplicate incidents. Total incidents now: ${importedIncidents.length}.`
+                : 'No duplicates found — all incidents are unique.'}
+              <button onClick={() => setDedupReport(null)} style={{ marginLeft: 8, background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', fontSize: 11 }}>Dismiss</button>
+            </div>
+          )}
           {cleanupReport && (
             <div className="import-msg success" style={{ marginTop: 10 }}>
-              Data cleanup complete: {cleanupReport.fixed} titles/casualties fixed{cleanupReport.split > 0 ? `, ${cleanupReport.split} merged rows split into individual incidents` : ''}.
+              Data cleanup complete: {cleanupReport.fixed} titles/casualties fixed{cleanupReport.split > 0 ? `, ${cleanupReport.split} merged rows split into individual incidents` : ''}{cleanupReport.deduplicated > 0 ? `, ${cleanupReport.deduplicated} duplicates removed` : ''}.
               Total incidents now: {importedIncidents.length}.
               <button onClick={() => setCleanupReport(null)} style={{ marginLeft: 8, background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', fontSize: 11 }}>Dismiss</button>
             </div>

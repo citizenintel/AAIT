@@ -3,6 +3,7 @@ import { fetchIncidents, type IncidentRow } from '../api/incidents';
 import { fetchActiveCampaigns, type CampaignRow } from '../api/sponsors';
 import type { MockIncident } from '../../data/mock-incidents';
 import { useAppStore } from '../../stores/app-store';
+import { deduplicateByContent, incidentFingerprint } from '../utils/deduplicate';
 
 interface IncidentDataContextValue {
   incidents: MockIncident[];
@@ -65,7 +66,11 @@ export function IncidentDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const incidents = useMemo(
-    () => [...apiIncidents, ...importedIncidents],
+    () => deduplicateByContent(
+      [...apiIncidents, ...importedIncidents],
+      (i) => incidentFingerprint(i.title, i.dateOccurred ?? '', i.town ?? i.province ?? ''),
+      (i) => i.id,
+    ),
     [apiIncidents, importedIncidents],
   );
 

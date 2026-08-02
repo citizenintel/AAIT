@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { SEVERITY_META, MODULE_META, VERIFICATION_META } from '../../data/mock-incidents';
-import { fetchIncidents, mockToRow } from '@/lib/api/incidents';
+import { fetchIncidents, mockToRow, type IncidentRow } from '@/lib/api/incidents';
 import { useQuery } from '@/lib/hooks/useQuery';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useAppStore } from '@/stores/app-store';
 import { exportCsv, exportXls, exportDocx } from '@/lib/utils/report-export';
+import { deduplicateByContent, incidentFingerprint } from '@/lib/utils/deduplicate';
 
 const ALL = 'All';
 
@@ -35,7 +36,11 @@ export function AdminReports() {
   const incidents = useMemo(() => {
     const api = apiIncidents ?? [];
     const imported = importedIncidents.map(mockToRow);
-    return [...api, ...imported];
+    return deduplicateByContent(
+      [...api, ...imported],
+      (i: IncidentRow) => incidentFingerprint(i.title, i.occurred_at ?? '', i.location?.town ?? i.location?.province ?? ''),
+      (i: IncidentRow) => i.id,
+    );
   }, [apiIncidents, importedIncidents]);
 
   const [province, setProvince] = useState(ALL);

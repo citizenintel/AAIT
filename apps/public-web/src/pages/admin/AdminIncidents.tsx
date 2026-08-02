@@ -3,6 +3,7 @@ import { MODULE_META, SEVERITY_META, VERIFICATION_META } from '../../data/mock-i
 import { fetchIncidents, mockToRow, type IncidentRow } from '@/lib/api/incidents';
 import { useQuery } from '@/lib/hooks/useQuery';
 import { useAppStore } from '@/stores/app-store';
+import { deduplicateByContent, incidentFingerprint } from '@/lib/utils/deduplicate';
 
 function buildSearchQuery(inc: IncidentRow): string {
   const parts: string[] = [];
@@ -189,7 +190,11 @@ export function AdminIncidents() {
   const incidents = useMemo(() => {
     const api = apiIncidents ?? [];
     const imported = importedIncidents.map(mockToRow);
-    return [...api, ...imported];
+    return deduplicateByContent(
+      [...api, ...imported],
+      (i: IncidentRow) => incidentFingerprint(i.title, i.occurred_at ?? '', i.location?.town ?? i.location?.province ?? ''),
+      (i: IncidentRow) => i.id,
+    );
   }, [apiIncidents, importedIncidents]);
 
   const filtered = useMemo(() => {

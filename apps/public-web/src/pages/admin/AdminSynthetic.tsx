@@ -1,13 +1,18 @@
 import { MOCK_INCIDENTS, MODULE_META, SEVERITY_META } from '../../data/mock-incidents';
 import { useAppStore } from '@/stores/app-store';
 import { useMemo } from 'react';
+import { deduplicateByContent, incidentFingerprint } from '@/lib/utils/deduplicate';
 
 export function AdminSynthetic() {
   const showSynthetic = useAppStore((s) => s.filters.showSynthetic);
   const setShowSynthetic = useAppStore((s) => s.setShowSynthetic);
   const importedIncidents = useAppStore((s) => s.importedIncidents);
 
-  const allIncidents = useMemo(() => [...MOCK_INCIDENTS, ...importedIncidents], [importedIncidents]);
+  const allIncidents = useMemo(() => deduplicateByContent(
+    [...MOCK_INCIDENTS, ...importedIncidents],
+    (i) => incidentFingerprint(i.title, i.dateOccurred ?? '', i.town ?? i.province ?? ''),
+    (i) => i.id,
+  ), [importedIncidents]);
   const syntheticCount = allIncidents.filter(i => i.isSynthetic).length;
   const realCount = allIncidents.filter(i => !i.isSynthetic).length;
 

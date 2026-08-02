@@ -16,6 +16,7 @@ import type {
 } from '@/types/ontology';
 import type { ModuleKey, IncidentSeverity, AppRole } from '@/data/types';
 import type { MockIncident } from '@/data/mock-incidents';
+import { deduplicateByContent, incidentFingerprint } from '@/lib/utils/deduplicate';
 
 // ---------------------------------------------------------------------------
 // IndexedDB persistence
@@ -294,6 +295,7 @@ interface AppStore {
   importedIncidents: MockIncident[];
   addImportedIncidents: (incidents: MockIncident[]) => void;
   clearImportedIncidents: () => void;
+  deduplicateImportedIncidents: () => number;
   getStorageEstimate: () => { incidentCount: number; estimatedBytes: number };
 
   // --- Hydration ---
@@ -656,12 +658,20 @@ export const useAppStore = create<AppStore>()(
     importedIncidents: [],
     addImportedIncidents: (incidents) => set((s) => {
       const existingIds = new Set(s.importedIncidents.map(i => i.id));
+      const existingFps = new Set(s.importedIncidents.map(i =>
+        incidentFingerprint(i.title, i.dateOccurred ?? '', i.town ?? i.province ?? ''),
+      ));
       for (const inc of incidents) {
+        const fp = incidentFingerprint(inc.title, inc.dateOccurred ?? '', inc.town ?? inc.province ?? '');
         if (existingIds.has(inc.id)) {
           const idx = s.importedIncidents.findIndex(i => i.id === inc.id);
           if (idx !== -1) s.importedIncidents[idx] = inc;
+        } else if (fp && existingFps.has(fp)) {
+          continue;
         } else {
           s.importedIncidents.push(inc);
+          existingIds.add(inc.id);
+          if (fp) existingFps.add(fp);
         }
       }
       debouncePersist('importedIncidents', s.importedIncidents, true);
@@ -670,6 +680,20 @@ export const useAppStore = create<AppStore>()(
       s.importedIncidents = [];
       debouncePersist('importedIncidents', [], true);
     }),
+    deduplicateImportedIncidents: () => {
+      const before = get().importedIncidents.length;
+      const deduped = deduplicateByContent(
+        get().importedIncidents,
+        (i) => incidentFingerprint(i.title, i.dateOccurred ?? '', i.town ?? i.province ?? ''),
+        (i) => i.id,
+      );
+      const removed = before - deduped.length;
+      if (removed > 0) {
+        set((s) => { s.importedIncidents = deduped; });
+        debouncePersist('importedIncidents', deduped, true);
+      }
+      return removed;
+    },
     getStorageEstimate: () => {
       const incidents = get().importedIncidents;
       const estimatedBytes = new Blob([JSON.stringify(incidents)]).size;
