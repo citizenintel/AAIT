@@ -197,6 +197,41 @@ function formatDistance(km: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Province centroids — fallback geocoding for incidents with missing coords
+// ---------------------------------------------------------------------------
+
+const PROVINCE_CENTROIDS: Record<string, { lat: number; lng: number }> = {
+  'Gauteng': { lat: -26.27, lng: 28.11 },
+  'Limpopo': { lat: -23.40, lng: 29.42 },
+  'Mpumalanga': { lat: -25.57, lng: 30.30 },
+  'North West': { lat: -26.66, lng: 25.28 },
+  'Free State': { lat: -29.08, lng: 26.15 },
+  'KwaZulu-Natal': { lat: -29.01, lng: 30.29 },
+  'Eastern Cape': { lat: -32.00, lng: 26.50 },
+  'Western Cape': { lat: -33.23, lng: 19.32 },
+  'Northern Cape': { lat: -29.10, lng: 21.25 },
+};
+
+function resolveCoords(inc: MockIncident): { lng: number; lat: number } | null {
+  if (inc.lng != null && inc.lat != null && !(inc.lng === 0 && inc.lat === 0)) {
+    return { lng: inc.lng, lat: inc.lat };
+  }
+  const provKey = Object.keys(PROVINCE_CENTROIDS).find(
+    k => k.toLowerCase() === (inc.province ?? '').toLowerCase(),
+  );
+  if (provKey) {
+    const c = PROVINCE_CENTROIDS[provKey]!;
+    const jitter = () => (Math.random() - 0.5) * 0.5;
+    return { lat: c.lat + jitter(), lng: c.lng + jitter() };
+  }
+  if (inc.province || inc.town) {
+    const jitter = () => (Math.random() - 0.5) * 4;
+    return { lat: -28.5 + jitter(), lng: 25.5 + jitter() };
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // GeoJSON helpers
 // ---------------------------------------------------------------------------
 
@@ -239,12 +274,13 @@ function incidentsToGeoJSON(incidents: MockIncident[]): GeoJSON.FeatureCollectio
   const DEFAULT_SEVERITY = SEVERITY_META.medium;
   const features: GeoJSON.Feature[] = [];
   for (const inc of incidents) {
-    if ((inc.lng == null || inc.lat == null) || (inc.lng === 0 && inc.lat === 0)) continue;
+    const coords = resolveCoords(inc);
+    if (!coords) continue;
     const modMeta = MODULE_META[inc.module as keyof typeof MODULE_META] ?? DEFAULT_MODULE;
     const sevMeta = SEVERITY_META[inc.severity as keyof typeof SEVERITY_META] ?? DEFAULT_SEVERITY;
     features.push({
       type: 'Feature',
-      geometry: { type: 'Point', coordinates: [inc.lng, inc.lat] },
+      geometry: { type: 'Point', coordinates: [coords.lng, coords.lat] },
       properties: {
         id: inc.id,
         title: inc.title,
@@ -295,6 +331,7 @@ export function IntelligenceMap({
   const [measure, setMeasure] = useState<MeasureState>({ active: false, points: [], totalKm: 0 });
   const [showRoads, setShowRoads] = useState(false);
   const [show3DHint, setShow3DHint] = useState(false);
+  const [markerCount, setMarkerCount] = useState(0);
 
   // Refs so event handlers always see current state
   const measureRef = useRef(measure);
@@ -316,6 +353,9 @@ export function IntelligenceMap({
   );
   const incidentsGeoJsonRef = useRef(incidentsGeoJson);
   incidentsGeoJsonRef.current = incidentsGeoJson;
+
+  const incidentsRef = useRef(incidents);
+  incidentsRef.current = incidents;
 
   const visibleCount = geojson.features.length;
 
@@ -420,6 +460,72 @@ export function IntelligenceMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  // ------------------------------------------------------------------
+  // Reusable marker placement — called from effect AND map load callback
+  // ------------------------------------------------------------------
+  const placeIncidentMarkers = useCallback((map: maplibregl.Map) => {
+    try {
+      for (const m of incidentMarkersRef.current) m.remove();
+      incidentMarkersRef.current = [];
+
+      const incs = incidentsRef.current;
+      const DEFAULT_MODULE = MODULE_META.ait;
+      const DEFAULT_SEVERITY = SEVERITY_META.medium;
+      let placed = 0;
+      let skipped = 0;
+
+      for (const inc of incs) {
+        const coords = resolveCoords(inc);
+        if (!coords) { skipped++; continue; }
+
+        const modMeta = MODULE_META[inc.module as keyof typeof MODULE_META] ?? DEFAULT_MODULE;
+        const sevMeta = SEVERITY_META[inc.severity as keyof typeof SEVERITY_META] ?? DEFAULT_SEVERITY;
+        const size = inc.severity === 'critical' ? 14 : inc.severity === 'high' ? 11 : 9;
+
+        const el = document.createElement('div');
+        el.className = 'incident-marker';
+        el.style.cssText = `width:${size}px;height:${size}px;background:${modMeta.colour};border:2px solid ${sevMeta.colour};border-radius:50%;cursor:pointer;box-shadow:0 0 4px rgba(0,0,0,0.5);z-index:10;`;
+        el.title = `${inc.title}\n${inc.province} · ${inc.dateOccurred}`;
+
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const existing = popupRef.current;
+          if (existing) existing.remove();
+          const dead = inc.casualties?.deceased ?? 0;
+          const hurt = inc.casualties?.injured ?? 0;
+          const casualtyLine = (dead > 0 || hurt > 0)
+            ? `<div style="margin-top:4px;font-size:11px;color:#e53e3e">${dead > 0 ? dead + ' deceased' : ''}${dead > 0 && hurt > 0 ? ' · ' : ''}${hurt > 0 ? hurt + ' injured' : ''}</div>`
+            : '';
+          const popup = new maplibregl.Popup({ offset: 10, maxWidth: '280px' })
+            .setLngLat([coords.lng, coords.lat])
+            .setHTML(
+              `<div style="font-size:12px"><div style="font-weight:700;margin-bottom:2px">${inc.title}</div>` +
+              `<div style="color:#a0aec0;font-size:11px">${modMeta.label} · ${sevMeta.label} · ${inc.province || ''}</div>` +
+              `<div style="color:#a0aec0;font-size:11px">${inc.dateOccurred || ''} · ${inc.town || ''}</div>` +
+              `${casualtyLine}` +
+              `${inc.summary ? '<div style="margin-top:4px;font-size:11px;color:#cbd5e0;max-height:60px;overflow:hidden">' + inc.summary.slice(0, 150) + (inc.summary.length > 150 ? '...' : '') + '</div>' : ''}</div>`,
+            )
+            .addTo(map);
+          popupRef.current = popup;
+        });
+
+        const marker = new maplibregl.Marker({ element: el })
+          .setLngLat([coords.lng, coords.lat])
+          .addTo(map);
+        incidentMarkersRef.current.push(marker);
+        placed++;
+      }
+
+      setMarkerCount(placed);
+      console.log(`[IntelligenceMap] Marker render: ${incs.length} incidents, ${placed} placed, ${skipped} skipped`);
+      if (placed === 0 && incs.length > 0) {
+        console.warn('[IntelligenceMap] Zero markers! Sample:', JSON.stringify(incs[0], null, 2));
+      }
+    } catch (err) {
+      console.error('[IntelligenceMap] Marker creation failed:', err);
+    }
+  }, []);
 
   // ------------------------------------------------------------------
   // Measure layers
@@ -567,6 +673,11 @@ export function IntelligenceMap({
       addMeasureLayers(map);
       tryAddDeckOverlay(map);
       didMountRef.current = true;
+      // Safety net: place markers here in case the effect fired before map was ready
+      if (incidentMarkersRef.current.length === 0 && incidentsRef.current.length > 0) {
+        console.log('[IntelligenceMap] Map load: placing markers that missed the effect');
+        placeIncidentMarkers(map);
+      }
     });
 
     // Force repaints when raster tiles finish loading (fixes blank tile boxes in MapLibre v6)
@@ -692,6 +803,15 @@ export function IntelligenceMap({
 
     mapRef.current = map;
 
+    // Delayed safety net: re-place markers after hydration likely completes
+    const hydrateTimer = setInterval(() => {
+      if (incidentsRef.current.length > 0 && incidentMarkersRef.current.length === 0) {
+        console.log('[IntelligenceMap] Hydration retry: placing', incidentsRef.current.length, 'markers');
+        placeIncidentMarkers(map);
+      }
+    }, 2000);
+    const hydrateTimeout = setTimeout(() => clearInterval(hydrateTimer), 15000);
+
     // Resize observer for container changes
     const ro = new ResizeObserver(() => {
       requestAnimationFrame(() => map.resize());
@@ -700,6 +820,8 @@ export function IntelligenceMap({
 
     return () => {
       ro.disconnect();
+      clearInterval(hydrateTimer);
+      clearTimeout(hydrateTimeout);
       if (popupRef.current) popupRef.current.remove();
       map.remove();
       mapRef.current = null;
@@ -939,52 +1061,16 @@ export function IntelligenceMap({
   // ------------------------------------------------------------------
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
-
-    // Remove old markers
-    for (const m of incidentMarkersRef.current) m.remove();
-    incidentMarkersRef.current = [];
-
-    const DEFAULT_MODULE = MODULE_META.ait;
-    const DEFAULT_SEVERITY = SEVERITY_META.medium;
-
-    for (const inc of incidents) {
-      if ((inc.lng == null || inc.lat == null) || (inc.lng === 0 && inc.lat === 0)) continue;
-
-      const modMeta = MODULE_META[inc.module as keyof typeof MODULE_META] ?? DEFAULT_MODULE;
-      const sevMeta = SEVERITY_META[inc.severity as keyof typeof SEVERITY_META] ?? DEFAULT_SEVERITY;
-      const size = inc.severity === 'critical' ? 14 : inc.severity === 'high' ? 11 : 9;
-
-      const el = document.createElement('div');
-      el.className = 'incident-marker';
-      el.style.cssText = `width:${size}px;height:${size}px;background:${modMeta.colour};border:2px solid ${sevMeta.colour};border-radius:50%;cursor:pointer;box-shadow:0 0 4px rgba(0,0,0,0.5);`;
-      el.title = `${inc.title}\n${inc.province} · ${inc.dateOccurred}`;
-
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const existing = popupRef.current;
-        if (existing) existing.remove();
-        const dead = inc.casualties?.deceased ?? 0;
-        const hurt = inc.casualties?.injured ?? 0;
-        const casualtyLine = (dead > 0 || hurt > 0) ? `<div style="margin-top:4px;font-size:11px;color:#e53e3e">${dead > 0 ? dead + ' deceased' : ''}${dead > 0 && hurt > 0 ? ' · ' : ''}${hurt > 0 ? hurt + ' injured' : ''}</div>` : '';
-        const popup = new maplibregl.Popup({ offset: 10, maxWidth: '280px' })
-          .setLngLat([inc.lng, inc.lat])
-          .setHTML(`<div style="font-size:12px"><div style="font-weight:700;margin-bottom:2px">${inc.title}</div><div style="color:#a0aec0;font-size:11px">${modMeta.label} · ${sevMeta.label} · ${inc.province || ''}</div><div style="color:#a0aec0;font-size:11px">${inc.dateOccurred || ''} · ${inc.town || ''}</div>${casualtyLine}${inc.summary ? '<div style="margin-top:4px;font-size:11px;color:#cbd5e0;max-height:60px;overflow:hidden">' + inc.summary.slice(0, 150) + (inc.summary.length > 150 ? '...' : '') + '</div>' : ''}</div>`)
-          .addTo(map);
-        popupRef.current = popup;
-      });
-
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([inc.lng, inc.lat])
-        .addTo(map);
-      incidentMarkersRef.current.push(marker);
+    if (!map) {
+      console.warn('[IntelligenceMap] Marker effect: map not ready, incidents pending:', incidents.length);
+      return;
     }
-
+    placeIncidentMarkers(map);
     return () => {
       for (const m of incidentMarkersRef.current) m.remove();
       incidentMarkersRef.current = [];
     };
-  }, [incidents]);
+  }, [incidents, placeIncidentMarkers]);
 
   // ------------------------------------------------------------------
   // Fly to selected event when selectedEventId changes externally
@@ -1127,6 +1213,21 @@ export function IntelligenceMap({
           </button>
         </div>
       </div>
+
+      {/* Marker count badge — diagnostic + user feedback */}
+      {(incidents.length > 0 || markerCount > 0) && (
+        <div style={{
+          position: 'absolute', bottom: 8, left: 12, zIndex: 20,
+          background: markerCount > 0 ? 'rgba(56, 178, 172, 0.9)' : 'rgba(197, 48, 48, 0.9)',
+          color: '#fff', fontSize: 11, fontWeight: 600,
+          padding: '3px 8px', borderRadius: 4,
+          pointerEvents: 'none',
+        }}>
+          {markerCount > 0
+            ? `${markerCount} incidents on map`
+            : `${incidents.length} incidents pending...`}
+        </div>
+      )}
     </div>
   );
 }

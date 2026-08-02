@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react';
 import { fetchIncidents, type IncidentRow } from '../api/incidents';
 import { fetchActiveCampaigns, type CampaignRow } from '../api/sponsors';
 import type { MockIncident } from '../../data/mock-incidents';
@@ -64,10 +64,22 @@ export function IncidentDataProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
-  const incidents = [...apiIncidents, ...importedIncidents];
+  const incidents = useMemo(
+    () => [...apiIncidents, ...importedIncidents],
+    [apiIncidents, importedIncidents],
+  );
+
+  const value = useMemo(
+    () => ({ incidents, campaigns, loading }),
+    [incidents, campaigns, loading],
+  );
+
+  useEffect(() => {
+    console.log(`[IncidentDataProvider] incidents=${incidents.length} (api=${apiIncidents.length}, imported=${importedIncidents.length})`);
+  }, [incidents.length, apiIncidents.length, importedIncidents.length]);
 
   return (
-    <IncidentDataContext.Provider value={{ incidents, campaigns, loading }}>
+    <IncidentDataContext.Provider value={value}>
       {children}
     </IncidentDataContext.Provider>
   );
