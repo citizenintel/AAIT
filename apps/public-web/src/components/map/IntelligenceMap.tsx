@@ -288,6 +288,7 @@ export function IntelligenceMap({
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const deckOverlayRef = useRef<unknown>(null);
   const didMountRef = useRef(false);
+  const incidentMarkersRef = useRef<maplibregl.Marker[]>([]);
 
   // Style / control state
   const [activeStyle, setActiveStyle] = useState<MapStyleKey>('standard');
@@ -932,6 +933,58 @@ export function IntelligenceMap({
       clearTimeout(timeout);
     };
   }, [incidentsGeoJson]);
+
+  // ------------------------------------------------------------------
+  // HTML marker fallback — guaranteed to render regardless of tile/source state
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Remove old markers
+    for (const m of incidentMarkersRef.current) m.remove();
+    incidentMarkersRef.current = [];
+
+    const DEFAULT_MODULE = MODULE_META.ait;
+    const DEFAULT_SEVERITY = SEVERITY_META.medium;
+
+    for (const inc of incidents) {
+      if ((inc.lng == null || inc.lat == null) || (inc.lng === 0 && inc.lat === 0)) continue;
+
+      const modMeta = MODULE_META[inc.module as keyof typeof MODULE_META] ?? DEFAULT_MODULE;
+      const sevMeta = SEVERITY_META[inc.severity as keyof typeof SEVERITY_META] ?? DEFAULT_SEVERITY;
+      const size = inc.severity === 'critical' ? 14 : inc.severity === 'high' ? 11 : 9;
+
+      const el = document.createElement('div');
+      el.className = 'incident-marker';
+      el.style.cssText = `width:${size}px;height:${size}px;background:${modMeta.colour};border:2px solid ${sevMeta.colour};border-radius:50%;cursor:pointer;box-shadow:0 0 4px rgba(0,0,0,0.5);`;
+      el.title = `${inc.title}\n${inc.province} · ${inc.dateOccurred}`;
+
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const existing = popupRef.current;
+        if (existing) existing.remove();
+        const dead = inc.casualties?.deceased ?? 0;
+        const hurt = inc.casualties?.injured ?? 0;
+        const casualtyLine = (dead > 0 || hurt > 0) ? `<div style="margin-top:4px;font-size:11px;color:#e53e3e">${dead > 0 ? dead + ' deceased' : ''}${dead > 0 && hurt > 0 ? ' · ' : ''}${hurt > 0 ? hurt + ' injured' : ''}</div>` : '';
+        const popup = new maplibregl.Popup({ offset: 10, maxWidth: '280px' })
+          .setLngLat([inc.lng, inc.lat])
+          .setHTML(`<div style="font-size:12px"><div style="font-weight:700;margin-bottom:2px">${inc.title}</div><div style="color:#a0aec0;font-size:11px">${modMeta.label} · ${sevMeta.label} · ${inc.province || ''}</div><div style="color:#a0aec0;font-size:11px">${inc.dateOccurred || ''} · ${inc.town || ''}</div>${casualtyLine}${inc.summary ? '<div style="margin-top:4px;font-size:11px;color:#cbd5e0;max-height:60px;overflow:hidden">' + inc.summary.slice(0, 150) + (inc.summary.length > 150 ? '...' : '') + '</div>' : ''}</div>`)
+          .addTo(map);
+        popupRef.current = popup;
+      });
+
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([inc.lng, inc.lat])
+        .addTo(map);
+      incidentMarkersRef.current.push(marker);
+    }
+
+    return () => {
+      for (const m of incidentMarkersRef.current) m.remove();
+      incidentMarkersRef.current = [];
+    };
+  }, [incidents]);
 
   // ------------------------------------------------------------------
   // Fly to selected event when selectedEventId changes externally
