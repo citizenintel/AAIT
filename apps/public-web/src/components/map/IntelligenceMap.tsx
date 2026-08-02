@@ -885,14 +885,21 @@ export function IntelligenceMap({
     const map = mapRef.current;
     if (!map) return;
 
+    const featureCount = incidentsGeoJson.features.length;
     const updateSource = () => {
       const source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
-      if (source) source.setData(incidentsGeoJson);
+      if (source) {
+        source.setData(incidentsGeoJson);
+        console.log(`[Map] Updated incidents source: ${featureCount} features`);
+      } else {
+        console.warn(`[Map] Incidents source not found, ${featureCount} features waiting`);
+      }
     };
 
     if (map.isStyleLoaded()) {
       updateSource();
     } else {
+      console.log(`[Map] Style not loaded yet, waiting... (${featureCount} features pending)`);
       map.once('style.load', updateSource);
       return () => { map.off('style.load', updateSource); };
     }
