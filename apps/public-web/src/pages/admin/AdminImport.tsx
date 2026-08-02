@@ -745,6 +745,16 @@ function sortedRowToIncident(row: AISortedRow, index: number): MockIncident {
     tags: [],
     isSynthetic: false,
     casualties: deceased > 0 || injured > 0 ? { deceased, injured } : undefined,
+    victimName: victimName || undefined,
+    suspectName: row.confidential['Suspect name'] || undefined,
+    incidentType: get('Incident type') || undefined,
+    courtCase: row.confidential['Court case / docket'] || undefined,
+    verdict: get('Verdict / outcome') || undefined,
+    caseStatus: get('Case status') || undefined,
+    sourceUrl: get('Source URL') || undefined,
+    reporter: row.confidential['Reporter / contact'] || undefined,
+    contactPhone: row.confidential['Phone number'] || undefined,
+    contactEmail: row.confidential['Email address'] || undefined,
   };
 }
 
@@ -801,6 +811,16 @@ function rawRowToIncident(
     tags: [],
     isSynthetic: false,
     casualties: deceased > 0 || injured > 0 ? { deceased, injured } : undefined,
+    victimName: victimName || undefined,
+    suspectName: get('suspectName') || undefined,
+    incidentType: get('incidentType') || undefined,
+    courtCase: get('courtCase') || undefined,
+    verdict: get('verdict') || undefined,
+    caseStatus: get('caseStatus') || undefined,
+    sourceUrl: get('sourceUrl') || undefined,
+    reporter: get('reporter') || undefined,
+    contactPhone: get('contactPhone') || undefined,
+    contactEmail: get('contactEmail') || undefined,
   };
 }
 

@@ -1,191 +1,107 @@
-import { useState, useMemo, useCallback, Fragment } from 'react';
-import { MODULE_META, SEVERITY_META, VERIFICATION_META } from '../../data/mock-incidents';
+import { useState, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { MODULE_META, SEVERITY_META, type MockIncident } from '../../data/mock-incidents';
 import { fetchIncidents, mockToRow, type IncidentRow } from '@/lib/api/incidents';
 import { useQuery } from '@/lib/hooks/useQuery';
 import { useAppStore } from '@/stores/app-store';
 import { deduplicateByContent, incidentFingerprint } from '@/lib/utils/deduplicate';
+import { calculateCredibility } from '@/lib/utils/credibility';
 
-function buildSearchQuery(inc: IncidentRow): string {
-  const parts: string[] = [];
-  if (inc.title) parts.push(inc.title);
-  if (inc.location?.town) parts.push(inc.location.town);
-  if (inc.location?.province) parts.push(inc.location.province);
-  if (inc.occurred_at) parts.push(inc.occurred_at);
-  return parts.join(' ');
-}
+function AddIncidentForm({ onAdd, onCancel }: { onAdd: (inc: MockIncident) => void; onCancel: () => void }) {
+  const [title, setTitle] = useState('');
+  const [victimName, setVictimName] = useState('');
+  const [dateOccurred, setDateOccurred] = useState('');
+  const [town, setTown] = useState('');
+  const [province, setProvince] = useState('');
+  const [module, setModule] = useState('ait');
+  const [severity, setSeverity] = useState('high');
+  const [summary, setSummary] = useState('');
 
-function buildSASearchQuery(inc: IncidentRow): string {
-  const parts: string[] = [];
-  if (inc.title) parts.push(inc.title);
-  if (inc.location?.town) parts.push(inc.location.town);
-  parts.push('South Africa');
-  return parts.join(' ');
-}
+  const provinces = ['Eastern Cape', 'Free State', 'Gauteng', 'KwaZulu-Natal', 'Limpopo', 'Mpumalanga', 'North West', 'Northern Cape', 'Western Cape'];
 
-function ResearchPanel({ incident }: { incident: IncidentRow }) {
-  const q = encodeURIComponent(buildSearchQuery(incident));
-  const qSA = encodeURIComponent(buildSASearchQuery(incident));
-
-  const linkStyle = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 4,
-    padding: '4px 10px',
-    borderRadius: 4,
-    fontSize: 11,
-    fontWeight: 600 as const,
-    textDecoration: 'none' as const,
-    border: '1px solid var(--border)',
+  const handleAdd = () => {
+    const finalTitle = title.trim() || (victimName ? `${victimName} — ${town || province || 'Unknown'}` : 'Untitled incident');
+    const inc: MockIncident = {
+      id: `man-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      title: finalTitle,
+      summary: summary.trim(),
+      module: module as MockIncident['module'],
+      category: module,
+      severity: severity as MockIncident['severity'],
+      verification: 'v0_unverified' as MockIncident['verification'],
+      locationTier: 'l3_area' as MockIncident['locationTier'],
+      lng: 0, lat: 0,
+      province, town,
+      dateOccurred: dateOccurred || new Date().toISOString().slice(0, 10),
+      dateReported: new Date().toISOString().slice(0, 10),
+      sourceCount: 0, sources: [], tags: [],
+      isSynthetic: false,
+      victimName: victimName || undefined,
+    };
+    onAdd(inc);
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div>
-        <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.04em', color: 'var(--text-muted)', marginBottom: 6 }}>
-          Search for articles & news
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          <a href={`https://news.google.com/search?q=${q}`} target="_blank" rel="noopener noreferrer" style={{ ...linkStyle, background: '#2563eb11', color: '#3b82f6' }}>
-            Google News
-          </a>
-          <a href={`https://www.google.com/search?q=${q}&tbm=nws`} target="_blank" rel="noopener noreferrer" style={{ ...linkStyle, background: '#16a34a11', color: '#22c55e' }}>
-            Google News Tab
-          </a>
-          <a href={`https://www.google.com/search?q=${qSA}`} target="_blank" rel="noopener noreferrer" style={{ ...linkStyle, background: '#16a34a11', color: '#22c55e' }}>
-            Google Web
-          </a>
-          <a href={`https://twitter.com/search?q=${q}&f=live`} target="_blank" rel="noopener noreferrer" style={{ ...linkStyle, background: '#a855f711', color: '#a855f7' }}>
-            X / Twitter
-          </a>
-          <a href={`https://www.reddit.com/search/?q=${qSA}`} target="_blank" rel="noopener noreferrer" style={{ ...linkStyle, background: '#f9731611', color: '#f97316' }}>
-            Reddit
-          </a>
-          <a href={`https://www.youtube.com/results?search_query=${q}`} target="_blank" rel="noopener noreferrer" style={{ ...linkStyle, background: '#ef444411', color: '#ef4444' }}>
-            YouTube
-          </a>
-        </div>
-      </div>
-
-      <div>
-        <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.04em', color: 'var(--text-muted)', marginBottom: 6 }}>
-          SA News Sources
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          <a href={`https://www.news24.com/search?query=${encodeURIComponent(incident.title)}`} target="_blank" rel="noopener noreferrer" style={{ ...linkStyle, background: '#06b6d411', color: '#06b6d4' }}>
-            News24
-          </a>
-          <a href={`https://www.dailymaverick.co.za/?s=${encodeURIComponent(incident.title)}`} target="_blank" rel="noopener noreferrer" style={{ ...linkStyle, background: '#8b5cf611', color: '#8b5cf6' }}>
-            Daily Maverick
-          </a>
-          <a href={`https://www.iol.co.za/search?query=${encodeURIComponent(incident.title)}`} target="_blank" rel="noopener noreferrer" style={{ ...linkStyle, background: '#0ea5e911', color: '#0ea5e9' }}>
-            IOL
-          </a>
-          <a href={`https://www.timeslive.co.za/search?query=${encodeURIComponent(incident.title)}`} target="_blank" rel="noopener noreferrer" style={{ ...linkStyle, background: '#f59e0b11', color: '#f59e0b' }}>
-            TimesLive
-          </a>
-          <a href={`https://ewn.co.za/?s=${encodeURIComponent(incident.title)}`} target="_blank" rel="noopener noreferrer" style={{ ...linkStyle, background: '#10b98111', color: '#10b981' }}>
-            EWN
-          </a>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function IncidentDetail({ incident }: { incident: IncidentRow }) {
-  const mod = MODULE_META[incident.category?.module as keyof typeof MODULE_META];
-  const sev = SEVERITY_META[incident.severity as keyof typeof SEVERITY_META];
-  const ver = VERIFICATION_META[incident.verification_state];
-
-  return (
-    <div style={{ padding: '16px 20px', background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-        {/* Left: Case details */}
+    <div className="admin-card" style={{ borderLeft: '3px solid #3b82f6' }}>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Add New Incident</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
         <div>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--text-muted)', marginBottom: 8 }}>
-            Case Details
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '4px 12px', fontSize: 12 }}>
-            <span style={{ color: 'var(--text-muted)' }}>ID</span>
-            <code style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{incident.id}</code>
-            <span style={{ color: 'var(--text-muted)' }}>Module</span>
-            <span style={{ color: mod?.colour, fontWeight: 600 }}>{mod?.label ?? incident.category?.module}</span>
-            <span style={{ color: 'var(--text-muted)' }}>Severity</span>
-            <span style={{ color: sev?.colour, fontWeight: 600 }}>{sev?.label ?? incident.severity}</span>
-            <span style={{ color: 'var(--text-muted)' }}>Verification</span>
-            <span>{ver?.label ?? incident.verification_state}</span>
-            <span style={{ color: 'var(--text-muted)' }}>Date</span>
-            <span>{incident.occurred_at || 'Unknown'}</span>
-            <span style={{ color: 'var(--text-muted)' }}>Location</span>
-            <span>{[incident.location?.town, incident.location?.province].filter(Boolean).join(', ') || 'Unknown'}</span>
-            <span style={{ color: 'var(--text-muted)' }}>Coordinates</span>
-            <span>{incident.location?.lat && incident.location?.lng ? `${incident.location.lat.toFixed(4)}, ${incident.location.lng.toFixed(4)}` : 'N/A'}</span>
-            <span style={{ color: 'var(--text-muted)' }}>Sources</span>
-            <span>{incident.source_count ?? 0}</span>
-            {(incident.fatality_count_confirmed ?? 0) > 0 && (<>
-              <span style={{ color: 'var(--text-muted)' }}>Deceased</span>
-              <span style={{ color: '#c53030', fontWeight: 700 }}>{incident.fatality_count_confirmed}</span>
-            </>)}
-            {(incident.injury_count_confirmed ?? 0) > 0 && (<>
-              <span style={{ color: 'var(--text-muted)' }}>Injured</span>
-              <span style={{ color: '#ed8936', fontWeight: 700 }}>{incident.injury_count_confirmed}</span>
-            </>)}
-          </div>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Victim name</label>
+          <input className="form-input" value={victimName} onChange={e => setVictimName(e.target.value)} placeholder="Full name" style={{ fontSize: 12, marginTop: 2 }} />
         </div>
-
-        {/* Right: Research */}
         <div>
-          <ResearchPanel incident={incident} />
+          <label style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Title (auto-generated if blank)</label>
+          <input className="form-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="Incident title" style={{ fontSize: 12, marginTop: 2 }} />
+        </div>
+        <div>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Date occurred</label>
+          <input className="form-input" type="date" value={dateOccurred} onChange={e => setDateOccurred(e.target.value)} style={{ fontSize: 12, marginTop: 2 }} />
+        </div>
+        <div>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Location / town</label>
+          <input className="form-input" value={town} onChange={e => setTown(e.target.value)} placeholder="Town name" style={{ fontSize: 12, marginTop: 2 }} />
+        </div>
+        <div>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Province</label>
+          <select className="form-input" value={province} onChange={e => setProvince(e.target.value)} style={{ fontSize: 12, marginTop: 2 }}>
+            <option value="">-- Select --</option>
+            {provinces.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Module</label>
+          <select className="form-input" value={module} onChange={e => setModule(e.target.value)} style={{ fontSize: 12, marginTop: 2 }}>
+            {Object.entries(MODULE_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Severity</label>
+          <select className="form-input" value={severity} onChange={e => setSeverity(e.target.value)} style={{ fontSize: 12, marginTop: 2 }}>
+            {Object.entries(SEVERITY_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </div>
+        <div style={{ gridColumn: 'span 2' }}>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Summary / notes</label>
+          <textarea className="form-input" value={summary} onChange={e => setSummary(e.target.value)} placeholder="Case description..." rows={2} style={{ fontSize: 12, marginTop: 2, resize: 'vertical' }} />
         </div>
       </div>
-
-      {/* Full case text */}
-      {incident.confirmed_facts && (
-        <div style={{ marginTop: 8 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--text-muted)', marginBottom: 6 }}>
-            Full Case Notes
-          </div>
-          <div style={{
-            fontSize: 12,
-            lineHeight: 1.6,
-            color: 'var(--text-primary)',
-            background: 'var(--surface-0)',
-            padding: '10px 14px',
-            borderRadius: 6,
-            border: '1px solid var(--border)',
-            maxHeight: 300,
-            overflowY: 'auto',
-            whiteSpace: 'pre-wrap',
-          }}>
-            {incident.confirmed_facts}
-          </div>
-        </div>
-      )}
-
-      {/* Tags */}
-      {incident.tags && incident.tags.length > 0 && (
-        <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--text-muted)', marginBottom: 4 }}>Tags</div>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            {incident.tags.map((t, i) => (
-              <span key={i} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 3, background: 'var(--surface-0)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-                {t.tag}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+        <button className="btn btn-secondary" onClick={onCancel} style={{ fontSize: 12 }}>Cancel</button>
+        <button className="btn btn-primary" onClick={handleAdd} style={{ fontSize: 12 }}>Add incident</button>
+      </div>
     </div>
   );
 }
 
 export function AdminIncidents() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [moduleFilter, setModuleFilter] = useState('all');
   const [severityFilter, setSeverityFilter] = useState('all');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
   const { data: apiIncidents, loading } = useQuery(() => fetchIncidents(), []);
   const importedIncidents = useAppStore((s) => s.importedIncidents);
+  const addImportedIncidents = useAppStore((s) => s.addImportedIncidents);
 
   const incidents = useMemo(() => {
     const api = apiIncidents ?? [];
@@ -196,6 +112,14 @@ export function AdminIncidents() {
       (i: IncidentRow) => i.id,
     );
   }, [apiIncidents, importedIncidents]);
+
+  const credibilityMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const imp of importedIncidents) {
+      map.set(imp.id, calculateCredibility(imp).score);
+    }
+    return map;
+  }, [importedIncidents]);
 
   const filtered = useMemo(() => {
     return incidents.filter(inc => {
@@ -214,19 +138,30 @@ export function AdminIncidents() {
     });
   }, [search, moduleFilter, severityFilter, incidents]);
 
-  const toggleExpand = useCallback((id: string) => {
-    setExpandedId(prev => prev === id ? null : id);
-  }, []);
+  const handleAddIncident = useCallback((inc: MockIncident) => {
+    addImportedIncidents([inc]);
+    setShowAdd(false);
+    navigate(`/admin/incidents/${inc.id}`);
+  }, [addImportedIncidents, navigate]);
 
   return (
     <div className="admin-page">
       <div className="admin-page-header">
-        <h1>Incidents</h1>
-        <p>{filtered.length} of {incidents.length} incidents — click any row to expand full details and research links</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <div>
+            <h1>Incidents</h1>
+            <p>Manage and review all tracked incidents</p>
+          </div>
+          <button className="btn btn-primary" onClick={() => setShowAdd(!showAdd)} style={{ fontSize: 12 }}>
+            + Add Incident
+          </button>
+        </div>
       </div>
 
+      {showAdd && <AddIncidentForm onAdd={handleAddIncident} onCancel={() => setShowAdd(false)} />}
+
       <div className="admin-toolbar">
-        <input type="text" className="form-input" placeholder="Search title, location, or case notes..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 340 }} />
+        <input type="text" className="form-input" placeholder="Search incidents..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 340 }} />
         <select className="form-input" value={moduleFilter} onChange={(e) => setModuleFilter(e.target.value)} style={{ maxWidth: 180 }}>
           <option value="all">All modules</option>
           {Object.entries(MODULE_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -235,56 +170,72 @@ export function AdminIncidents() {
           <option value="all">All severities</option>
           {Object.entries(SEVERITY_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>{filtered.length} of {incidents.length}</span>
       </div>
 
       <div className="admin-card" style={{ padding: 0 }}>
         <table className="admin-table" style={{ marginBottom: 0 }}>
           <thead>
             <tr>
-              <th style={{ width: 28 }}></th>
               <th>Title</th>
               <th>Module</th>
               <th>Severity</th>
+              <th>Verification</th>
               <th>Location</th>
               <th>Date</th>
               <th>Casualties</th>
+              <th>Credibility</th>
+              <th style={{ width: 70 }}>Research</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map(inc => {
               const mod = MODULE_META[inc.category?.module as keyof typeof MODULE_META];
               const sev = SEVERITY_META[inc.severity as keyof typeof SEVERITY_META];
-              const isExpanded = expandedId === inc.id;
               const dead = inc.fatality_count_confirmed ?? 0;
               const hurt = inc.injury_count_confirmed ?? 0;
+              const cred = credibilityMap.get(inc.id);
+              const credColour = cred !== undefined ? (cred >= 60 ? '#48bb78' : cred >= 30 ? '#ecc94b' : '#a0aec0') : undefined;
+              const q = encodeURIComponent([inc.title, inc.location?.town, inc.location?.province].filter(Boolean).join(' '));
+
               return (
-                <Fragment key={inc.id}>
-                  <tr onClick={() => toggleExpand(inc.id)} style={{ cursor: 'pointer', background: isExpanded ? 'var(--bg-elevated)' : undefined }}>
-                    <td style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-muted)' }}>
-                      {isExpanded ? '▼' : '▶'}
-                    </td>
-                    <td className="td-title" style={{ fontWeight: isExpanded ? 600 : 400 }}>
-                      {inc.title}
-                    </td>
-                    <td><span style={{ color: mod?.colour, fontWeight: 500 }}>{mod?.label}</span></td>
-                    <td><span className="table-badge" style={{ background: (sev?.colour ?? '#888') + '22', color: sev?.colour }}>{sev?.label}</span></td>
-                    <td style={{ fontSize: 11 }}>{inc.location?.town}{inc.location?.town && inc.location?.province ? ', ' : ''}{inc.location?.province}</td>
-                    <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{inc.occurred_at}</td>
-                    <td style={{ textAlign: 'center', fontSize: 11 }}>
-                      {dead > 0 && <span style={{ color: '#c53030', fontWeight: 700 }}>{dead}D</span>}
-                      {dead > 0 && hurt > 0 && ' '}
-                      {hurt > 0 && <span style={{ color: '#ed8936', fontWeight: 700 }}>{hurt}I</span>}
-                      {dead === 0 && hurt === 0 && <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                    </td>
-                  </tr>
-                  {isExpanded && (
-                    <tr>
-                      <td colSpan={7} style={{ padding: 0 }}>
-                        <IncidentDetail incident={inc} />
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
+                <tr key={inc.id} onClick={() => navigate(`/admin/incidents/${inc.id}`)} style={{ cursor: 'pointer' }}>
+                  <td className="td-title" style={{ fontWeight: 500 }}>{inc.title}</td>
+                  <td><span style={{ color: mod?.colour, fontWeight: 500, fontSize: 11 }}>{mod?.label}</span></td>
+                  <td><span className="table-badge" style={{ background: (sev?.colour ?? '#888') + '22', color: sev?.colour }}>{sev?.label}</span></td>
+                  <td style={{ fontSize: 11 }}>{inc.verification_state?.replace(/^v\d_/, '').replace(/_/g, ' ')}</td>
+                  <td style={{ fontSize: 11 }}>{inc.location?.town}{inc.location?.town && inc.location?.province ? ', ' : ''}{inc.location?.province}</td>
+                  <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{inc.occurred_at}</td>
+                  <td style={{ textAlign: 'center', fontSize: 11 }}>
+                    {dead > 0 && <span style={{ color: '#c53030', fontWeight: 700 }}>{dead}D</span>}
+                    {dead > 0 && hurt > 0 && ' '}
+                    {hurt > 0 && <span style={{ color: '#ed8936', fontWeight: 700 }}>{hurt}I</span>}
+                    {dead === 0 && hurt === 0 && <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    {cred !== undefined ? (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: credColour }}>{cred}%</span>
+                    ) : (
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>—</span>
+                    )}
+                  </td>
+                  <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                    <a href={`https://news.google.com/search?q=${q}`} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 10, padding: '2px 6px', borderRadius: 3, background: '#2563eb11', color: '#3b82f6', textDecoration: 'none', fontWeight: 600 }}>
+                      News
+                    </a>
+                    {' '}
+                    <a href={`https://www.google.com/search?q=${q}`} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 10, padding: '2px 6px', borderRadius: 3, background: '#16a34a11', color: '#22c55e', textDecoration: 'none', fontWeight: 600 }}>
+                      Web
+                    </a>
+                    {' '}
+                    <a href={`https://twitter.com/search?q=${q}&f=live`} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 10, padding: '2px 6px', borderRadius: 3, background: '#a855f711', color: '#a855f7', textDecoration: 'none', fontWeight: 600 }}>
+                      X
+                    </a>
+                  </td>
+                </tr>
               );
             })}
           </tbody>

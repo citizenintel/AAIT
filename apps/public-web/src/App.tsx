@@ -4,6 +4,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { AdminLayout } from '@/pages/admin/AdminLayout';
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
 import { AdminIncidents } from '@/pages/admin/AdminIncidents';
+import { AdminIncidentProfile } from '@/pages/admin/AdminIncidentProfile';
 import { AdminSubmissions } from '@/pages/admin/AdminSubmissions';
 import { AdminSponsors } from '@/pages/admin/AdminSponsors';
 import { AdminWidgets } from '@/pages/admin/AdminWidgets';
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminDashboard />} />
           <Route path="incidents" element={<AdminIncidents />} />
+          <Route path="incidents/:id" element={<AdminIncidentProfile />} />
           <Route path="submissions" element={<AdminSubmissions />} />
           <Route path="sponsors" element={<AdminSponsors />} />
           <Route path="widgets" element={<AdminWidgets />} />

@@ -1,5 +1,14 @@
 import type { VerificationState, IncidentSeverity, LocationTier } from './types';
 
+export interface IncidentEvidence {
+  id: string;
+  type: 'article' | 'police_report' | 'witness' | 'court_document' | 'photo' | 'video' | 'other';
+  title: string;
+  url?: string;
+  notes?: string;
+  addedAt: string;
+}
+
 export interface MockIncident {
   id: string;
   title: string;
@@ -20,6 +29,17 @@ export interface MockIncident {
   tags: string[];
   isSynthetic: boolean;
   casualties?: { deceased: number; injured: number };
+  victimName?: string;
+  suspectName?: string;
+  incidentType?: string;
+  courtCase?: string;
+  verdict?: string;
+  caseStatus?: string;
+  sourceUrl?: string;
+  reporter?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  evidence?: IncidentEvidence[];
 }
 
 export const MOCK_INCIDENTS: MockIncident[] = [

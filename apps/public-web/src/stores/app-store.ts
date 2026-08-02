@@ -294,6 +294,8 @@ interface AppStore {
   // --- Imported incidents ---
   importedIncidents: MockIncident[];
   addImportedIncidents: (incidents: MockIncident[]) => void;
+  updateImportedIncident: (id: string, updates: Partial<MockIncident>) => void;
+  deleteImportedIncident: (id: string) => void;
   clearImportedIncidents: () => void;
   deduplicateImportedIncidents: () => number;
   getStorageEstimate: () => { incidentCount: number; estimatedBytes: number };
@@ -674,6 +676,17 @@ export const useAppStore = create<AppStore>()(
           if (fp) existingFps.add(fp);
         }
       }
+      debouncePersist('importedIncidents', s.importedIncidents, true);
+    }),
+    updateImportedIncident: (id, updates) => set((s) => {
+      const idx = s.importedIncidents.findIndex(i => i.id === id);
+      if (idx !== -1) {
+        Object.assign(s.importedIncidents[idx]!, updates);
+        debouncePersist('importedIncidents', s.importedIncidents, true);
+      }
+    }),
+    deleteImportedIncident: (id) => set((s) => {
+      s.importedIncidents = s.importedIncidents.filter(i => i.id !== id);
       debouncePersist('importedIncidents', s.importedIncidents, true);
     }),
     clearImportedIncidents: () => set((s) => {
