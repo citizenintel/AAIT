@@ -235,27 +235,35 @@ function eventsToGeoJSON(
 }
 
 function incidentsToGeoJSON(incidents: MockIncident[]): GeoJSON.FeatureCollection {
-  const features: GeoJSON.Feature[] = incidents.map((inc) => ({
-    type: 'Feature',
-    geometry: { type: 'Point', coordinates: [inc.lng, inc.lat] },
-    properties: {
-      id: inc.id,
-      title: inc.title,
-      module: inc.module,
-      severity: inc.severity,
-      verification: inc.verification,
-      town: inc.town,
-      province: inc.province,
-      moduleColour: MODULE_META[inc.module].colour,
-      severityColour: SEVERITY_META[inc.severity].colour,
-      moduleLabel: MODULE_META[inc.module].label,
-      severityLabel: SEVERITY_META[inc.severity].label,
-      dateOccurred: inc.dateOccurred,
-      deceased: inc.casualties?.deceased ?? 0,
-      injured: inc.casualties?.injured ?? 0,
-      isSynthetic: inc.isSynthetic,
-    },
-  }));
+  const DEFAULT_MODULE = MODULE_META.ait;
+  const DEFAULT_SEVERITY = SEVERITY_META.medium;
+  const features: GeoJSON.Feature[] = [];
+  for (const inc of incidents) {
+    if ((inc.lng == null || inc.lat == null) || (inc.lng === 0 && inc.lat === 0)) continue;
+    const modMeta = MODULE_META[inc.module as keyof typeof MODULE_META] ?? DEFAULT_MODULE;
+    const sevMeta = SEVERITY_META[inc.severity as keyof typeof SEVERITY_META] ?? DEFAULT_SEVERITY;
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [inc.lng, inc.lat] },
+      properties: {
+        id: inc.id,
+        title: inc.title,
+        module: inc.module,
+        severity: inc.severity,
+        verification: inc.verification,
+        town: inc.town,
+        province: inc.province,
+        moduleColour: modMeta.colour,
+        severityColour: sevMeta.colour,
+        moduleLabel: modMeta.label,
+        severityLabel: sevMeta.label,
+        dateOccurred: inc.dateOccurred,
+        deceased: inc.casualties?.deceased ?? 0,
+        injured: inc.casualties?.injured ?? 0,
+        isSynthetic: inc.isSynthetic,
+      },
+    });
+  }
   return { type: 'FeatureCollection', features };
 }
 
@@ -338,33 +346,32 @@ export function IntelligenceMap({
   // ------------------------------------------------------------------
   const addSourceAndLayer = useCallback(
     (map: maplibregl.Map) => {
-      if (map.getSource(EVENTS_SOURCE)) return;
+      if (!map.getSource(EVENTS_SOURCE)) {
+        map.addSource(EVENTS_SOURCE, {
+          type: 'geojson',
+          data: geojsonRef.current,
+        });
 
-      map.addSource(EVENTS_SOURCE, {
-        type: 'geojson',
-        data: geojsonRef.current,
-      });
+        map.addLayer({
+          id: EVENTS_LAYER,
+          type: 'circle',
+          source: EVENTS_SOURCE,
+          paint: {
+            'circle-color': colorMatchExpr,
+            'circle-radius': [
+              'interpolate',
+              ['linear'],
+              ['get', 'confidence'],
+              0, 4,
+              100, 12,
+            ],
+            'circle-opacity': 0.85,
+            'circle-stroke-width': 1,
+            'circle-stroke-color': 'rgba(255,255,255,0.15)',
+          },
+        });
+      }
 
-      map.addLayer({
-        id: EVENTS_LAYER,
-        type: 'circle',
-        source: EVENTS_SOURCE,
-        paint: {
-          'circle-color': colorMatchExpr,
-          'circle-radius': [
-            'interpolate',
-            ['linear'],
-            ['get', 'confidence'],
-            0, 4,
-            100, 12,
-          ],
-          'circle-opacity': 0.85,
-          'circle-stroke-width': 1,
-          'circle-stroke-color': 'rgba(255,255,255,0.15)',
-        },
-      });
-
-      // Mock incidents layer — module-coloured markers with severity ring
       if (!map.getSource(INCIDENTS_SOURCE)) {
         map.addSource(INCIDENTS_SOURCE, { type: 'geojson', data: incidentsGeoJsonRef.current });
 
@@ -570,7 +577,7 @@ export function IntelligenceMap({
 
     // If the style was swapped (fallback or user-switched), re-add layers
     map.on('styledata', () => {
-      if (map.isStyleLoaded() && !map.getSource(EVENTS_SOURCE)) {
+      if (map.isStyleLoaded() && (!map.getSource(EVENTS_SOURCE) || !map.getSource(INCIDENTS_SOURCE))) {
         addSourceAndLayer(map);
         addMeasureLayers(map);
       }
@@ -885,20 +892,45 @@ export function IntelligenceMap({
     const map = mapRef.current;
     if (!map) return;
 
+    let done = false;
+
     const doUpdate = () => {
+      if (done) return;
       try {
-        const source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
-        if (source) source.setData(incidentsGeoJson);
+        let source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
+        if (!source && map.isStyleLoaded()) {
+          addSourceAndLayer(map);
+          source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
+        }
+        if (source) {
+          source.setData(incidentsGeoJson);
+          done = true;
+        }
       } catch { /* map not ready */ }
     };
 
     doUpdate();
 
-    // Retry on load (source created by addSourceAndLayer) and idle (post-render)
     const onReady = () => doUpdate();
     if (!map.loaded()) map.once('load', onReady);
-    map.once('idle', onReady);
-    return () => { map.off('load', onReady); map.off('idle', onReady); };
+    map.on('idle', onReady);
+    map.on('sourcedata', onReady);
+
+    // Polling fallback: retry every 500ms for up to 10s in case events were missed
+    const interval = setInterval(() => {
+      doUpdate();
+      if (done) clearInterval(interval);
+    }, 500);
+    const timeout = setTimeout(() => clearInterval(interval), 10000);
+
+    return () => {
+      done = true;
+      map.off('load', onReady);
+      map.off('idle', onReady);
+      map.off('sourcedata', onReady);
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
   }, [incidentsGeoJson]);
 
   // ------------------------------------------------------------------
