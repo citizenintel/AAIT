@@ -892,14 +892,13 @@ export function IntelligenceMap({
       } catch { /* map not ready */ }
     };
 
-    // Try immediately — works when map is already loaded
     doUpdate();
 
-    // Also retry after map becomes idle (covers all timing races:
-    // store hydration before map load, HMR re-renders, style changes)
-    const onIdle = () => doUpdate();
-    map.once('idle', onIdle);
-    return () => { map.off('idle', onIdle); };
+    // Retry on load (source created by addSourceAndLayer) and idle (post-render)
+    const onReady = () => doUpdate();
+    if (!map.loaded()) map.once('load', onReady);
+    map.once('idle', onReady);
+    return () => { map.off('load', onReady); map.off('idle', onReady); };
   }, [incidentsGeoJson]);
 
   // ------------------------------------------------------------------

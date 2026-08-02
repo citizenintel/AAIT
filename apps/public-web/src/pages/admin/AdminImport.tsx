@@ -65,6 +65,78 @@ interface AIFlag {
 }
 
 // ---------------------------------------------------------------------------
+// Duplicate / similarity detection
+// ---------------------------------------------------------------------------
+
+interface DuplicateMatch {
+  newIncident: MockIncident;
+  existing: MockIncident;
+  score: number;
+  reasons: string[];
+}
+
+function normalise(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+}
+
+function extractName(title: string): string {
+  const dash = title.indexOf(' — ');
+  return dash > 0 ? normalise(title.slice(0, dash)) : normalise(title);
+}
+
+function wordOverlap(a: string, b: string): number {
+  const wa = new Set(normalise(a).split(/\s+/).filter(w => w.length > 2));
+  const wb = new Set(normalise(b).split(/\s+/).filter(w => w.length > 2));
+  if (wa.size === 0 || wb.size === 0) return 0;
+  let shared = 0;
+  for (const w of wa) if (wb.has(w)) shared++;
+  return shared / Math.max(wa.size, wb.size);
+}
+
+function scoreSimilarity(a: MockIncident, b: MockIncident): { score: number; reasons: string[] } {
+  let score = 0;
+  const reasons: string[] = [];
+  const nameA = extractName(a.title);
+  const nameB = extractName(b.title);
+  if (nameA && nameB && nameA === nameB) { score += 40; reasons.push('Same name'); }
+  else if (nameA && nameB && (nameA.includes(nameB) || nameB.includes(nameA))) { score += 25; reasons.push('Similar name'); }
+  if (a.dateOccurred && b.dateOccurred && a.dateOccurred === b.dateOccurred) { score += 25; reasons.push('Same date'); }
+  if (a.town && b.town && normalise(a.town) === normalise(b.town)) { score += 20; reasons.push('Same town'); }
+  if (a.province && b.province && normalise(a.province) === normalise(b.province)) { score += 10; reasons.push('Same province'); }
+  const overlap = wordOverlap(a.summary, b.summary);
+  if (overlap > 0.5) { score += Math.round(overlap * 15); reasons.push('Similar summary'); }
+  return { score, reasons };
+}
+
+const DUPLICATE_THRESHOLD = 60;
+
+function findDuplicates(incoming: MockIncident[], existing: MockIncident[]): DuplicateMatch[] {
+  const matches: DuplicateMatch[] = [];
+  for (const newInc of incoming) {
+    for (const ext of existing) {
+      const { score, reasons } = scoreSimilarity(newInc, ext);
+      if (score >= DUPLICATE_THRESHOLD) {
+        matches.push({ newIncident: newInc, existing: ext, score, reasons });
+      }
+    }
+  }
+  return matches.sort((a, b) => b.score - a.score);
+}
+
+function findInternalDuplicates(incidents: MockIncident[]): DuplicateMatch[] {
+  const matches: DuplicateMatch[] = [];
+  for (let i = 0; i < incidents.length; i++) {
+    for (let j = i + 1; j < incidents.length; j++) {
+      const { score, reasons } = scoreSimilarity(incidents[i]!, incidents[j]!);
+      if (score >= DUPLICATE_THRESHOLD) {
+        matches.push({ newIncident: incidents[j]!, existing: incidents[i]!, score, reasons });
+      }
+    }
+  }
+  return matches.sort((a, b) => b.score - a.score);
+}
+
+// ---------------------------------------------------------------------------
 // CSV/TSV parser
 // ---------------------------------------------------------------------------
 
@@ -755,6 +827,10 @@ export function AdminImport() {
 
   // Import state
   const [imported, setImported] = useState<number | null>(null);
+  const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
+  const [skipIds, setSkipIds] = useState<Set<string>>(new Set());
+  const [showDedupScan, setShowDedupScan] = useState(false);
+  const [internalDupes, setInternalDupes] = useState<DuplicateMatch[]>([]);
 
   // PDF state
   const [pdfExtracting, setPdfExtracting] = useState(false);
@@ -928,15 +1004,51 @@ export function AdminImport() {
   }, [dataRows, mapping]);
 
   const runImport = () => {
+    let newIncidents: MockIncident[];
     if (sorted && sortedRows.length > 0) {
-      const newIncidents = sortedRows.map((row, i) => sortedRowToIncident(row, i));
-      addImportedIncidents(newIncidents);
-      setImported(newIncidents.length);
+      newIncidents = sortedRows.map((row, i) => sortedRowToIncident(row, i));
     } else if (dataRows.length > 0) {
-      const newIncidents = dataRows.map((row, i) => rawRowToIncident(row, mapping, i));
-      addImportedIncidents(newIncidents);
-      setImported(newIncidents.length);
+      newIncidents = dataRows.map((row, i) => rawRowToIncident(row, mapping, i));
+    } else {
+      return;
     }
+
+    const dupes = findDuplicates(newIncidents, importedIncidents);
+    if (dupes.length > 0) {
+      setDuplicates(dupes);
+      setSkipIds(new Set(dupes.map(d => d.newIncident.id)));
+      return;
+    }
+
+    addImportedIncidents(newIncidents);
+    setImported(newIncidents.length);
+  };
+
+  const confirmImportWithDupes = () => {
+    let newIncidents: MockIncident[];
+    if (sorted && sortedRows.length > 0) {
+      newIncidents = sortedRows.map((row, i) => sortedRowToIncident(row, i));
+    } else {
+      newIncidents = dataRows.map((row, i) => rawRowToIncident(row, mapping, i));
+    }
+    const filtered = newIncidents.filter(inc => !skipIds.has(inc.id));
+    if (filtered.length > 0) addImportedIncidents(filtered);
+    setImported(filtered.length);
+    setDuplicates([]);
+    setSkipIds(new Set());
+  };
+
+  const scanForInternalDupes = () => {
+    const dupes = findInternalDuplicates(importedIncidents);
+    setInternalDupes(dupes);
+    setShowDedupScan(true);
+  };
+
+  const removeInternalDupe = (id: string) => {
+    const updated = importedIncidents.filter(i => i.id !== id);
+    clearImportedIncidents();
+    if (updated.length > 0) addImportedIncidents(updated);
+    setInternalDupes(prev => prev.filter(d => d.newIncident.id !== id && d.existing.id !== id));
   };
 
   const mappedCount = useMemo(() => Object.values(mapping).filter((v) => v >= 0).length, [mapping]);
@@ -1407,7 +1519,65 @@ export function AdminImport() {
 
           {/* ── Import button ──────────────────────────────────────────── */}
           <div className="admin-card">
-            {imported === null ? (
+            {duplicates.length > 0 ? (
+              <div>
+                <div className="import-msg warning" style={{ marginBottom: 12 }}>
+                  Found {duplicates.length} potential duplicate{duplicates.length !== 1 ? 's' : ''} in the new data. Review below — uncheck any you want to keep.
+                </div>
+                <div style={{ overflowX: 'auto', marginBottom: 12 }}>
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 40 }}>Skip</th>
+                        <th>New record</th>
+                        <th>Matches existing</th>
+                        <th>Score</th>
+                        <th>Why</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {duplicates.map((d, i) => (
+                        <tr key={i}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={skipIds.has(d.newIncident.id)}
+                              onChange={(e) => {
+                                setSkipIds(prev => {
+                                  const next = new Set(prev);
+                                  if (e.target.checked) next.add(d.newIncident.id);
+                                  else next.delete(d.newIncident.id);
+                                  return next;
+                                });
+                              }}
+                            />
+                          </td>
+                          <td style={{ fontSize: 12 }}>
+                            <div style={{ fontWeight: 600 }}>{d.newIncident.title}</div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{d.newIncident.dateOccurred} · {d.newIncident.town || d.newIncident.province}</div>
+                          </td>
+                          <td style={{ fontSize: 12 }}>
+                            <div style={{ fontWeight: 600 }}>{d.existing.title}</div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{d.existing.dateOccurred} · {d.existing.town || d.existing.province}</div>
+                          </td>
+                          <td style={{ fontSize: 12, fontWeight: 700, color: d.score >= 80 ? '#c53030' : '#d69e2e' }}>{d.score}%</td>
+                          <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{d.reasons.join(', ')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button className="btn btn-primary" onClick={confirmImportWithDupes}>
+                    Import {(sorted ? sortedRows.length : dataRows.length) - skipIds.size} records (skip {skipIds.size} duplicate{skipIds.size !== 1 ? 's' : ''})
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => { setSkipIds(new Set()); confirmImportWithDupes(); }}>
+                    Import all anyway
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => { setDuplicates([]); setSkipIds(new Set()); }}>Cancel</button>
+                </div>
+              </div>
+            ) : imported === null ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <button className="btn btn-primary" onClick={runImport} disabled={mappedCount === 0 || (!sorted && dataRows.length === 0)}>
                   {sorted ? `Import ${sortedRows.length} sorted records to review queue` : `Import ${dataRows.length} records to review queue`}
@@ -1488,11 +1658,16 @@ export function AdminImport() {
       {/* ── Stored incidents & storage ──────────────────────────────── */}
       {importedIncidents.length > 0 && (
         <div className="admin-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
             <h2 style={{ margin: 0 }}>Stored Incidents</h2>
-            <button className="btn btn-secondary" onClick={() => { if (confirm('Clear all imported incidents? This cannot be undone.')) clearImportedIncidents(); }} style={{ fontSize: 11, color: '#c53030' }}>
-              Clear all imported data
-            </button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn btn-secondary" onClick={scanForInternalDupes} style={{ fontSize: 11 }}>
+                Scan for duplicates
+              </button>
+              <button className="btn btn-secondary" onClick={() => { if (confirm('Clear all imported incidents? This cannot be undone.')) clearImportedIncidents(); }} style={{ fontSize: 11, color: '#c53030' }}>
+                Clear all
+              </button>
+            </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
             <div style={{ background: 'var(--bg-elevated)', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
@@ -1510,6 +1685,61 @@ export function AdminImport() {
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>On map (real data)</div>
             </div>
           </div>
+          {showDedupScan && (
+            <div style={{ marginTop: 12 }}>
+              {internalDupes.length === 0 ? (
+                <div className="import-msg success">No duplicates found — data is clean.</div>
+              ) : (
+                <>
+                  <div className="import-msg warning" style={{ marginBottom: 8 }}>
+                    Found {internalDupes.length} potential duplicate pair{internalDupes.length !== 1 ? 's' : ''}. Remove the copy you don't need.
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>Record A</th>
+                          <th>Record B (potential copy)</th>
+                          <th>Score</th>
+                          <th>Reason</th>
+                          <th style={{ width: 100 }}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {internalDupes.map((d, i) => (
+                          <tr key={i}>
+                            <td style={{ fontSize: 12 }}>
+                              <div style={{ fontWeight: 600 }}>{d.existing.title}</div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{d.existing.dateOccurred} · {d.existing.town || d.existing.province}</div>
+                            </td>
+                            <td style={{ fontSize: 12 }}>
+                              <div style={{ fontWeight: 600 }}>{d.newIncident.title}</div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{d.newIncident.dateOccurred} · {d.newIncident.town || d.newIncident.province}</div>
+                            </td>
+                            <td style={{ fontSize: 12, fontWeight: 700, color: d.score >= 80 ? '#c53030' : '#d69e2e' }}>{d.score}%</td>
+                            <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{d.reasons.join(', ')}</td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <button className="btn btn-secondary" style={{ fontSize: 10, padding: '2px 6px', color: '#c53030' }} onClick={() => removeInternalDupe(d.newIncident.id)} title="Remove record B">
+                                  Remove B
+                                </button>
+                                <button className="btn btn-secondary" style={{ fontSize: 10, padding: '2px 6px', color: '#c53030' }} onClick={() => removeInternalDupe(d.existing.id)} title="Remove record A">
+                                  Remove A
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                    <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={() => setShowDedupScan(false)}>Dismiss</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           {getStorageEstimate().estimatedBytes > 20 * 1024 * 1024 && (
             <div className="import-msg warning" style={{ marginTop: 8 }}>
               Storage usage is high ({formatBytes(getStorageEstimate().estimatedBytes)}). Consider clearing old data or arranging more space before the next deploy.
