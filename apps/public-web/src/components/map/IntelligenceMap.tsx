@@ -683,7 +683,6 @@ export function IntelligenceMap({
     });
 
     mapRef.current = map;
-    (window as unknown as Record<string, unknown>).__debugMap = map;
 
     // Resize observer for container changes
     const ro = new ResizeObserver(() => {
