@@ -497,7 +497,7 @@ export function IntelligenceMap({
           const casualtyLine = (dead > 0 || hurt > 0)
             ? `<div style="margin-top:4px;font-size:11px;color:#e53e3e">${dead > 0 ? dead + ' deceased' : ''}${dead > 0 && hurt > 0 ? ' · ' : ''}${hurt > 0 ? hurt + ' injured' : ''}</div>`
             : '';
-          const popup = new maplibregl.Popup({ offset: 10, maxWidth: '280px' })
+          const popup = new maplibregl.Popup({ offset: 10, maxWidth: '280px', closeButton: true, className: 'incident-popup' })
             .setLngLat([coords.lng, coords.lat])
             .setHTML(
               `<div style="font-size:12px;color:#1a1a1a"><div style="font-weight:700;margin-bottom:2px;color:#111">${inc.title}</div>` +

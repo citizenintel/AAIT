@@ -848,6 +848,30 @@
   right: 8px;
 }
 
+/* Incident popup — must render above all markers */
+.maplibregl-popup {
+  z-index: 100 !important;
+}
+
+.maplibregl-popup-close-button {
+  font-size: 18px;
+  padding: 2px 6px;
+  color: #555;
+  background: none;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+}
+.maplibregl-popup-close-button:hover {
+  color: #111;
+}
+
+.maplibregl-popup-content {
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  padding: 10px 12px;
+}
+
 /* Map controls overlay */
 .map-controls {
   position: absolute;
