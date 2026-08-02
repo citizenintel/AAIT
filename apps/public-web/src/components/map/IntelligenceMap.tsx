@@ -497,14 +497,14 @@ export function IntelligenceMap({
           const casualtyLine = (dead > 0 || hurt > 0)
             ? `<div style="margin-top:4px;font-size:11px;color:#e53e3e">${dead > 0 ? dead + ' deceased' : ''}${dead > 0 && hurt > 0 ? ' · ' : ''}${hurt > 0 ? hurt + ' injured' : ''}</div>`
             : '';
-          const popup = new maplibregl.Popup({ offset: 10, maxWidth: '280px', closeButton: true, className: 'incident-popup' })
+          const popup = new maplibregl.Popup({ offset: 10, maxWidth: '340px', closeButton: true, className: 'incident-popup' })
             .setLngLat([coords.lng, coords.lat])
             .setHTML(
-              `<div style="font-size:12px;color:#1a1a1a"><div style="font-weight:700;margin-bottom:2px;color:#111">${inc.title}</div>` +
+              `<div style="font-size:12px;color:#1a1a1a"><div style="font-weight:700;margin-bottom:4px;color:#111">${inc.title}</div>` +
               `<div style="color:#555;font-size:11px">${modMeta.label} · ${sevMeta.label} · ${inc.province || ''}</div>` +
               `<div style="color:#555;font-size:11px">${inc.dateOccurred || ''} · ${inc.town || ''}</div>` +
               `${casualtyLine}` +
-              `${inc.summary ? '<div style="margin-top:4px;font-size:11px;color:#333;max-height:60px;overflow:hidden">' + inc.summary.slice(0, 150) + (inc.summary.length > 150 ? '...' : '') + '</div>' : ''}</div>`,
+              `${inc.summary ? '<div style="margin-top:6px;font-size:11px;color:#333;max-height:180px;overflow-y:auto;line-height:1.5;white-space:pre-wrap">' + inc.summary + '</div>' : ''}</div>`,
             )
             .addTo(map);
           popupRef.current = popup;
