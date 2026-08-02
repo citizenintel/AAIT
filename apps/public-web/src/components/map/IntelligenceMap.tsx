@@ -883,10 +883,18 @@ export function IntelligenceMap({
   // ------------------------------------------------------------------
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
-    const source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
-    if (source) {
-      source.setData(incidentsGeoJson);
+    if (!map) return;
+
+    const updateSource = () => {
+      const source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
+      if (source) source.setData(incidentsGeoJson);
+    };
+
+    if (map.isStyleLoaded()) {
+      updateSource();
+    } else {
+      map.once('style.load', updateSource);
+      return () => { map.off('style.load', updateSource); };
     }
   }, [incidentsGeoJson]);
 
