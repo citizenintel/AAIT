@@ -885,24 +885,21 @@ export function IntelligenceMap({
     const map = mapRef.current;
     if (!map) return;
 
-    const featureCount = incidentsGeoJson.features.length;
-    const updateSource = () => {
-      const source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
-      if (source) {
-        source.setData(incidentsGeoJson);
-        console.log(`[Map] Updated incidents source: ${featureCount} features`);
-      } else {
-        console.warn(`[Map] Incidents source not found, ${featureCount} features waiting`);
-      }
+    const doUpdate = () => {
+      try {
+        const source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
+        if (source) source.setData(incidentsGeoJson);
+      } catch { /* map not ready */ }
     };
 
-    if (map.isStyleLoaded()) {
-      updateSource();
-    } else {
-      console.log(`[Map] Style not loaded yet, waiting... (${featureCount} features pending)`);
-      map.once('style.load', updateSource);
-      return () => { map.off('style.load', updateSource); };
-    }
+    // Try immediately — works when map is already loaded
+    doUpdate();
+
+    // Also retry after map becomes idle (covers all timing races:
+    // store hydration before map load, HMR re-renders, style changes)
+    const onIdle = () => doUpdate();
+    map.once('idle', onIdle);
+    return () => { map.off('idle', onIdle); };
   }, [incidentsGeoJson]);
 
   // ------------------------------------------------------------------
