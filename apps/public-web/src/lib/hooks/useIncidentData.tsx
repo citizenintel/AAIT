@@ -49,6 +49,11 @@ export function IncidentDataProvider({ children }: { children: ReactNode }) {
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const [loading, setLoading] = useState(true);
   const importedIncidents = useAppStore((s) => s.importedIncidents);
+  const hydrate = useAppStore((s) => s.hydrate);
+
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
 
   useEffect(() => {
     let cancelled = false;

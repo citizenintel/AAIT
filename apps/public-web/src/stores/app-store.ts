@@ -52,8 +52,8 @@ function debouncePersist(storeName: string, data: unknown, immediate = false) {
       const tx = db.transaction(storeName, 'readwrite');
       await tx.store.put(snapshot, 'data');
       await tx.done;
-    } catch {
-      // IndexedDB may be unavailable in private browsing
+    } catch (err) {
+      console.warn(`[IDB] persist "${storeName}" failed:`, err);
     }
   };
   if (immediate) { write(); return; }
@@ -63,8 +63,11 @@ function debouncePersist(storeName: string, data: unknown, immediate = false) {
 async function hydrateStore<T>(storeName: string): Promise<T | undefined> {
   try {
     const db = await getDb();
-    return await db.get(storeName, 'data');
-  } catch {
+    const data = await db.get(storeName, 'data');
+    console.log(`[IDB] hydrate "${storeName}":`, Array.isArray(data) ? `${data.length} items` : typeof data);
+    return data;
+  } catch (err) {
+    console.warn(`[IDB] hydrate "${storeName}" failed:`, err);
     return undefined;
   }
 }
@@ -715,12 +718,14 @@ export const useAppStore = create<AppStore>()(
 
     // --- Hydration ---
     hydrate: async () => {
+      console.log('[AppStore] hydrate() starting...');
       const [events, assets, watchAreas, imported] = await Promise.all([
         hydrateStore<IntelligenceEvent[]>('events'),
         hydrateStore<InfrastructureAsset[]>('assets'),
         hydrateStore<WatchArea[]>('watchAreas'),
         hydrateStore<MockIncident[]>('importedIncidents'),
       ]);
+      console.log(`[AppStore] hydrate() loaded: events=${events?.length ?? 0}, assets=${assets?.length ?? 0}, imported=${imported?.length ?? 0}`);
       set((s) => {
         if (events) for (const e of events) s.events.set(e.id, e);
         if (assets) for (const a of assets) s.assets.set(a.id, a);
