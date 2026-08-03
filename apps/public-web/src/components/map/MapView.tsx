@@ -6,6 +6,7 @@ import { SEVERITY_META, VERIFICATION_META, MODULE_META, type MockIncident } from
 import { useAppStore } from '@/stores/app-store';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
 import { deconflictCoordinates } from '@/lib/utils/map-deconflict';
+import { resolveCoords } from '@/lib/utils/sa-coordinates';
 
 // Satellite imagery + place labels. Reused for the flat "Satellite" view and as the
 // drape for the "3D" terrain view (a fresh object per key so setStyle always reprocesses).
@@ -368,13 +369,21 @@ export function MapView() {
     markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
 
-    const coordMap = deconflictCoordinates(incidents);
+    const resolvedList: { id: string; lat: number; lng: number }[] = [];
+    const resolvedMap = new Map<string, { lat: number; lng: number }>();
+    for (const inc of incidents) {
+      const rc = resolveCoords(inc);
+      if (rc) { resolvedList.push({ id: inc.id, ...rc }); resolvedMap.set(inc.id, rc); }
+    }
+    const coordMap = deconflictCoordinates(resolvedList);
 
     incidents.forEach(incident => {
       const sevMeta = SEVERITY_META[incident.severity];
       const verMeta = VERIFICATION_META[incident.verification];
       const modMeta = MODULE_META[incident.module];
-      const coords = coordMap.get(incident.id) ?? { lat: incident.lat, lng: incident.lng };
+      const baseCoords = resolvedMap.get(incident.id);
+      if (!baseCoords) return;
+      const coords = coordMap.get(incident.id) ?? baseCoords;
 
       const el = document.createElement('div');
       el.style.cssText = 'width: 14px; height: 14px; cursor: pointer;';

@@ -6,7 +6,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { MODULE_META, SEVERITY_META, VERIFICATION_META } from '@/data/mock-incidents';
 import type { MockIncident } from '@/data/mock-incidents';
 import { deconflictCoordinates } from '@/lib/utils/map-deconflict';
-import { lookupTown, lookupProvince, gaussianJitter } from '@/lib/utils/sa-coordinates';
+import { resolveCoords } from '@/lib/utils/sa-coordinates';
 import type {
   IntelligenceEvent,
   InfrastructureAsset,
@@ -168,23 +168,6 @@ function formatDistance(km: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Coordinate resolution — town lookup → province centroid → skip
-// ---------------------------------------------------------------------------
-
-function resolveCoords(inc: MockIncident): { lng: number; lat: number } | null {
-  if (inc.lng != null && inc.lat != null && !(inc.lng === 0 && inc.lat === 0)) {
-    return { lng: inc.lng, lat: inc.lat };
-  }
-  if (inc.town) {
-    const tc = lookupTown(inc.town);
-    if (tc) return { lat: tc.lat + gaussianJitter(0.02), lng: tc.lng + gaussianJitter(0.02) };
-  }
-  const pc = lookupProvince(inc.province ?? '');
-  if (pc) return { lat: pc.lat + gaussianJitter(0.3), lng: pc.lng + gaussianJitter(0.3) };
-  return null;
-}
-
-// ---------------------------------------------------------------------------
 // GeoJSON helpers
 // ---------------------------------------------------------------------------
 
@@ -225,10 +208,16 @@ function eventsToGeoJSON(
 function incidentsToGeoJSON(incidents: MockIncident[]): GeoJSON.FeatureCollection {
   const DEFAULT_MODULE = MODULE_META.ait;
   const DEFAULT_SEVERITY = SEVERITY_META.medium;
-  const coordMap = deconflictCoordinates(incidents);
+  const resolvedList: { id: string; lat: number; lng: number }[] = [];
+  const resolvedMap = new Map<string, { lat: number; lng: number }>();
+  for (const inc of incidents) {
+    const rc = resolveCoords(inc);
+    if (rc) { resolvedList.push({ id: inc.id, ...rc }); resolvedMap.set(inc.id, rc); }
+  }
+  const coordMap = deconflictCoordinates(resolvedList);
   const features: GeoJSON.Feature[] = [];
   for (const inc of incidents) {
-    const baseCoords = resolveCoords(inc);
+    const baseCoords = resolvedMap.get(inc.id);
     if (!baseCoords) continue;
     const coords = coordMap.get(inc.id) ?? baseCoords;
     const modMeta = MODULE_META[inc.module as keyof typeof MODULE_META] ?? DEFAULT_MODULE;
@@ -425,14 +414,20 @@ export function IntelligenceMap({
       incidentMarkersRef.current = [];
 
       const incs = incidentsRef.current;
-      const coordMap = deconflictCoordinates(incs);
+      const resolvedList: { id: string; lat: number; lng: number }[] = [];
+      const resolvedMap = new Map<string, { lat: number; lng: number }>();
+      for (const inc of incs) {
+        const rc = resolveCoords(inc);
+        if (rc) { resolvedList.push({ id: inc.id, ...rc }); resolvedMap.set(inc.id, rc); }
+      }
+      const coordMap = deconflictCoordinates(resolvedList);
       const DEFAULT_MODULE = MODULE_META.ait;
       const DEFAULT_SEVERITY = SEVERITY_META.medium;
       let placed = 0;
       let skipped = 0;
 
       for (const inc of incs) {
-        const baseCoords = resolveCoords(inc);
+        const baseCoords = resolvedMap.get(inc.id);
         if (!baseCoords) { skipped++; continue; }
         const coords = coordMap.get(inc.id) ?? baseCoords;
 
