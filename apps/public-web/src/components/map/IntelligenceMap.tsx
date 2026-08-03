@@ -268,14 +268,12 @@ export function IntelligenceMap({
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const deckOverlayRef = useRef<unknown>(null);
   const didMountRef = useRef(false);
-  // (DOM markers removed — incidents rendered via GeoJSON circles layer only)
 
   // Style / control state
   const [activeStyle, setActiveStyle] = useState<MapStyleKey>('standard');
   const [measure, setMeasure] = useState<MeasureState>({ active: false, points: [], totalKm: 0 });
   const [showRoads, setShowRoads] = useState(false);
   const [show3DHint, setShow3DHint] = useState(false);
-  const markerCount = incidentsGeoJson.features.length;
 
   // Refs so event handlers always see current state
   const measureRef = useRef(measure);
@@ -295,11 +293,9 @@ export function IntelligenceMap({
     () => incidentsToGeoJSON(incidents),
     [incidents],
   );
+  const markerCount = incidentsGeoJson.features.length;
   const incidentsGeoJsonRef = useRef(incidentsGeoJson);
   incidentsGeoJsonRef.current = incidentsGeoJson;
-
-  const incidentsRef = useRef(incidents);
-  incidentsRef.current = incidents;
 
   const visibleCount = geojson.features.length;
 
@@ -551,11 +547,6 @@ export function IntelligenceMap({
       addMeasureLayers(map);
       tryAddDeckOverlay(map);
       didMountRef.current = true;
-      // Safety net: place markers here in case the effect fired before map was ready
-      if (incidentMarkersRef.current.length === 0 && incidentsRef.current.length > 0) {
-        console.log('[IntelligenceMap] Map load: placing markers that missed the effect');
-        placeIncidentMarkers(map);
-      }
     });
 
     // Force repaints when raster tiles finish loading (fixes blank tile boxes in MapLibre v6)
@@ -681,15 +672,6 @@ export function IntelligenceMap({
 
     mapRef.current = map;
 
-    // Delayed safety net: re-place markers after hydration likely completes
-    const hydrateTimer = setInterval(() => {
-      if (incidentsRef.current.length > 0 && incidentMarkersRef.current.length === 0) {
-        console.log('[IntelligenceMap] Hydration retry: placing', incidentsRef.current.length, 'markers');
-        placeIncidentMarkers(map);
-      }
-    }, 2000);
-    const hydrateTimeout = setTimeout(() => clearInterval(hydrateTimer), 15000);
-
     // Resize observer for container changes
     const ro = new ResizeObserver(() => {
       requestAnimationFrame(() => map.resize());
@@ -698,8 +680,6 @@ export function IntelligenceMap({
 
     return () => {
       ro.disconnect();
-      clearInterval(hydrateTimer);
-      clearTimeout(hydrateTimeout);
       if (popupRef.current) popupRef.current.remove();
       map.remove();
       mapRef.current = null;
@@ -789,7 +769,6 @@ export function IntelligenceMap({
     const reAdd = () => {
       addSourceAndLayer(map);
       addMeasureLayers(map);
-      placeIncidentMarkers(map);
       if (measureRef.current.points.length > 0) updateMeasureGeometry(map, measureRef.current.points);
       if (is3D) enable3D(map);
       const applied = applyRoads(map, activeStyle, showRoadsRef.current);
@@ -799,7 +778,7 @@ export function IntelligenceMap({
     };
     map.once('idle', reAdd);
     return () => { map.off('idle', reAdd); clearTimeout(failsafe); };
-  }, [activeStyle, addSourceAndLayer, addMeasureLayers, placeIncidentMarkers, updateMeasureGeometry, enable3D, disable3D, applyRoads]);
+  }, [activeStyle, addSourceAndLayer, addMeasureLayers, updateMeasureGeometry, enable3D, disable3D, applyRoads]);
 
   // ------------------------------------------------------------------
   // Roads toggle
@@ -926,22 +905,6 @@ export function IntelligenceMap({
       clearTimeout(timeout);
     };
   }, [incidentsGeoJson]);
-
-  // ------------------------------------------------------------------
-  // HTML marker fallback — guaranteed to render regardless of tile/source state
-  // ------------------------------------------------------------------
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) {
-      console.warn('[IntelligenceMap] Marker effect: map not ready, incidents pending:', incidents.length);
-      return;
-    }
-    placeIncidentMarkers(map);
-    return () => {
-      for (const m of incidentMarkersRef.current) m.remove();
-      incidentMarkersRef.current = [];
-    };
-  }, [incidents, placeIncidentMarkers]);
 
   // ------------------------------------------------------------------
   // Fly to selected event when selectedEventId changes externally
