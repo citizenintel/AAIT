@@ -326,9 +326,7 @@ export function IntelligenceMap({
   // Add all custom sources + layers to the map
   // ------------------------------------------------------------------
   const addSourceAndLayer = useCallback(
-    (map: maplibregl.Map): boolean => {
-      if (!map.isStyleLoaded()) return false;
-
+    (map: maplibregl.Map) => {
       try {
         if (!map.getSource(EVENTS_SOURCE)) {
           map.addSource(EVENTS_SOURCE, { type: 'geojson', data: geojsonRef.current });
@@ -347,8 +345,8 @@ export function IntelligenceMap({
             },
           });
         }
-      } catch (err) {
-        console.warn('[Map] events source/layer failed:', err);
+      } catch {
+        // style not ready — will retry via load/idle/polling
       }
 
       try {
@@ -386,11 +384,9 @@ export function IntelligenceMap({
             },
           });
         }
-      } catch (err) {
-        console.warn('[Map] incidents source/layer failed:', err);
+      } catch {
+        // style not ready — will retry via load/idle/polling
       }
-
-      return !!map.getLayer(INCIDENTS_LAYER);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
