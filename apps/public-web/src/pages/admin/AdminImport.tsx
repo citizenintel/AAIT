@@ -4,6 +4,7 @@ import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import mammoth from 'mammoth';
 import { useAppStore } from '../../stores/app-store';
 import type { MockIncident } from '../../data/mock-incidents';
+import { splitAllMultiIncidents } from '../../lib/utils/incident-splitter';
 
 GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
@@ -1165,15 +1166,22 @@ export function AdminImport() {
       return;
     }
 
-    const dupes = findDuplicates(newIncidents, importedIncidents);
+    // Split multi-incident entries before importing
+    const towns = Object.keys(SA_TOWN_COORDS);
+    const { result: splitIncidents, splitCount } = splitAllMultiIncidents(newIncidents, towns, geocodeIncident);
+    if (splitCount > 0) {
+      console.log(`[Import] Split ${splitCount} multi-incident entries → ${splitIncidents.length} total`);
+    }
+
+    const dupes = findDuplicates(splitIncidents, importedIncidents);
     if (dupes.length > 0) {
       setDuplicates(dupes);
       setSkipIds(new Set(dupes.map(d => d.newIncident.id)));
       return;
     }
 
-    addImportedIncidents(newIncidents);
-    setImported(newIncidents.length);
+    addImportedIncidents(splitIncidents);
+    setImported(splitIncidents.length);
   };
 
   const confirmImportWithDupes = () => {
@@ -1183,7 +1191,9 @@ export function AdminImport() {
     } else {
       newIncidents = dataRows.map((row, i) => rawRowToIncident(row, mapping, i));
     }
-    const filtered = newIncidents.filter(inc => !skipIds.has(inc.id));
+    const towns = Object.keys(SA_TOWN_COORDS);
+    const { result: splitIncidents } = splitAllMultiIncidents(newIncidents, towns, geocodeIncident);
+    const filtered = splitIncidents.filter(inc => !skipIds.has(inc.id));
     if (filtered.length > 0) addImportedIncidents(filtered);
     setImported(filtered.length);
     setDuplicates([]);
@@ -1212,50 +1222,24 @@ export function AdminImport() {
   };
 
   const cleanImportedData = () => {
-    const cleaned: MockIncident[] = [];
+    const towns = Object.keys(SA_TOWN_COORDS);
     let fixed = 0;
-    let split = 0;
     let removed = 0;
 
-    for (const inc of importedIncidents) {
+    // Step 1: Split multi-incident entries using the robust splitter
+    const { result: splitResult, splitCount } = splitAllMultiIncidents(
+      importedIncidents, towns, geocodeIncident,
+    );
+    const splitTotal = splitResult.length - importedIncidents.length;
+
+    // Step 2: Fix titles, casualties, and other data quality issues
+    const cleaned: MockIncident[] = [];
+    for (const inc of splitResult) {
       let needsFix = false;
-
-      // Detect merged rows: summary contains multiple date+name patterns
-      const namePatterns = inc.summary.match(/\d{4}[,;]\s*[A-Z]{2,}/g) ?? [];
-      const lineBreaks = inc.summary.split(/\n/).filter(l => l.trim().length > 10);
-
-      if (namePatterns.length >= 2 || (lineBreaks.length >= 3 && inc.summary.length > 300)) {
-        // Split merged records into individual incidents
-        const lines = inc.summary.split(/\n/).filter(l => l.trim().length > 5);
-        if (lines.length >= 2) {
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i]!.trim();
-            const dateMatch = line.match(/(\d{1,2}\s+\w+\s+\d{4}|\d{4}[-/]\d{2}[-/]\d{2}|\d{2}[-/]\d{2}[-/]\d{4})/);
-            const nameMatch = line.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/);
-            const title = nameMatch?.[0]
-              ? `${nameMatch[0]} — ${inc.town || inc.province || 'Unknown location'}`
-              : line.slice(0, 80);
-            const coords = geocodeIncident(inc.town, inc.province);
-            const jitter = () => (Math.random() - 0.5) * 0.3;
-            cleaned.push({
-              ...inc,
-              id: `${inc.id}-split-${i}`,
-              title,
-              summary: line,
-              lng: coords.lng + jitter(),
-              lat: coords.lat + jitter(),
-              dateOccurred: dateMatch?.[1] ?? inc.dateOccurred,
-              casualties: { deceased: 1, injured: 0 },
-            });
-          }
-          split += lines.length;
-          continue;
-        }
-      }
 
       // Fix generic/garbage titles
       if (/^(?:\d+\s*(?:killed|dead)|[A-Z]\s+killed|unknown|imported incident)/i.test(inc.title)) {
-        const nameMatch = inc.summary.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/);
+        const nameMatch = inc.summary.match(/([A-Z][a-z]+(?:\s+(?:van|de|du|le|von)\s+)?(?:\s+[A-Z][a-z]+)+)/);
         if (nameMatch) {
           inc.title = `${nameMatch[0]} — ${inc.town || inc.province || 'Unknown location'}`;
         } else if (inc.summary.length > 10) {
@@ -1264,15 +1248,8 @@ export function AdminImport() {
         needsFix = true;
       }
 
-      // Fix casualty count mismatch: if title suggests multiple names but casualties says 1
-      const namesInSummary = inc.summary.match(/[A-Z][a-z]+\s+[A-Z][a-z]+/g) ?? [];
-      if (namesInSummary.length > 1 && inc.casualties?.deceased === 1) {
-        inc.casualties = { deceased: namesInSummary.length, injured: inc.casualties?.injured ?? 0 };
-        needsFix = true;
-      }
-
-      // Fix missing casualties: if title contains "killed"/"murdered" but no casualties set
-      if (!inc.casualties && /\b(killed|murdered|dead|fatal)\b/i.test(inc.summary)) {
+      // Fix missing casualties: if summary mentions killing but no casualties set
+      if (!inc.casualties && /\b(killed|murdered|dead|fatal|slain|shot dead)\b/i.test(inc.summary)) {
         const countMatch = inc.summary.match(/(\d+)\s*(?:killed|dead|deceased|murdered)/i);
         inc.casualties = { deceased: countMatch ? parseInt(countMatch[1]!, 10) : 1, injured: 0 };
         needsFix = true;
@@ -1285,7 +1262,7 @@ export function AdminImport() {
     clearImportedIncidents();
     if (cleaned.length > 0) addImportedIncidents(cleaned);
     const deduplicated = deduplicateImportedIncidents();
-    setCleanupReport({ fixed, split, removed, deduplicated });
+    setCleanupReport({ fixed, split: splitTotal, removed, deduplicated });
   };
 
   const mappedCount = useMemo(() => Object.values(mapping).filter((v) => v >= 0).length, [mapping]);
@@ -1902,7 +1879,7 @@ export function AdminImport() {
                 Remove Duplicates
               </button>
               <button className="btn btn-secondary" onClick={cleanImportedData} style={{ fontSize: 11, color: '#2563eb' }}>
-                Clean data
+                Split &amp; Clean
               </button>
               <button className="btn btn-secondary" onClick={scanForInternalDupes} style={{ fontSize: 11 }}>
                 Scan for duplicates
