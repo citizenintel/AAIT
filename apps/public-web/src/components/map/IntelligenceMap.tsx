@@ -268,14 +268,14 @@ export function IntelligenceMap({
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const deckOverlayRef = useRef<unknown>(null);
   const didMountRef = useRef(false);
-  const incidentMarkersRef = useRef<maplibregl.Marker[]>([]);
+  // (DOM markers removed — incidents rendered via GeoJSON circles layer only)
 
   // Style / control state
   const [activeStyle, setActiveStyle] = useState<MapStyleKey>('standard');
   const [measure, setMeasure] = useState<MeasureState>({ active: false, points: [], totalKm: 0 });
   const [showRoads, setShowRoads] = useState(false);
   const [show3DHint, setShow3DHint] = useState(false);
-  const [markerCount, setMarkerCount] = useState(0);
+  const markerCount = incidentsGeoJson.features.length;
 
   // Refs so event handlers always see current state
   const measureRef = useRef(measure);
@@ -404,80 +404,6 @@ export function IntelligenceMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
-
-  // ------------------------------------------------------------------
-  // Reusable marker placement — called from effect AND map load callback
-  // ------------------------------------------------------------------
-  const placeIncidentMarkers = useCallback((map: maplibregl.Map) => {
-    try {
-      for (const m of incidentMarkersRef.current) m.remove();
-      incidentMarkersRef.current = [];
-
-      const incs = incidentsRef.current;
-      const resolvedList: { id: string; lat: number; lng: number }[] = [];
-      const resolvedMap = new Map<string, { lat: number; lng: number }>();
-      for (const inc of incs) {
-        const rc = resolveCoords(inc);
-        if (rc) { resolvedList.push({ id: inc.id, ...rc }); resolvedMap.set(inc.id, rc); }
-      }
-      const coordMap = deconflictCoordinates(resolvedList);
-      const DEFAULT_MODULE = MODULE_META.ait;
-      const DEFAULT_SEVERITY = SEVERITY_META.medium;
-      let placed = 0;
-      let skipped = 0;
-
-      for (const inc of incs) {
-        const baseCoords = resolvedMap.get(inc.id);
-        if (!baseCoords) { skipped++; continue; }
-        const coords = coordMap.get(inc.id) ?? baseCoords;
-
-        const modMeta = MODULE_META[inc.module as keyof typeof MODULE_META] ?? DEFAULT_MODULE;
-        const sevMeta = SEVERITY_META[inc.severity as keyof typeof SEVERITY_META] ?? DEFAULT_SEVERITY;
-        const size = inc.severity === 'critical' ? 14 : inc.severity === 'high' ? 11 : 9;
-
-        const el = document.createElement('div');
-        el.className = 'incident-marker';
-        el.style.cssText = `width:${size}px;height:${size}px;background:${modMeta.colour};border:2px solid ${sevMeta.colour};border-radius:50%;cursor:pointer;box-shadow:0 0 4px rgba(0,0,0,0.5);z-index:10;`;
-        el.title = `${inc.title}\n${inc.province} · ${inc.dateOccurred}`;
-
-        el.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const existing = popupRef.current;
-          if (existing) existing.remove();
-          const dead = inc.casualties?.deceased ?? 0;
-          const hurt = inc.casualties?.injured ?? 0;
-          const casualtyLine = (dead > 0 || hurt > 0)
-            ? `<div style="margin-top:4px;font-size:11px;color:#e53e3e">${dead > 0 ? dead + ' deceased' : ''}${dead > 0 && hurt > 0 ? ' · ' : ''}${hurt > 0 ? hurt + ' injured' : ''}</div>`
-            : '';
-          const popup = new maplibregl.Popup({ offset: 10, maxWidth: '340px', closeButton: true, className: 'incident-popup' })
-            .setLngLat([coords.lng, coords.lat])
-            .setHTML(
-              `<div style="font-size:12px;color:#1a1a1a"><div style="font-weight:700;margin-bottom:4px;color:#111">${inc.title}</div>` +
-              `<div style="color:#555;font-size:11px">${modMeta.label} · ${sevMeta.label} · ${inc.province || ''}</div>` +
-              `<div style="color:#555;font-size:11px">${inc.dateOccurred || ''} · ${inc.town || ''}</div>` +
-              `${casualtyLine}` +
-              `${inc.summary ? '<div style="margin-top:6px;font-size:11px;color:#333;max-height:180px;overflow-y:auto;line-height:1.5;white-space:pre-wrap">' + inc.summary + '</div>' : ''}</div>`,
-            )
-            .addTo(map);
-          popupRef.current = popup;
-        });
-
-        const marker = new maplibregl.Marker({ element: el })
-          .setLngLat([coords.lng, coords.lat])
-          .addTo(map);
-        incidentMarkersRef.current.push(marker);
-        placed++;
-      }
-
-      setMarkerCount(placed);
-      console.log(`[IntelligenceMap] Marker render: ${incs.length} incidents, ${placed} placed, ${skipped} skipped`);
-      if (placed === 0 && incs.length > 0) {
-        console.warn('[IntelligenceMap] Zero markers! Sample:', JSON.stringify(incs[0], null, 2));
-      }
-    } catch (err) {
-      console.error('[IntelligenceMap] Marker creation failed:', err);
-    }
-  }, []);
 
   // ------------------------------------------------------------------
   // Measure layers
