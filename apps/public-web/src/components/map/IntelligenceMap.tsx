@@ -5,6 +5,7 @@ import '@/lib/maplibre-setup';
 import { formatDistanceToNow } from 'date-fns';
 import { MODULE_META, SEVERITY_META, VERIFICATION_META } from '@/data/mock-incidents';
 import type { MockIncident } from '@/data/mock-incidents';
+import { deconflictCoordinates } from '@/lib/utils/map-deconflict';
 import type {
   IntelligenceEvent,
   InfrastructureAsset,
@@ -272,10 +273,12 @@ function eventsToGeoJSON(
 function incidentsToGeoJSON(incidents: MockIncident[]): GeoJSON.FeatureCollection {
   const DEFAULT_MODULE = MODULE_META.ait;
   const DEFAULT_SEVERITY = SEVERITY_META.medium;
+  const coordMap = deconflictCoordinates(incidents);
   const features: GeoJSON.Feature[] = [];
   for (const inc of incidents) {
-    const coords = resolveCoords(inc);
-    if (!coords) continue;
+    const baseCoords = resolveCoords(inc);
+    if (!baseCoords) continue;
+    const coords = coordMap.get(inc.id) ?? baseCoords;
     const modMeta = MODULE_META[inc.module as keyof typeof MODULE_META] ?? DEFAULT_MODULE;
     const sevMeta = SEVERITY_META[inc.severity as keyof typeof SEVERITY_META] ?? DEFAULT_SEVERITY;
     features.push({
@@ -470,14 +473,16 @@ export function IntelligenceMap({
       incidentMarkersRef.current = [];
 
       const incs = incidentsRef.current;
+      const coordMap = deconflictCoordinates(incs);
       const DEFAULT_MODULE = MODULE_META.ait;
       const DEFAULT_SEVERITY = SEVERITY_META.medium;
       let placed = 0;
       let skipped = 0;
 
       for (const inc of incs) {
-        const coords = resolveCoords(inc);
-        if (!coords) { skipped++; continue; }
+        const baseCoords = resolveCoords(inc);
+        if (!baseCoords) { skipped++; continue; }
+        const coords = coordMap.get(inc.id) ?? baseCoords;
 
         const modMeta = MODULE_META[inc.module as keyof typeof MODULE_META] ?? DEFAULT_MODULE;
         const sevMeta = SEVERITY_META[inc.severity as keyof typeof SEVERITY_META] ?? DEFAULT_SEVERITY;

@@ -5,6 +5,7 @@ import '@/lib/maplibre-setup';
 import { SEVERITY_META, VERIFICATION_META, MODULE_META, type MockIncident } from '../../data/mock-incidents';
 import { useAppStore } from '@/stores/app-store';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
+import { deconflictCoordinates } from '@/lib/utils/map-deconflict';
 
 // Satellite imagery + place labels. Reused for the flat "Satellite" view and as the
 // drape for the "3D" terrain view (a fresh object per key so setStyle always reprocesses).
@@ -369,10 +370,13 @@ export function MapView() {
     markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
 
+    const coordMap = deconflictCoordinates(incidents);
+
     incidents.forEach(incident => {
       const sevMeta = SEVERITY_META[incident.severity];
       const verMeta = VERIFICATION_META[incident.verification];
       const modMeta = MODULE_META[incident.module];
+      const coords = coordMap.get(incident.id) ?? { lat: incident.lat, lng: incident.lng };
 
       const el = document.createElement('div');
       el.style.cssText = 'width: 14px; height: 14px; cursor: pointer;';
@@ -410,7 +414,7 @@ export function MapView() {
       `);
 
       const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([incident.lng, incident.lat])
+        .setLngLat([coords.lng, coords.lat])
         .setPopup(popup)
         .addTo(map);
 
