@@ -6,6 +6,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { MODULE_META, SEVERITY_META, VERIFICATION_META } from '@/data/mock-incidents';
 import type { MockIncident } from '@/data/mock-incidents';
 import { deconflictCoordinates } from '@/lib/utils/map-deconflict';
+import { lookupTown, lookupProvince, gaussianJitter } from '@/lib/utils/sa-coordinates';
 import type {
   IntelligenceEvent,
   InfrastructureAsset,
@@ -55,88 +56,64 @@ const EVENT_TYPE_COLORS: Record<EventType, string> = {
 
 
 // ---------------------------------------------------------------------------
-// Map basemaps — all sources added at init, switching toggles visibility
+// Map basemaps — each key returns a fresh style; switching uses setStyle()
 // ---------------------------------------------------------------------------
 
-const BASEMAP_BG_COLORS: Record<string, string> = {
-  standard: '#111113',
-  light: '#f2efe9',
-  terrain: '#d4c6a1',
-  satellite: '#0a1a2e',
-  '3d': '#0a1a2e',
-};
+function satelliteStyle(): maplibregl.StyleSpecification {
+  return {
+    version: 8 as const,
+    sources: {
+      'esri-satellite': {
+        type: 'raster',
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+        tileSize: 256,
+        maxzoom: 18,
+      },
+      'carto-labels': {
+        type: 'raster',
+        tiles: ['https://basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png'],
+        tileSize: 256,
+        maxzoom: 18,
+      },
+    },
+    layers: [
+      { id: 'bg', type: 'background', paint: { 'background-color': '#0a1a2e' } },
+      { id: 'satellite-tiles', type: 'raster', source: 'esri-satellite', paint: { 'raster-fade-duration': 300 } },
+      { id: 'label-tiles', type: 'raster', source: 'carto-labels', paint: { 'raster-fade-duration': 300 } },
+    ],
+  };
+}
 
-const BG_LAYER = 'basemap-bg';
-
-const BASEMAP_KEYS = ['standard', 'light', 'terrain', 'satellite'] as const;
-
-const INITIAL_STYLE: maplibregl.StyleSpecification = {
-  version: 8 as const,
-  sources: {
-    'src-standard': {
-      type: 'raster',
-      tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
-      tileSize: 256,
-      maxzoom: 18,
-    },
-    'src-light': {
-      type: 'raster',
-      tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'],
-      tileSize: 256,
-      maxzoom: 18,
-    },
-    'src-terrain': {
-      type: 'raster',
-      tiles: [
-        'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
-        'https://b.tile.opentopomap.org/{z}/{x}/{y}.png',
-        'https://c.tile.opentopomap.org/{z}/{x}/{y}.png',
-      ],
-      tileSize: 256,
-      maxzoom: 17,
-    },
-    'src-satellite': {
-      type: 'raster',
-      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
-      tileSize: 256,
-      maxzoom: 18,
-    },
-    'src-sat-labels': {
-      type: 'raster',
-      tiles: ['https://basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png'],
-      tileSize: 256,
-      maxzoom: 18,
-    },
-  },
-  layers: [
-    { id: BG_LAYER, type: 'background', paint: { 'background-color': '#111113' } },
-    { id: 'lyr-standard', type: 'raster', source: 'src-standard', layout: { visibility: 'visible' }, paint: { 'raster-fade-duration': 300 } },
-    { id: 'lyr-light', type: 'raster', source: 'src-light', layout: { visibility: 'none' }, paint: { 'raster-fade-duration': 300 } },
-    { id: 'lyr-terrain', type: 'raster', source: 'src-terrain', layout: { visibility: 'none' }, paint: { 'raster-fade-duration': 300 } },
-    { id: 'lyr-satellite', type: 'raster', source: 'src-satellite', layout: { visibility: 'none' }, paint: { 'raster-fade-duration': 300 } },
-    { id: 'lyr-sat-labels', type: 'raster', source: 'src-sat-labels', layout: { visibility: 'none' }, paint: { 'raster-fade-duration': 300 } },
-  ],
-};
-
-function swapBasemap(map: maplibregl.Map, key: string) {
-  const bgColor = BASEMAP_BG_COLORS[key] ?? '#111113';
-  if (map.getLayer(BG_LAYER)) {
-    map.setPaintProperty(BG_LAYER, 'background-color', bgColor);
+function getBasemapStyle(key: string): string | maplibregl.StyleSpecification {
+  switch (key) {
+    case 'light':
+      return 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
+    case 'terrain':
+      return {
+        version: 8 as const,
+        sources: {
+          opentopomap: {
+            type: 'raster',
+            tiles: [
+              'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
+              'https://b.tile.opentopomap.org/{z}/{x}/{y}.png',
+              'https://c.tile.opentopomap.org/{z}/{x}/{y}.png',
+            ],
+            tileSize: 256,
+            maxzoom: 17,
+          },
+        },
+        layers: [
+          { id: 'bg', type: 'background', paint: { 'background-color': '#d4c6a1' } },
+          { id: 'topo-tiles', type: 'raster', source: 'opentopomap', paint: { 'raster-fade-duration': 300 } },
+        ],
+      };
+    case 'satellite':
+    case '3d':
+      return satelliteStyle();
+    default:
+      return 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
   }
-
-  for (const k of BASEMAP_KEYS) {
-    const layerId = `lyr-${k}`;
-    if (map.getLayer(layerId)) {
-      map.setLayoutProperty(layerId, 'visibility', k === key || (key === '3d' && k === 'satellite') ? 'visible' : 'none');
-    }
-  }
-
-  const showLabels = key === 'satellite' || key === '3d';
-  if (map.getLayer('lyr-sat-labels')) {
-    map.setLayoutProperty('lyr-sat-labels', 'visibility', showLabels ? 'visible' : 'none');
-  }
-
-  map.triggerRepaint();
 }
 
 const STYLE_LABELS: Record<string, string> = {
@@ -191,37 +168,19 @@ function formatDistance(km: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Province centroids — fallback geocoding for incidents with missing coords
+// Coordinate resolution — town lookup → province centroid → skip
 // ---------------------------------------------------------------------------
-
-const PROVINCE_CENTROIDS: Record<string, { lat: number; lng: number }> = {
-  'Gauteng': { lat: -26.27, lng: 28.11 },
-  'Limpopo': { lat: -23.40, lng: 29.42 },
-  'Mpumalanga': { lat: -25.57, lng: 30.30 },
-  'North West': { lat: -26.66, lng: 25.28 },
-  'Free State': { lat: -29.08, lng: 26.15 },
-  'KwaZulu-Natal': { lat: -29.01, lng: 30.29 },
-  'Eastern Cape': { lat: -32.00, lng: 26.50 },
-  'Western Cape': { lat: -33.23, lng: 19.32 },
-  'Northern Cape': { lat: -29.10, lng: 21.25 },
-};
 
 function resolveCoords(inc: MockIncident): { lng: number; lat: number } | null {
   if (inc.lng != null && inc.lat != null && !(inc.lng === 0 && inc.lat === 0)) {
     return { lng: inc.lng, lat: inc.lat };
   }
-  const provKey = Object.keys(PROVINCE_CENTROIDS).find(
-    k => k.toLowerCase() === (inc.province ?? '').toLowerCase(),
-  );
-  if (provKey) {
-    const c = PROVINCE_CENTROIDS[provKey]!;
-    const jitter = () => (Math.random() - 0.5) * 0.5;
-    return { lat: c.lat + jitter(), lng: c.lng + jitter() };
+  if (inc.town) {
+    const tc = lookupTown(inc.town);
+    if (tc) return { lat: tc.lat + gaussianJitter(0.02), lng: tc.lng + gaussianJitter(0.02) };
   }
-  if (inc.province || inc.town) {
-    const jitter = () => (Math.random() - 0.5) * 4;
-    return { lat: -28.5 + jitter(), lng: 25.5 + jitter() };
-  }
+  const pc = lookupProvince(inc.province ?? '');
+  if (pc) return { lat: pc.lat + gaussianJitter(0.3), lng: pc.lng + gaussianJitter(0.3) };
   return null;
 }
 
@@ -657,7 +616,7 @@ export function IntelligenceMap({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: INITIAL_STYLE,
+      style: getBasemapStyle('standard'),
       center: [25.5, -28.0],
       zoom: 5.5,
       minZoom: 3,
@@ -882,21 +841,44 @@ export function IntelligenceMap({
   );
 
   // ------------------------------------------------------------------
-  // Style change effect — swaps basemap tiles without setStyle()
+  // Style change effect — uses setStyle() then re-adds custom layers
   // ------------------------------------------------------------------
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (!didMountRef.current) return;
+    if (!didMountRef.current) { didMountRef.current = true; return; }
 
     const is3D = activeStyle === '3d';
     if (!is3D) disable3D(map);
 
-    swapBasemap(map, activeStyle);
+    const canvas = map.getCanvas();
+    canvas.style.transition = 'opacity 250ms ease';
+    canvas.style.opacity = '0.15';
 
-    if (is3D) enable3D(map);
-    applyRoads(map, activeStyle, showRoadsRef.current);
-  }, [activeStyle, enable3D, disable3D, applyRoads]);
+    map.setStyle(getBasemapStyle(activeStyle));
+    map.triggerRepaint();
+
+    const showCanvas = () => {
+      canvas.style.opacity = '1';
+      setTimeout(() => { canvas.style.transition = ''; }, 300);
+    };
+    const failsafe = setTimeout(showCanvas, 3000);
+
+    let tries = 0;
+    const reAdd = () => {
+      addSourceAndLayer(map);
+      addMeasureLayers(map);
+      placeIncidentMarkers(map);
+      if (measureRef.current.points.length > 0) updateMeasureGeometry(map, measureRef.current.points);
+      if (is3D) enable3D(map);
+      const applied = applyRoads(map, activeStyle, showRoadsRef.current);
+      if (!applied && tries < 6) { tries += 1; map.once('idle', reAdd); return; }
+      clearTimeout(failsafe);
+      showCanvas();
+    };
+    map.once('idle', reAdd);
+    return () => { map.off('idle', reAdd); clearTimeout(failsafe); };
+  }, [activeStyle, addSourceAndLayer, addMeasureLayers, placeIncidentMarkers, updateMeasureGeometry, enable3D, disable3D, applyRoads]);
 
   // ------------------------------------------------------------------
   // Roads toggle

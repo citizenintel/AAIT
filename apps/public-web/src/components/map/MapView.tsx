@@ -326,10 +326,8 @@ export function MapView() {
     map.triggerRepaint();
 
     const showCanvas = () => {
-      requestAnimationFrame(() => {
-        canvas.style.opacity = '1';
-        setTimeout(() => { canvas.style.transition = ''; }, 300);
-      });
+      canvas.style.opacity = '1';
+      setTimeout(() => { canvas.style.transition = ''; }, 300);
     };
 
     const failsafe = setTimeout(showCanvas, 3000);
