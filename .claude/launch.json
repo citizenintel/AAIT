@@ -7,6 +7,12 @@
       "runtimeArgs": ["vite", "--host", "--port", "5190"],
       "port": 5190,
       "cwd": "apps/public-web"
+    },
+    {
+      "name": "dev",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--prefix", "C:/Users/DuneSurfer/Projects/incident-tracker", "vite", "--host", "--port", "5200", "--config", "C:/Users/DuneSurfer/Projects/incident-tracker/apps/public-web/vite.config.ts"],
+      "port": 5200
     }
   ]
 }

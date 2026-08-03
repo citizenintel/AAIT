@@ -326,76 +326,71 @@ export function IntelligenceMap({
   // Add all custom sources + layers to the map
   // ------------------------------------------------------------------
   const addSourceAndLayer = useCallback(
-    (map: maplibregl.Map) => {
-      if (!map.getSource(EVENTS_SOURCE)) {
-        map.addSource(EVENTS_SOURCE, {
-          type: 'geojson',
-          data: geojsonRef.current,
-        });
+    (map: maplibregl.Map): boolean => {
+      if (!map.isStyleLoaded()) return false;
 
-        map.addLayer({
-          id: EVENTS_LAYER,
-          type: 'circle',
-          source: EVENTS_SOURCE,
-          paint: {
-            'circle-color': colorMatchExpr,
-            'circle-radius': [
-              'interpolate',
-              ['linear'],
-              ['get', 'confidence'],
-              0, 4,
-              100, 12,
-            ],
-            'circle-opacity': 0.85,
-            'circle-stroke-width': 1,
-            'circle-stroke-color': 'rgba(255,255,255,0.15)',
-          },
-        });
+      try {
+        if (!map.getSource(EVENTS_SOURCE)) {
+          map.addSource(EVENTS_SOURCE, { type: 'geojson', data: geojsonRef.current });
+        }
+        if (!map.getLayer(EVENTS_LAYER)) {
+          map.addLayer({
+            id: EVENTS_LAYER,
+            type: 'circle',
+            source: EVENTS_SOURCE,
+            paint: {
+              'circle-color': colorMatchExpr,
+              'circle-radius': ['interpolate', ['linear'], ['get', 'confidence'], 0, 4, 100, 12],
+              'circle-opacity': 0.85,
+              'circle-stroke-width': 1,
+              'circle-stroke-color': 'rgba(255,255,255,0.15)',
+            },
+          });
+        }
+      } catch (err) {
+        console.warn('[Map] events source/layer failed:', err);
       }
 
-      if (!map.getSource(INCIDENTS_SOURCE)) {
-        map.addSource(INCIDENTS_SOURCE, { type: 'geojson', data: incidentsGeoJsonRef.current });
-
-        // Outer pulse ring for critical incidents
-        map.addLayer({
-          id: INCIDENTS_PULSE_LAYER,
-          type: 'circle',
-          source: INCIDENTS_SOURCE,
-          filter: ['==', ['get', 'severity'], 'critical'],
-          paint: {
-            'circle-color': ['get', 'severityColour'],
-            'circle-radius': 16,
-            'circle-opacity': 0.15,
-            'circle-stroke-width': 0,
-          },
-        });
-
-        // Main incident circles
-        map.addLayer({
-          id: INCIDENTS_LAYER,
-          type: 'circle',
-          source: INCIDENTS_SOURCE,
-          paint: {
-            'circle-color': ['get', 'moduleColour'],
-            'circle-radius': [
-              'match', ['get', 'severity'],
-              'critical', 9,
-              'high', 7,
-              'medium', 6,
-              'low', 5,
-              5,
-            ],
-            'circle-opacity': 0.9,
-            'circle-stroke-width': [
-              'match', ['get', 'severity'],
-              'critical', 3,
-              'high', 2,
-              2,
-            ],
-            'circle-stroke-color': ['get', 'severityColour'],
-          },
-        });
+      try {
+        if (!map.getSource(INCIDENTS_SOURCE)) {
+          map.addSource(INCIDENTS_SOURCE, { type: 'geojson', data: incidentsGeoJsonRef.current });
+        }
+        if (!map.getLayer(INCIDENTS_PULSE_LAYER)) {
+          map.addLayer({
+            id: INCIDENTS_PULSE_LAYER,
+            type: 'circle',
+            source: INCIDENTS_SOURCE,
+            filter: ['==', ['get', 'severity'], 'critical'],
+            paint: {
+              'circle-color': ['get', 'severityColour'],
+              'circle-radius': 16,
+              'circle-opacity': 0.15,
+              'circle-stroke-width': 0,
+            },
+          });
+        }
+        if (!map.getLayer(INCIDENTS_LAYER)) {
+          map.addLayer({
+            id: INCIDENTS_LAYER,
+            type: 'circle',
+            source: INCIDENTS_SOURCE,
+            paint: {
+              'circle-color': ['get', 'moduleColour'],
+              'circle-radius': [
+                'match', ['get', 'severity'],
+                'critical', 9, 'high', 7, 'medium', 6, 'low', 5, 5,
+              ],
+              'circle-opacity': 0.9,
+              'circle-stroke-width': ['match', ['get', 'severity'], 'critical', 3, 'high', 2, 2],
+              'circle-stroke-color': ['get', 'severityColour'],
+            },
+          });
+        }
+      } catch (err) {
+        console.warn('[Map] incidents source/layer failed:', err);
       }
+
+      return !!map.getLayer(INCIDENTS_LAYER);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -556,9 +551,9 @@ export function IntelligenceMap({
       }
     });
 
-    // If custom sources go missing, re-add them
+    // If custom sources/layers go missing after a style change, re-add them
     map.on('styledata', () => {
-      if (map.isStyleLoaded() && (!map.getSource(EVENTS_SOURCE) || !map.getSource(INCIDENTS_SOURCE))) {
+      if (map.isStyleLoaded() && (!map.getLayer(EVENTS_LAYER) || !map.getLayer(INCIDENTS_LAYER))) {
         addSourceAndLayer(map);
         addMeasureLayers(map);
       }
@@ -870,40 +865,40 @@ export function IntelligenceMap({
     const doUpdate = () => {
       if (done) return;
       try {
-        let source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
-        if (!source && map.isStyleLoaded()) {
+        if (!map.getLayer(INCIDENTS_LAYER)) {
           addSourceAndLayer(map);
-          source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
         }
+        const source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
         if (source) {
           source.setData(incidentsGeoJson);
           done = true;
         }
-      } catch { /* map not ready */ }
+      } catch {
+        // style not ready yet — will retry
+      }
     };
 
     doUpdate();
 
-    const onReady = () => doUpdate();
-    if (!map.loaded()) map.once('load', onReady);
-    map.on('idle', onReady);
-    map.on('sourcedata', onReady);
+    const onLoad = () => doUpdate();
+    const onIdle = () => doUpdate();
+    if (!map.loaded()) map.once('load', onLoad);
+    map.on('idle', onIdle);
 
-    // Polling fallback: retry every 500ms for up to 10s in case events were missed
     const interval = setInterval(() => {
       doUpdate();
       if (done) clearInterval(interval);
     }, 500);
-    const timeout = setTimeout(() => clearInterval(interval), 10000);
+    const timeout = setTimeout(() => clearInterval(interval), 30000);
 
     return () => {
       done = true;
-      map.off('load', onReady);
-      map.off('idle', onReady);
-      map.off('sourcedata', onReady);
+      map.off('load', onLoad);
+      map.off('idle', onIdle);
       clearInterval(interval);
       clearTimeout(timeout);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incidentsGeoJson]);
 
   // ------------------------------------------------------------------
