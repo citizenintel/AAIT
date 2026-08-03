@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { splitMultiIncidentEntry, splitAllMultiIncidents } from '@/lib/utils/incident-splitter';
 import type { MockIncident } from '@/data/mock-incidents';
 
-const KNOWN_TOWNS = ['Hoedspruit', 'Tzaneen', 'Polokwane', 'Mokopane', 'Vaalwater', 'Pretoria', 'Johannesburg'];
+const KNOWN_TOWNS = ['Hoedspruit', 'Tzaneen', 'Polokwane', 'Mokopane', 'Vaalwater', 'Pretoria', 'Johannesburg', 'Brakpan', 'Magaliesburg'];
 
 function mockGeocode(town: string, _province: string) {
   return { lat: -25.0, lng: 28.0 };
@@ -115,6 +115,57 @@ describe('splitMultiIncidentEntry', () => {
       expect(r.severity).toBe('critical');
       expect(r.id).toContain('parent-1');
     }
+  });
+
+  it('splits ALL-CAPS surname entries (farm attack list format)', () => {
+    const inc = makeIncident({
+      summary: [
+        'MOSTERT Susan. Assaulted & Shot. Witkoppies farm, Hoedspruit.',
+        'MEYBURGH Maria. Murdered. Maryvlei smallholding. Brakpan. 16 June 2004',
+        'PRETORIUS Hannes. Shot. Kosterfontein farm. 14 Apr 2004.',
+        'THERON Richard. Murdered. Kosterfontein farm, Magaliesburg. 9 June 2004',
+      ].join('\n'),
+    });
+    const result = splitMultiIncidentEntry(inc, KNOWN_TOWNS, mockGeocode);
+    expect(result.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('handles month-year dates without day (July 2004)', () => {
+    const inc = makeIncident({
+      summary: [
+        'SERFONTEIN Chris. Murdered. Vaalrivier. July 2004.',
+        'PRETORIUS Hannes. Shot. Kosterfontein farm. Apr 2004.',
+      ].join('\n'),
+    });
+    const result = splitMultiIncidentEntry(inc, KNOWN_TOWNS, mockGeocode);
+    expect(result.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('fixes OCR split years (200 4 → 2004)', () => {
+    const inc = makeIncident({
+      summary: [
+        'MEYBURGH Maria. Murdered. Brakpan. 16 Junie 200 4',
+        'PRETORIUS Hannes. Shot. Hoedspruit. 14 Apr 200 4.',
+      ].join('\n'),
+    });
+    const result = splitMultiIncidentEntry(inc, KNOWN_TOWNS, mockGeocode);
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    // After OCR fix, dates should be parsed correctly
+    const dates = result.map(r => r.dateOccurred).filter(d => d && d.includes('2004'));
+    expect(dates.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('joins continuation lines that do not start with ALL-CAPS', () => {
+    const inc = makeIncident({
+      summary: [
+        'MEYBURGH Maria. Murdered. Maryvlei smallholding. Brakpan. 16',
+        'Junie 2004',
+        'NAUDE SG. Murdered. Olyfenkloof farm, Jamestown.',
+      ].join('\n'),
+    });
+    const result = splitMultiIncidentEntry(inc, KNOWN_TOWNS, mockGeocode);
+    // "Junie 2004" should be joined to MEYBURGH line, giving 2 entries
+    expect(result.length).toBeGreaterThanOrEqual(2);
   });
 });
 

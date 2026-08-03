@@ -812,6 +812,23 @@ const SA_TOWN_COORDS: Record<string, { lat: number; lng: number }> = {
   'Vredefort': { lat: -27.00, lng: 27.35 },
   'Wolmaransstad': { lat: -27.20, lng: 25.97 },
   'Ottoshoop': { lat: -25.72, lng: 25.97 },
+  'Brakpan': { lat: -26.24, lng: 28.37 },
+  'Magaliesburg': { lat: -25.99, lng: 27.55 },
+  'Henley on Klip': { lat: -26.56, lng: 28.05 },
+  'Henley-on-Klip': { lat: -26.56, lng: 28.05 },
+  'Jamestown': { lat: -31.12, lng: 26.80 },
+  'Hartbeesfontein': { lat: -26.63, lng: 26.62 },
+  'Colesburg': { lat: -30.72, lng: 25.10 },
+  'Greytown': { lat: -29.06, lng: 30.59 },
+  'Lykso': { lat: -25.55, lng: 28.30 },
+  'Moorreesburg': { lat: -33.15, lng: 18.67 },
+  'Bethal': { lat: -26.46, lng: 29.47 },
+  'Ogies': { lat: -26.05, lng: 29.05 },
+  'Dullstroom': { lat: -25.41, lng: 30.11 },
+  'Ellisras': { lat: -23.69, lng: 27.70 },
+  'Naboomspruit': { lat: -24.57, lng: 28.74 },
+  'Settlers': { lat: -25.08, lng: 30.29 },
+  'Potgietersrus': { lat: -24.19, lng: 29.01 },
 };
 
 function geocodeIncident(town: string, province: string): { lat: number; lng: number } {
@@ -1215,6 +1232,7 @@ export function AdminImport() {
 
   const [cleanupReport, setCleanupReport] = useState<{ fixed: number; split: number; removed: number; deduplicated: number } | null>(null);
   const [dedupReport, setDedupReport] = useState<number | null>(null);
+  const [actionInProgress, setActionInProgress] = useState<'dedup' | 'split' | 'scan' | null>(null);
 
   const runDedup = () => {
     const removed = deduplicateImportedIncidents();
@@ -1263,6 +1281,34 @@ export function AdminImport() {
     if (cleaned.length > 0) addImportedIncidents(cleaned);
     const deduplicated = deduplicateImportedIncidents();
     setCleanupReport({ fixed, split: splitTotal, removed, deduplicated });
+  };
+
+  const handleDedup = () => {
+    setActionInProgress('dedup');
+    setDedupReport(null);
+    setCleanupReport(null);
+    setTimeout(() => {
+      runDedup();
+      setActionInProgress(null);
+    }, 50);
+  };
+
+  const handleSplitClean = () => {
+    setActionInProgress('split');
+    setDedupReport(null);
+    setCleanupReport(null);
+    setTimeout(() => {
+      cleanImportedData();
+      setActionInProgress(null);
+    }, 50);
+  };
+
+  const handleScan = () => {
+    setActionInProgress('scan');
+    setTimeout(() => {
+      scanForInternalDupes();
+      setActionInProgress(null);
+    }, 50);
   };
 
   const mappedCount = useMemo(() => Object.values(mapping).filter((v) => v >= 0).length, [mapping]);
@@ -1875,16 +1921,16 @@ export function AdminImport() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
             <h2 style={{ margin: 0 }}>Stored Incidents</h2>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button className="btn btn-secondary" onClick={runDedup} style={{ fontSize: 11, color: '#d97706' }}>
-                Remove Duplicates
+              <button className="btn btn-secondary" onClick={handleDedup} disabled={!!actionInProgress} style={{ fontSize: 11, color: '#d97706', display: 'flex', alignItems: 'center', gap: 4 }}>
+                {actionInProgress === 'dedup' ? <><span className="spinner-dot" /> Removing…</> : 'Remove Duplicates'}
               </button>
-              <button className="btn btn-secondary" onClick={cleanImportedData} style={{ fontSize: 11, color: '#2563eb' }}>
-                Split &amp; Clean
+              <button className="btn btn-secondary" onClick={handleSplitClean} disabled={!!actionInProgress} style={{ fontSize: 11, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 4 }}>
+                {actionInProgress === 'split' ? <><span className="spinner-dot" /> Splitting &amp; cleaning…</> : 'Split & Clean'}
               </button>
-              <button className="btn btn-secondary" onClick={scanForInternalDupes} style={{ fontSize: 11 }}>
-                Scan for duplicates
+              <button className="btn btn-secondary" onClick={handleScan} disabled={!!actionInProgress} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+                {actionInProgress === 'scan' ? <><span className="spinner-dot" /> Scanning…</> : 'Scan for duplicates'}
               </button>
-              <button className="btn btn-secondary" onClick={() => { if (confirm('Clear all imported incidents? This cannot be undone.')) clearImportedIncidents(); }} style={{ fontSize: 11, color: '#c53030' }}>
+              <button className="btn btn-secondary" onClick={() => { if (confirm('Clear all imported incidents? This cannot be undone.')) clearImportedIncidents(); }} disabled={!!actionInProgress} style={{ fontSize: 11, color: '#c53030' }}>
                 Clear all
               </button>
             </div>
