@@ -55,102 +55,95 @@ const EVENT_TYPE_COLORS: Record<EventType, string> = {
 
 
 // ---------------------------------------------------------------------------
-// Map styles — all inline (no remote style JSON fetches)
+// Map basemaps — all sources added at init, switching toggles visibility
 // ---------------------------------------------------------------------------
 
-function satelliteStyle(): maplibregl.StyleSpecification {
-  return {
-    version: 8 as const,
-    sources: {
-      'esri-satellite': {
-        type: 'raster',
-        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
-        tileSize: 256,
-        attribution: '&copy; Esri, Maxar, Earthstar Geographics',
-        maxzoom: 18,
-      },
-      'carto-labels': {
-        type: 'raster',
-        tiles: ['https://basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png'],
-        tileSize: 256,
-        attribution: '&copy; CARTO',
-        maxzoom: 18,
-      },
-    },
-    layers: [
-      { id: 'bg', type: 'background', paint: { 'background-color': '#0a1a2e' } },
-      { id: 'satellite-tiles', type: 'raster', source: 'esri-satellite', paint: { 'raster-fade-duration': 300 } },
-      { id: 'label-tiles', type: 'raster', source: 'carto-labels', paint: { 'raster-fade-duration': 300 } },
-    ],
-  } satisfies maplibregl.StyleSpecification;
-}
+const BASEMAP_BG_COLORS: Record<string, string> = {
+  standard: '#111113',
+  light: '#f2efe9',
+  terrain: '#d4c6a1',
+  satellite: '#0a1a2e',
+  '3d': '#0a1a2e',
+};
 
-const DARK_STYLE: maplibregl.StyleSpecification = {
+const BG_LAYER = 'basemap-bg';
+
+const BASEMAP_KEYS = ['standard', 'light', 'terrain', 'satellite'] as const;
+
+const INITIAL_STYLE: maplibregl.StyleSpecification = {
   version: 8 as const,
   sources: {
-    'carto-dark': {
+    'src-standard': {
       type: 'raster',
       tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
       tileSize: 256,
-      attribution: '&copy; CARTO &copy; OpenStreetMap contributors',
       maxzoom: 18,
     },
-  },
-  layers: [
-    { id: 'bg', type: 'background', paint: { 'background-color': '#111113' } },
-    { id: 'dark-tiles', type: 'raster', source: 'carto-dark', paint: { 'raster-fade-duration': 300 } },
-  ],
-};
-
-const LIGHT_STYLE: maplibregl.StyleSpecification = {
-  version: 8 as const,
-  sources: {
-    'carto-light': {
+    'src-light': {
       type: 'raster',
       tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'],
       tileSize: 256,
-      attribution: '&copy; CARTO &copy; OpenStreetMap contributors',
+      maxzoom: 18,
+    },
+    'src-terrain': {
+      type: 'raster',
+      tiles: [
+        'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
+        'https://b.tile.opentopomap.org/{z}/{x}/{y}.png',
+        'https://c.tile.opentopomap.org/{z}/{x}/{y}.png',
+      ],
+      tileSize: 256,
+      maxzoom: 17,
+    },
+    'src-satellite': {
+      type: 'raster',
+      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+      tileSize: 256,
+      maxzoom: 18,
+    },
+    'src-sat-labels': {
+      type: 'raster',
+      tiles: ['https://basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png'],
+      tileSize: 256,
       maxzoom: 18,
     },
   },
   layers: [
-    { id: 'bg', type: 'background', paint: { 'background-color': '#f2efe9' } },
-    { id: 'light-tiles', type: 'raster', source: 'carto-light', paint: { 'raster-fade-duration': 300 } },
+    { id: BG_LAYER, type: 'background', paint: { 'background-color': '#111113' } },
+    { id: 'lyr-standard', type: 'raster', source: 'src-standard', layout: { visibility: 'visible' }, paint: { 'raster-fade-duration': 300 } },
+    { id: 'lyr-light', type: 'raster', source: 'src-light', layout: { visibility: 'none' }, paint: { 'raster-fade-duration': 300 } },
+    { id: 'lyr-terrain', type: 'raster', source: 'src-terrain', layout: { visibility: 'none' }, paint: { 'raster-fade-duration': 300 } },
+    { id: 'lyr-satellite', type: 'raster', source: 'src-satellite', layout: { visibility: 'none' }, paint: { 'raster-fade-duration': 300 } },
+    { id: 'lyr-sat-labels', type: 'raster', source: 'src-sat-labels', layout: { visibility: 'none' }, paint: { 'raster-fade-duration': 300 } },
   ],
 };
 
-const MAP_STYLES: Record<string, maplibregl.StyleSpecification> = {
-  standard: DARK_STYLE,
-  light: LIGHT_STYLE,
-  terrain: {
-    version: 8 as const,
-    sources: {
-      'opentopomap': {
-        type: 'raster',
-        tiles: [
-          'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
-          'https://b.tile.opentopomap.org/{z}/{x}/{y}.png',
-          'https://c.tile.opentopomap.org/{z}/{x}/{y}.png',
-        ],
-        tileSize: 256,
-        attribution: '&copy; OpenTopoMap (CC-BY-SA)',
-        maxzoom: 17,
-      },
-    },
-    layers: [
-      { id: 'bg', type: 'background', paint: { 'background-color': '#d4c6a1' } },
-      { id: 'topo-tiles', type: 'raster', source: 'opentopomap', paint: { 'raster-fade-duration': 300 } },
-    ],
-  } satisfies maplibregl.StyleSpecification,
-  satellite: satelliteStyle(),
-  '3d': satelliteStyle(),
-};
+function swapBasemap(map: maplibregl.Map, key: string) {
+  const bgColor = BASEMAP_BG_COLORS[key] ?? '#111113';
+  if (map.getLayer(BG_LAYER)) {
+    map.setPaintProperty(BG_LAYER, 'background-color', bgColor);
+  }
+
+  for (const k of BASEMAP_KEYS) {
+    const layerId = `lyr-${k}`;
+    if (map.getLayer(layerId)) {
+      map.setLayoutProperty(layerId, 'visibility', k === key || (key === '3d' && k === 'satellite') ? 'visible' : 'none');
+    }
+  }
+
+  const showLabels = key === 'satellite' || key === '3d';
+  if (map.getLayer('lyr-sat-labels')) {
+    map.setLayoutProperty('lyr-sat-labels', 'visibility', showLabels ? 'visible' : 'none');
+  }
+
+  map.triggerRepaint();
+}
 
 const STYLE_LABELS: Record<string, string> = {
   standard: 'Standard', light: 'Light', terrain: 'Terrain', satellite: 'Satellite', '3d': '3D',
 };
 
-type MapStyleKey = keyof typeof MAP_STYLES;
+type MapStyleKey = 'standard' | 'light' | 'terrain' | 'satellite' | '3d';
 
 // ---------------------------------------------------------------------------
 // 3D terrain source (AWS open dataset, terrarium encoding)
@@ -664,7 +657,7 @@ export function IntelligenceMap({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: DARK_STYLE,
+      style: INITIAL_STYLE,
       center: [25.5, -28.0],
       zoom: 5.5,
       minZoom: 3,
@@ -692,7 +685,7 @@ export function IntelligenceMap({
       }
     });
 
-    // If the style was swapped (fallback or user-switched), re-add layers
+    // If custom sources go missing, re-add them
     map.on('styledata', () => {
       if (map.isStyleLoaded() && (!map.getSource(EVENTS_SOURCE) || !map.getSource(INCIDENTS_SOURCE))) {
         addSourceAndLayer(map);
@@ -889,7 +882,7 @@ export function IntelligenceMap({
   );
 
   // ------------------------------------------------------------------
-  // Style change effect (skips initial mount — handled by init effect)
+  // Style change effect — swaps basemap tiles without setStyle()
   // ------------------------------------------------------------------
   useEffect(() => {
     const map = mapRef.current;
@@ -899,41 +892,11 @@ export function IntelligenceMap({
     const is3D = activeStyle === '3d';
     if (!is3D) disable3D(map);
 
-    const canvas = map.getCanvas();
-    canvas.style.transition = 'opacity 250ms ease';
-    canvas.style.opacity = '0.15';
+    swapBasemap(map, activeStyle);
 
-    map.setStyle(MAP_STYLES[activeStyle]!);
-
-    let tries = 0;
-    const reAdd = () => {
-      addSourceAndLayer(map);
-      addMeasureLayers(map);
-      if (measureRef.current.points.length > 0) updateMeasureGeometry(map, measureRef.current.points);
-      if (is3D) enable3D(map);
-      const applied = applyRoads(map, activeStyle, showRoadsRef.current);
-      if (!applied && tries < 6) { tries += 1; map.once('idle', reAdd); return; }
-      map.triggerRepaint();
-      requestAnimationFrame(() => {
-        canvas.style.opacity = '1';
-        setTimeout(() => { canvas.style.transition = ''; }, 300);
-      });
-    };
-    map.once('idle', reAdd);
-
-    // Failsafe: if idle never fires within 4s, force canvas visible
-    const failsafe = setTimeout(() => {
-      if (canvas.style.opacity !== '1') {
-        canvas.style.opacity = '1';
-        canvas.style.transition = '';
-        addSourceAndLayer(map);
-        addMeasureLayers(map);
-        if (is3D) enable3D(map);
-      }
-    }, 4000);
-
-    return () => { map.off('idle', reAdd); clearTimeout(failsafe); };
-  }, [activeStyle, addSourceAndLayer, addMeasureLayers, updateMeasureGeometry, enable3D, disable3D, applyRoads]);
+    if (is3D) enable3D(map);
+    applyRoads(map, activeStyle, showRoadsRef.current);
+  }, [activeStyle, enable3D, disable3D, applyRoads]);
 
   // ------------------------------------------------------------------
   // Roads toggle
@@ -1194,7 +1157,7 @@ export function IntelligenceMap({
           </button>
           <span className="map-style-divider" />
           <div className="map-style-group">
-            {(Object.keys(MAP_STYLES) as MapStyleKey[]).map(key => (
+            {(Object.keys(STYLE_LABELS) as MapStyleKey[]).map(key => (
               <button
                 key={key}
                 className={`map-style-btn${activeStyle === key ? ' active' : ''}${key === '3d' ? ' map-style-btn-3d' : ''}`}
