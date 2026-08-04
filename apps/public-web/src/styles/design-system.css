@@ -1719,6 +1719,25 @@ body {
 
 .review-banner-action:hover { background: rgba(214, 158, 46, 0.18); }
 
+/* Inline route link inside the banner copy. The action button sits at the far
+   right of the bar, which on a wide monitor is a long way from the text the
+   user is actually reading — this repeats the destination where their eye is. */
+.review-banner-inline {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #d69e2e;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.review-banner-inline:hover { color: #ecc94b; }
+.review-banner-inline:focus-visible { outline: 2px solid #d69e2e; outline-offset: 2px; }
+
 /* ---------------------------------------------------------------------------
    Map empty state — an empty map must always say WHY it is empty
    --------------------------------------------------------------------------- */

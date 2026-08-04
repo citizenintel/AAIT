@@ -77,13 +77,27 @@ export function ReviewQueueBanner() {
               not a date filter.
               {incidents.length > 0 && ` The ${incidents.length} record${incidents.length === 1 ? '' : 's'} currently shown ${incidents.length === 1 ? 'is a' : 'are'} built-in sample${incidents.length === 1 ? '' : 's'}, not your import.`}
             </div>
+            {/* The action button sits at the far right of the bar; on a wide
+                monitor that is a long way from the words the user is reading, so
+                name the route inline and make it clickable where their eye is. */}
+            <div className="review-banner-text">
+              <strong>Where to confirm:</strong>{' '}
+              <button type="button" className="review-banner-inline" onClick={go}>
+                Admin → Import → Stored Incidents → Review queue
+              </button>
+              {' '}— that link jumps straight to the block and highlights it. Press{' '}
+              <em>“I have checked these — release {n} record{plural} to the map”</em>.
+            </div>
           </>
         ) : (
           <div className="review-banner-text">
             <strong>{n}</strong> imported record{plural} {n === 1 ? 'is' : 'are'} held back pending your
             review. {n === 1 ? 'It is' : 'They are'} not on the map and {n === 1 ? 'is' : 'are'} not
             counted in any total on this screen. {incidents.length} record
-            {incidents.length === 1 ? ' is' : 's are'} published.
+            {incidents.length === 1 ? ' is' : 's are'} published. Confirm {n === 1 ? 'it' : 'them'} at{' '}
+            <button type="button" className="review-banner-inline" onClick={go}>
+              Admin → Import → Stored Incidents → Review queue
+            </button>.
           </div>
         )}
         {mergeNote}
