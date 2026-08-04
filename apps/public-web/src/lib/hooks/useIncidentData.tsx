@@ -3,7 +3,7 @@ import { fetchIncidents, type IncidentRow } from '../api/incidents';
 import { fetchActiveCampaigns, type CampaignRow } from '../api/sponsors';
 import type { MockIncident } from '../../data/mock-incidents';
 import { useAppStore } from '../../stores/app-store';
-import { deduplicateByContent, incidentFingerprint } from '../utils/deduplicate';
+import { deduplicateWithStats, mockIncidentFingerprint } from '../utils/deduplicate';
 import {
   applyTimeFilter, computeExtent, describeFilter, isBounded, resolveBounds,
   type DataExtent, type DateBounds, type TimeFilter,
@@ -32,9 +32,34 @@ export interface IncidentDataContextValue {
   allIncidents: MockIncident[];
   /** How many stored records are being withheld pending review. */
   awaitingReview: number;
+  /**
+   * Records removed before publication because another record carried the same
+   * content + date + place. This is the ONE remaining path by which a stored
+   * record does not reach `allIncidents`, so it is counted here and rendered in
+   * the shell banner and the map. Without it every number below silently
+   * under-reports: they are all computed on the post-dedup set.
+   */
+  mergedCount: number;
+  /**
+   * Everything the app is holding, before any gate:
+   * storedCount === totalCount + mergedCount + awaitingReview.
+   * That identity is the whole point — it makes "where did my records go?"
+   * answerable from the UI alone.
+   */
+  storedCount: number;
+
+  /**
+   * Imported records that PASSED the review gate. Zero means nothing the user
+   * imported has reached the map yet, even though `allIncidents` may be full of
+   * built-in demo records. Callers must test this rather than
+   * `allIncidents.length === 0` — with Supabase unconfigured, fetchIncidents()
+   * falls back to 23 bundled mock rows, so `allIncidents` is never empty and any
+   * check against it silently never fires.
+   */
+  publishedImportedCount: number;
 
   // --- Counts. total === inRange + outOfRange + (undated if excluded) ---
-  /** allIncidents.length — everything that passed review. */
+  /** allIncidents.length — everything that passed review AND dedup. */
   totalCount: number;
   /** incidents.length — what is published under the active window. */
   inRangeCount: number;
@@ -66,6 +91,9 @@ const IncidentDataContext = createContext<IncidentDataContextValue>({
   incidents: [],
   allIncidents: [],
   awaitingReview: 0,
+  mergedCount: 0,
+  storedCount: 0,
+  publishedImportedCount: 0,
   totalCount: 0,
   inRangeCount: 0,
   outOfRangeCount: 0,
@@ -170,23 +198,30 @@ export function IncidentDataProvider({ children }: { children: ReactNode }) {
   /**
    * Dedup FIRST, then time-filter. Filtering first would let the surviving
    * member of a duplicate pair depend on the active window.
+   *
+   * BLOCKER FIX. This used to call `deduplicateByContent`, which returns only
+   * the survivors. Every count the UI shows is derived from the result, so a
+   * merge reduced "N records in total", "N published" and the window's "−N"
+   * with nothing anywhere reporting that it had happened — the single remaining
+   * silent-drop path in the pipeline, and the one most likely to fire on a real
+   * historical import (repeated short narratives, many undated rows).
+   * `deduplicateWithStats` reports the removals; they are published on the
+   * context as `mergedCount` and rendered.
    */
-  const allIncidents = useMemo(
-    () => deduplicateByContent(
+  const deduped = useMemo(
+    () => deduplicateWithStats(
       [...apiIncidents, ...reviewed],
-      // Keyed on the SUMMARY, not the title. A title is a short, often
-      // generated string: two genuinely distinct incidents in the same town on
-      // the same day produced an identical fingerprint and one of them was
-      // silently dropped. The summary is the record's actual content.
-      (i) => incidentFingerprint(
-        i.summary || i.title,
-        i.dateOccurred ?? '',
-        i.town ?? i.province ?? '',
-      ),
+      // The canonical key — shared with the store's ingress check and its
+      // dedup command, so the three layers can no longer disagree about what a
+      // duplicate is. See mockIncidentFingerprint.
+      mockIncidentFingerprint,
       (i) => i.id,
     ),
     [apiIncidents, reviewed],
   );
+  const allIncidents = deduped.items;
+  const mergedCount = deduped.removedCount;
+  const storedCount = apiIncidents.length + importedIncidents.length;
 
   const bounds = useMemo(() => resolveBounds(timeFilter), [timeFilter]);
 
@@ -213,6 +248,9 @@ export function IncidentDataProvider({ children }: { children: ReactNode }) {
       incidents: filtered.matched,
       allIncidents,
       awaitingReview,
+      mergedCount,
+      storedCount,
+      publishedImportedCount: reviewed.length,
       totalCount: filtered.totalCount,
       inRangeCount: filtered.inRangeCount,
       outOfRangeCount: filtered.outOfRangeCount,
@@ -227,19 +265,30 @@ export function IncidentDataProvider({ children }: { children: ReactNode }) {
       campaigns,
       loading,
     }),
-    [filtered, allIncidents, awaitingReview, dataExtent, timeFilter, bounds,
-     filterActive, filterLabel, campaigns, loading],
+    [filtered, allIncidents, awaitingReview, mergedCount, storedCount, reviewed.length,
+     dataExtent, timeFilter, bounds, filterActive, filterLabel, campaigns, loading],
   );
 
   useEffect(() => {
     console.log(
       `[IncidentDataProvider] published=${filtered.inRangeCount} of ${filtered.totalCount} ` +
       `(api=${apiIncidents.length}, imported=${importedIncidents.length}, ` +
-      `withheld pending review=${awaitingReview}, window="${filterLabel}", ` +
+      `stored=${storedCount}, withheld pending review=${awaitingReview}, ` +
+      `merged as duplicates=${mergedCount}, window="${filterLabel}", ` +
       `outside window=${filtered.outOfRangeCount}, undated=${filtered.undatedCount}` +
       `${filtered.undatedIncluded ? ' (included)' : ' (excluded by you)'})`,
     );
-  }, [filtered, apiIncidents.length, importedIncidents.length, awaitingReview, filterLabel]);
+    // The identity that makes every record accounted for. If this ever trips,
+    // a new silent-drop path has been introduced upstream of the counts.
+    if (storedCount !== filtered.totalCount + mergedCount + awaitingReview) {
+      console.error(
+        '[IncidentDataProvider] RECORD ACCOUNTING MISMATCH — records are ' +
+        `unaccounted for: stored=${storedCount}, published-eligible=${filtered.totalCount}, ` +
+        `merged=${mergedCount}, awaiting review=${awaitingReview}.`,
+      );
+    }
+  }, [filtered, apiIncidents.length, importedIncidents.length, awaitingReview,
+      mergedCount, storedCount, filterLabel]);
 
   return (
     <IncidentDataContext.Provider value={value}>

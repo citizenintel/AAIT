@@ -7,6 +7,8 @@ import { MODULE_META, SEVERITY_META, VERIFICATION_META } from '@/data/mock-incid
 import type { MockIncident } from '@/data/mock-incidents';
 import { deconflictCoordinates } from '@/lib/utils/map-deconflict';
 import { resolveCoords } from '@/lib/utils/sa-coordinates';
+import { useIncidentData } from '@/lib/hooks/useIncidentData';
+import { useAppStore } from '@/stores/app-store';
 import type {
   IntelligenceEvent,
   InfrastructureAsset,
@@ -347,6 +349,28 @@ export function IntelligenceMap({
       );
     }
   }, [unmappedCount, incidents.length]);
+
+  /**
+   * Diagnostics only — the map still renders from the `incidents` PROP, so the
+   * component contract is unchanged. The hook is read here rather than plumbed
+   * through three separate call sites (GlanceView, InvestigateView, BriefView)
+   * because forgetting one of those props would silently reinstate the blank
+   * map with no explanation. Outside a provider this returns the default
+   * context (all zeros, All time), so it cannot throw.
+   */
+  const {
+    allIncidents,
+    awaitingReview,
+    mergedCount,
+    outsideWindowCount,
+    undatedCount,
+    undatedIncluded,
+    filterActive,
+    filterLabel,
+    loading: incidentsLoading,
+  } = useIncidentData();
+  const setTimeFilter = useAppStore((s) => s.setTimeFilter);
+  const setIncludeUndated = useAppStore((s) => s.setIncludeUndated);
 
   const visibleCount = geojson.features.length;
 
@@ -1301,33 +1325,116 @@ export function IntelligenceMap({
         </div>
       )}
 
+      {/* Three different reasons for an empty map, three different messages.
+          A blank map that says nothing has cost this project several rounds, so
+          every branch below names the cause and, where one exists, offers the
+          one-click way out. */}
+      {layersReady && markerCount === 0 && !incidentsLoading && (
+        <div className="map-empty-state" role="status">
+          {allIncidents.length === 0 && awaitingReview > 0 ? (
+            <>
+              <div className="map-empty-title">
+                Nothing published — {awaitingReview} record{awaitingReview === 1 ? '' : 's'} awaiting your review
+              </div>
+              <div className="map-empty-text">
+                The data loaded. It is held back until you confirm it, because every imported
+                record has at least one machine-derived field. Use the amber bar above the map
+                to release it.
+              </div>
+            </>
+          ) : allIncidents.length === 0 ? (
+            <>
+              <div className="map-empty-title">No incident data loaded</div>
+              <div className="map-empty-text">
+                Nothing was returned by the API and nothing has been imported. This is an empty
+                dataset — not a filter, and not a map failure.
+              </div>
+            </>
+          ) : filterActive ? (
+            <>
+              <div className="map-empty-title">No incidents in {filterLabel}</div>
+              <div className="map-empty-text">
+                {outsideWindowCount} record{outsideWindowCount === 1 ? ' falls' : 's fall'} outside this window
+                {undatedCount > 0 && (
+                  undatedIncluded
+                    ? `, and ${undatedCount} ${undatedCount === 1 ? 'has' : 'have'} no stated date (currently included)`
+                    : `, and ${undatedCount} with no stated date ${undatedCount === 1 ? 'is' : 'are'} excluded by your choice`
+                )}. {allIncidents.length} record{allIncidents.length === 1 ? '' : 's'} in total
+                {mergedCount > 0 && `, after ${mergedCount} duplicate${mergedCount === 1 ? '' : 's'} ${mergedCount === 1 ? 'was' : 'were'} merged away`}.
+                {/* Without this, an import that is entirely withheld reads as a
+                    date-filter miss and the user re-tunes the window forever. */}
+                {awaitingReview > 0 && ` A further ${awaitingReview} imported record${awaitingReview === 1 ? ' is' : 's are'} held back pending review and ${awaitingReview === 1 ? 'is' : 'are'} not in that total — releasing ${awaitingReview === 1 ? 'it' : 'them'} may fill this window.`}
+              </div>
+              <div className="map-empty-actions">
+                <button onClick={() => setTimeFilter({ mode: 'all' })}>Show all time</button>
+                {undatedCount > 0 && !undatedIncluded && (
+                  <button onClick={() => setIncludeUndated(true)}>
+                    Include {undatedCount} undated
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="map-empty-title">
+                {allIncidents.length} record{allIncidents.length === 1 ? '' : 's'}, none with a resolvable location
+              </div>
+              <div className="map-empty-text">
+                No time filter is active. These records have no coordinates, town or province that
+                could be resolved to a point, so they cannot be plotted. They are still counted in
+                the dashboard totals.
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Marker count badge — diagnostic + user feedback.
           Reports mapped vs unmappable honestly: incidents whose location could
           not be resolved produce no feature, and saying "N incidents on map"
-          while silently dropping them is what hid this bug for so long. */}
-      {(incidents.length > 0 || markerCount > 0) && (
+          while silently dropping them is what hid this bug for so long.
+          Rendered at ZERO too: unmounting the only on-map diagnostic in exactly
+          the failure case is what made the historical failures unreadable. */}
+      {(
         <div style={{
           position: 'absolute', bottom: 8, left: 12, zIndex: 20,
           background: layersReady ? 'rgba(56, 178, 172, 0.9)' : 'rgba(197, 48, 48, 0.9)',
           color: '#fff', fontSize: 11, fontWeight: 600,
           padding: '3px 8px', borderRadius: 4,
+          // The wrapper must not eat map drags, but the chips below carry the
+          // ONLY statement of why records are missing — with pointerEvents
+          // 'none' inherited, their title tooltips could never be shown. Each
+          // chip re-enables pointer events for itself.
           pointerEvents: 'none',
           display: 'flex', gap: 8, alignItems: 'center',
         }}>
           <span>
-            {layersReady
-              ? `${markerCount} incidents on map`
-              : `${incidents.length} incidents pending...`}
+            {!layersReady
+              ? `${incidents.length} incidents pending...`
+              : filterActive
+                ? `${markerCount} on map · ${filterLabel}`
+                : `${markerCount} incidents on map`}
           </span>
           {unmappedCount > 0 && (
             <span
               title={`${unmappedCount} incident(s) have no resolvable location and cannot be plotted. They are still counted in the dashboard totals.`}
               style={{
                 background: 'rgba(0,0,0,0.35)', padding: '1px 6px', borderRadius: 3,
-                fontWeight: 700,
+                fontWeight: 700, pointerEvents: 'auto', cursor: 'help',
               }}
             >
               {unmappedCount} unmapped
+            </span>
+          )}
+          {mergedCount > 0 && (
+            <span
+              title={`${mergedCount} record(s) were merged away as duplicates before publishing — another record carried the same description, date and place. They are not counted in any total on this screen.`}
+              style={{
+                background: 'rgba(0,0,0,0.35)', padding: '1px 6px', borderRadius: 3,
+                fontWeight: 700, pointerEvents: 'auto', cursor: 'help',
+              }}
+            >
+              {mergedCount} merged
             </span>
           )}
         </div>

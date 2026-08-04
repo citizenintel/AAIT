@@ -1,5 +1,8 @@
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { MOCK_INCIDENTS, type MockIncident } from '../../data/mock-incidents';
+// Static, not dynamic: app-store imports only types, deduplicate and
+// time-filter, none of which reach back here, so there is no cycle.
+import { useAppStore } from '../../stores/app-store';
 
 export interface IncidentRow {
   id: string;
@@ -77,10 +80,33 @@ export async function fetchIncidents(filters?: {
   return results;
 }
 
+/**
+ * Imported incidents live in the zustand store (backed by IndexedDB), not in
+ * MOCK_INCIDENTS. Looking only at MOCK_INCIDENTS meant every popup link to an
+ * IMPORTED record — i.e. every record in the user's own data — rendered
+ * "Incident not found". Imported first, then mocks.
+ *
+ * `hydrate()` is awaited because this page (/incident/:id) can be loaded
+ * directly, before anything else has pulled the store out of IndexedDB.
+ */
+async function findLocalIncident(id: string): Promise<MockIncident | undefined> {
+  const state = useAppStore.getState();
+  let imported = state.importedIncidents;
+  if (imported.length === 0) {
+    try {
+      await state.hydrate();
+      imported = useAppStore.getState().importedIncidents;
+    } catch {
+      /* IndexedDB unavailable — fall through to the mock lookup. */
+    }
+  }
+  return imported.find(m => m.id === id) ?? MOCK_INCIDENTS.find(m => m.id === id);
+}
+
 export async function fetchIncidentById(id: string): Promise<IncidentRow | null> {
   if (!isSupabaseConfigured()) {
-    const mock = MOCK_INCIDENTS.find(m => m.id === id);
-    return mock ? mockToRow(mock) : null;
+    const local = await findLocalIncident(id);
+    return local ? mockToRow(local) : null;
   }
 
   const { data, error } = await supabase
@@ -158,7 +184,9 @@ export function mockToRow(m: MockIncident): IncidentRow {
     severity: m.severity,
     status: 'active',
     bam_classification: 'not_assessed',
-    occurred_at: m.dateOccurred,
+    // '' means the source stated no date. It must stay absent, not render as
+    // an empty cell that looks like a rendering fault.
+    occurred_at: m.dateOccurred || null,
     is_ongoing: false,
     confirmed_facts: m.summary,
     reported_unconfirmed: null,
@@ -171,7 +199,7 @@ export function mockToRow(m: MockIncident): IncidentRow {
     victim_count_reported: null,
     fatality_count_reported: null,
     is_published: true,
-    published_at: m.dateReported,
+    published_at: m.dateReported || null,
     created_at: m.dateReported,
     updated_at: m.dateReported,
     category: { slug: m.category, label_en: m.category.replace(/_/g, ' '), module: m.module, icon_key: '', colour_key: '' },

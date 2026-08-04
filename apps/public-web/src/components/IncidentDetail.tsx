@@ -5,7 +5,10 @@ import { useIncidentData } from '@/lib/hooks/useIncidentData';
 import { INFERRED_FIELD_LABELS } from '@/lib/utils/inferred-fields';
 
 export function IncidentDetail() {
-  const { incidents } = useIncidentData();
+  // allIncidents, not incidents: a lookup by id must never be scoped by the
+  // active time window. Otherwise opening a record and then narrowing the
+  // window makes the detail panel vanish with no message (line 14 returns null).
+  const { allIncidents: incidents } = useIncidentData();
   const selectedId = useAppStore((s) => s.ui.selectedIncidentId);
   const setSelected = useAppStore((s) => s.setSelectedIncident);
   const navigate = useNavigate();

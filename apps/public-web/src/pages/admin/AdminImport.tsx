@@ -1,4 +1,4 @@
-﻿import { useCallback, useMemo, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import mammoth from 'mammoth';
@@ -15,7 +15,7 @@ import {
 } from '../../lib/utils/incident-splitter';
 import { SA_TOWN_COORDS, PROVINCE_CENTROIDS } from '../../lib/utils/sa-coordinates';
 import { inferredFieldLabel } from '../../lib/utils/inferred-fields';
-import { incidentFingerprint } from '../../lib/utils/deduplicate';
+import { mockIncidentFingerprint } from '../../lib/utils/deduplicate';
 
 GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
@@ -1092,7 +1092,7 @@ function computeDedupPreview(incidents: MockIncident[]): DedupPreview {
   for (const inc of incidents) {
     if (seenId.has(inc.id)) continue;
     seenId.add(inc.id);
-    const fp = incidentFingerprint(inc.title, inc.dateOccurred ?? '', inc.town ?? inc.province ?? '');
+    const fp = mockIncidentFingerprint(inc);
     const first = fp ? seenFp.get(fp) : undefined;
     if (first && first.id !== inc.id) {
       pairs.push({ keep: first, remove: inc, fingerprint: fp });
@@ -1375,6 +1375,30 @@ export function AdminImport() {
   const replaceImportedIncidents = useAppStore((s) => s.replaceImportedIncidents);
   const deduplicateImportedIncidents = useAppStore((s) => s.deduplicateImportedIncidents);
   const getStorageEstimate = useAppStore((s) => s.getStorageEstimate);
+
+  /**
+   * The public-side ReviewQueueBanner links here with #review-queue. That block
+   * sits far below the upload form, the mapping table and the import report, so
+   * without this the user lands at the top of a 3000-line page and has to hunt
+   * for the control they were just told to press. The block renders
+   * conditionally, so retry briefly rather than assuming it exists on frame 1.
+   */
+  useEffect(() => {
+    if (window.location.hash !== '#review-queue') return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      const el = document.getElementById('review-queue');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.outline = '2px solid #d69e2e';
+        window.setTimeout(() => { el.style.outline = ''; }, 2500);
+        window.clearInterval(timer);
+      } else if (++tries > 20) {
+        window.clearInterval(timer);
+      }
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // File / CSV state
   const [fileName, setFileName] = useState('');
@@ -2557,7 +2581,7 @@ export function AdminImport() {
                     )}
                     {importReport.rejectedByStore > 0 && (
                       <li style={{ color: '#d69e2e' }}>
-                        <strong>{importReport.rejectedByStore}</strong> record{importReport.rejectedByStore === 1 ? '' : 's'} not added â€” the store already held a record with the same title + date + place
+                        <strong>{importReport.rejectedByStore}</strong> record{importReport.rejectedByStore === 1 ? '' : 's'} not added â€” the store already held a record with the same description + title + date + place
                       </li>
                     )}
                     {importReport.replacedInStore > 0 && (
@@ -2728,7 +2752,7 @@ export function AdminImport() {
 
           {/* â”€â”€ Review queue release â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           {inventory.needsReview > 0 && (
-            <div style={{ marginTop: 12, padding: 12, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-elevated)' }}>
+            <div id="review-queue" style={{ marginTop: 12, padding: 12, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-elevated)' }}>
               <h3 style={{ margin: '0 0 4px', fontSize: 13 }}>Review queue</h3>
               <p className="form-hint" style={{ marginTop: 0 }}>
                 <strong>{inventory.needsReview}</strong> record{inventory.needsReview === 1 ? ' is' : 's are'} held back from the public map because at least one of their
@@ -2773,7 +2797,7 @@ export function AdminImport() {
                               <div style={{ fontWeight: 600 }}>{p.remove.title}</div>
                               <div style={{ color: 'var(--text-muted)', fontSize: 11, fontFamily: 'monospace' }}>{p.remove.id}</div>
                             </td>
-                            <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>identical title + date + place</td>
+                            <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>identical description + title + date + place</td>
                           </tr>
                         ))}
                       </tbody>

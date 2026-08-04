@@ -64,8 +64,23 @@ const LAYER_GROUPS: { id: ModuleKey; items: LayerItem[] }[] = [
   },
 ];
 
+/**
+ * Is this record's module switched on?
+ *
+ * `modules[inc.module]` alone excluded any record whose module string is not a
+ * key of `filters.modules` — and rowToMock (useIncidentData.tsx:89) casts an
+ * arbitrary API module string, so such records exist. They vanished from every
+ * sidebar total while appearing under no toggle the user could switch back on,
+ * and the map does not module-filter at all, so the two surfaces disagreed with
+ * no way to tell why. A module with no toggle is treated as ON: an unknown
+ * value is not a user instruction to hide anything.
+ */
+function isModuleOn(modules: Record<string, boolean>, module: string): boolean {
+  return modules[module] !== false;
+}
+
 export function Sidebar() {
-  const { incidents } = useIncidentData();
+  const { incidents, filterLabel } = useIncidentData();
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['ait']));
   const modules = useAppStore((s) => s.filters.modules);
   const categories = useAppStore((s) => s.filters.categories);
@@ -81,7 +96,7 @@ export function Sidebar() {
   }, [incidents]);
 
   const infographics = useMemo(() => {
-    const active = incidents.filter((inc) => modules[inc.module]);
+    const active = incidents.filter((inc) => isModuleOn(modules, inc.module));
     const byCat: Record<string, number> = {};
     const bySev: Record<string, number> = {};
     for (const inc of active) {
@@ -100,7 +115,7 @@ export function Sidebar() {
 
   // "The Last 24 Hours" summary — reflects the modules currently switched on.
   const summary = useMemo(() => {
-    const active = incidents.filter((inc) => modules[inc.module]);
+    const active = incidents.filter((inc) => isModuleOn(modules, inc.module));
     let deceased = 0, injured = 0, critical = 0, verified = 0;
     const byProvince: Record<string, number> = {};
     for (const inc of active) {
@@ -205,7 +220,10 @@ export function Sidebar() {
       )}
 
       <div className="sidebar-summary">
-        <div className="sidebar-summary-title">The Last 24 Hours</div>
+        {/* Was hardcoded "The Last 24 Hours" over a set that was never
+            time-scoped. With a real window selectable, a fixed label is an
+            outright false claim about what these numbers cover. */}
+        <div className="sidebar-summary-title">{filterLabel}</div>
         <div className="summary-grid">
           <div className="summary-cell">
             <div className="summary-value">{summary.total}</div>

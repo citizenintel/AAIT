@@ -5,6 +5,63 @@ import { MODULE_META } from '../../data/mock-incidents';
 import { resolveSlotContent } from '../../lib/content-slots';
 import { getPlacementDefinition, getAspectRatioCss } from '../../lib/content-slots/registry';
 import type { SlotKey, ResolvedContent, PlacementId } from '../../lib/content-slots';
+import { computeExtent, normalizeIncidentDate, shiftDays } from '@/lib/utils/time-filter';
+
+// ---------------------------------------------------------------------------
+// Shared date helpers for the infographic tiles
+//
+// These tiles used to bucket relative to Date.now() and read fields that do not
+// exist on MockIncident (`reportedAt`, `date`, `deceased`, `injured`), so they
+// rendered permanently flat / permanently zero long before any time filter
+// existed. Now that a historical window is selectable they would also have read
+// as "9500d ago" on a 2000 import, which would have been blamed on the filter.
+//
+// Rule followed here: bucket relative to the LATEST DATED RECORD IN THE SET,
+// never relative to the wall clock, and print absolute dates rather than
+// "N days ago". A 2000 dataset then charts 2000.
+// ---------------------------------------------------------------------------
+
+/** Inclusive day buckets ending on the newest dated record. Never uses Date.now(). */
+function bucketByDay(incidents: any[], days: number): { buckets: number[]; endDay: string | null } {
+  const extent = computeExtent(incidents, (i) => i?.dateOccurred);
+  if (!extent) return { buckets: new Array(days).fill(0), endDay: null };
+  const endDay = extent.maxDay;
+  const startDay = shiftDays(endDay, -(days - 1));
+  const buckets = new Array(days).fill(0);
+  for (const inc of incidents) {
+    const d = normalizeIncidentDate(inc?.dateOccurred);
+    // An undated record is never compared and never silently counted into a
+    // bucket it does not belong to.
+    if (d.kind === 'none') continue;
+    if (d.start > endDay || d.end < startDay) continue;
+    // A month/year-precision record has no single day. Attribute it to the last
+    // day of its interval that falls inside the window — never invent a day
+    // outside the source's own precision.
+    const day = d.end > endDay ? endDay : d.end;
+    const idx = Math.round(
+      (Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10))
+        - Date.UTC(+startDay.slice(0, 4), +startDay.slice(5, 7) - 1, +startDay.slice(8, 10)))
+      / 86400000,
+    );
+    if (idx >= 0 && idx < days) buckets[idx]++;
+  }
+  return { buckets, endDay };
+}
+
+/** What a single record's date should be shown as. Never 'NaNd ago'. */
+function displayDay(raw: unknown): string {
+  const d = normalizeIncidentDate(raw);
+  if (d.kind === 'none') return 'no date';
+  if (d.kind === 'year') return d.start.slice(0, 4);
+  if (d.kind === 'month') return d.start.slice(0, 7);
+  return d.start;
+}
+
+/** Sort key: newest first, undated last. Total, and cannot produce NaN. */
+function sortKey(raw: unknown): string {
+  const d = normalizeIncidentDate(raw);
+  return d.kind === 'none' ? '' : d.end;
+}
 
 // ---------------------------------------------------------------------------
 // useResolvedContentSlot — shared hook so parents can know before rendering
@@ -134,16 +191,12 @@ function MiniProvinceBar({ incidents }: { incidents: any[] }) {
 }
 
 function MiniTrendLine({ incidents }: { incidents: any[] }) {
-  const points = useMemo(() => {
-    const now = Date.now();
+  // Was `new Date(inc.reportedAt || inc.date)` — MockIncident has NEITHER
+  // field, so every bucket was 0 and this line was permanently flat.
+  const { points, endDay, startDay } = useMemo(() => {
     const days = 14;
-    const buckets = new Array(days).fill(0);
-    for (const inc of incidents) {
-      const d = new Date(inc.reportedAt || inc.date).getTime();
-      const age = Math.floor((now - d) / 86400000);
-      if (age >= 0 && age < days) buckets[days - 1 - age]++;
-    }
-    return buckets;
+    const { buckets, endDay } = bucketByDay(incidents, days);
+    return { points: buckets, endDay, startDay: endDay ? shiftDays(endDay, -(days - 1)) : null };
   }, [incidents]);
   const max = Math.max(...points, 1);
   const w = 140, h = 40, px = w / (points.length - 1);
@@ -156,9 +209,11 @@ function MiniTrendLine({ incidents }: { incidents: any[] }) {
         <path d={area} fill="#4299e122" />
         <path d={path} fill="none" stroke="#4299e1" strokeWidth="1.5" />
       </svg>
+      {/* Absolute dates, not "14d ago"/"today". The window ends at the newest
+          dated record in the set, so a 2000 dataset labels 2000. */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
-        <span style={{ fontSize: 7, color: '#64748b' }}>14d ago</span>
-        <span style={{ fontSize: 7, color: '#64748b' }}>today</span>
+        <span style={{ fontSize: 7, color: '#64748b' }}>{startDay ?? 'no dated records'}</span>
+        <span style={{ fontSize: 7, color: '#64748b' }}>{endDay ?? ''}</span>
       </div>
     </div>
   );
@@ -166,8 +221,14 @@ function MiniTrendLine({ incidents }: { incidents: any[] }) {
 
 function MiniCasualties({ incidents }: { incidents: any[] }) {
   const stats = useMemo(() => {
+    // Was `i.deceased` / `i.injured`. The real shape is
+    // `casualties.deceased` / `casualties.injured`, so this tile read a
+    // permanent 0 / 0 regardless of the data.
     let deceased = 0, injured = 0;
-    for (const i of incidents) { deceased += i.deceased || 0; injured += i.injured || 0; }
+    for (const i of incidents) {
+      deceased += i?.casualties?.deceased ?? 0;
+      injured += i?.casualties?.injured ?? 0;
+    }
     return { deceased, injured, total: incidents.length };
   }, [incidents]);
   return (
@@ -190,7 +251,9 @@ function MiniCasualties({ incidents }: { incidents: any[] }) {
 
 function MiniStats({ incidents }: { incidents: any[] }) {
   const stats = useMemo(() => {
-    const critical = incidents.filter(i => i.severity === 'Critical').length;
+    // Was `=== 'Critical'`. IncidentSeverity values are lowercase, so this
+    // counter was permanently 0. Compare case-insensitively.
+    const critical = incidents.filter(i => String(i?.severity ?? '').toLowerCase() === 'critical').length;
     const verified = incidents.filter(i => i.verification?.startsWith('v4') || i.verification?.startsWith('v5')).length;
     const provinces = new Set(incidents.map(i => i.province)).size;
     return { total: incidents.length, critical, verified, provinces };
@@ -260,33 +323,41 @@ function VerificationFunnel({ incidents }: { incidents: any[] }) {
 }
 
 function WeeklyTrend({ incidents }: { incidents: any[] }) {
-  const { points, todayCount, weekTotal, direction } = useMemo(() => {
-    const now = Date.now();
+  // Was bucketed against Date.now(), so a historical import fell entirely
+  // outside both weeks and the tile read 0 with a flat line. The two weeks now
+  // end at the newest dated record in the set.
+  const { points, weekTotal, direction, endDay, startDay } = useMemo(() => {
     const days = 7;
-    const buckets = new Array(days).fill(0);
-    const prevBuckets = new Array(days).fill(0);
-    for (const inc of incidents) {
-      const d = new Date(inc.dateReported || inc.reportedAt || inc.date).getTime();
-      const age = Math.floor((now - d) / 86400000);
-      if (age >= 0 && age < days) buckets[days - 1 - age]++;
-      else if (age >= days && age < days * 2) prevBuckets[days - 1 - (age - days)]++;
-    }
+    const { buckets: all14, endDay } = bucketByDay(incidents, days * 2);
+    const prevBuckets = all14.slice(0, days);
+    const buckets = all14.slice(days);
     const weekTotal = buckets.reduce((a, b) => a + b, 0);
     const prevTotal = prevBuckets.reduce((a, b) => a + b, 0);
-    return { points: buckets, todayCount: buckets[days - 1] ?? 0, weekTotal, direction: weekTotal > prevTotal ? 'up' : weekTotal < prevTotal ? 'down' : 'flat' };
+    return {
+      points: buckets,
+      weekTotal,
+      direction: weekTotal > prevTotal ? 'up' : weekTotal < prevTotal ? 'down' : 'flat',
+      endDay,
+      startDay: endDay ? shiftDays(endDay, -(days - 1)) : null,
+    };
   }, [incidents]);
   const max = Math.max(...points, 1);
   const w = 160, h = 50;
   const px = w / (points.length - 1);
   const path = points.map((v, i) => `${i === 0 ? 'M' : 'L'}${i * px},${h - (v / max) * (h - 4)}`).join(' ');
   const area = path + ` L${(points.length - 1) * px},${h} L0,${h} Z`;
-  const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const todayIdx = new Date().getDay();
-  const labels = Array.from({ length: 7 }, (_, i) => dayLabels[(todayIdx - 6 + i + 7) % 7]!);
+  // Labels derived from the window's own days, not from the wall clock's
+  // weekday. Weekday names computed from Date.now() were simply wrong whenever
+  // the data was not from this week.
+  const labels = Array.from({ length: 7 }, (_, i) =>
+    startDay ? shiftDays(startDay, i).slice(5) : '',
+  );
   return (
     <div className="sponsor-slot" style={{ background: '#111827', border: '1px solid #c9a84c22', borderRadius: 8, padding: '10px 12px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <div style={{ fontSize: 9, fontWeight: 700, color: '#c9a84c', letterSpacing: '0.05em' }}>7-DAY TREND</div>
+        <div style={{ fontSize: 9, fontWeight: 700, color: '#c9a84c', letterSpacing: '0.05em' }}>
+          {endDay ? `7 DAYS TO ${endDay}` : '7-DAY TREND'}
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0' }}>{weekTotal}</span>
           <span style={{ fontSize: 12, color: direction === 'up' ? '#e53e3e' : direction === 'down' ? '#38a169' : '#64748b' }}>
@@ -351,16 +422,27 @@ function ImpactSummary({ incidents }: { incidents: any[] }) {
 }
 
 function ActivityTimeline({ incidents }: { incidents: any[] }) {
+  // Was sorted by `new Date(...)` over fields that are often '' — Invalid Date
+  // sorts unpredictably — and rendered `${Math.floor(ago/24)}d ago`, which
+  // printed "9500d ago" for a 2000 record and the literal string "NaNd ago"
+  // for an undated one. Sorted and labelled by normalised date instead.
   const recent = useMemo(() => {
-    const sorted = [...incidents].sort((a, b) =>
-      new Date(b.dateReported || b.reportedAt || b.date).getTime() -
-      new Date(a.dateReported || a.reportedAt || a.date).getTime()
-    );
-    return sorted.slice(0, 8).map(inc => {
-      const ago = Math.floor((Date.now() - new Date(inc.dateReported || inc.reportedAt || inc.date).getTime()) / 3600000);
-      const timeStr = ago < 1 ? '<1h' : ago < 24 ? `${ago}h` : `${Math.floor(ago / 24)}d`;
-      return { id: inc.id, title: inc.title, severity: inc.severity, module: inc.module, time: timeStr };
+    const sorted = [...incidents].sort((a, b) => {
+      const ka = sortKey(a?.dateOccurred);
+      const kb = sortKey(b?.dateOccurred);
+      if (ka === kb) return 0;
+      // Undated ('') sorts last rather than pretending to be the oldest.
+      if (!ka) return 1;
+      if (!kb) return -1;
+      return kb < ka ? -1 : 1;
     });
+    return sorted.slice(0, 8).map(inc => ({
+      id: inc.id,
+      title: inc.title,
+      severity: inc.severity,
+      module: inc.module,
+      time: displayDay(inc?.dateOccurred),
+    }));
   }, [incidents]);
   const sevColor: Record<string, string> = { critical: '#e53e3e', Critical: '#e53e3e', high: '#dd6b20', High: '#dd6b20', medium: '#d69e2e', Medium: '#d69e2e', low: '#38a169', Low: '#38a169' };
   const modLabel: Record<string, string> = { ait: 'Farm', unrest: 'Unrest', bias: 'Bias', infrastructure: 'Infra', natural: 'Natural', traffic: 'Traffic' };
@@ -376,7 +458,7 @@ function ActivityTimeline({ incidents }: { incidents: any[] }) {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 11, color: '#e2e8f0', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.title}</div>
-              <div style={{ fontSize: 9, color: '#64748b', marginTop: 2 }}>{modLabel[inc.module] || inc.module} · {inc.time} ago</div>
+              <div style={{ fontSize: 9, color: '#64748b', marginTop: 2 }}>{modLabel[inc.module] || inc.module} · {inc.time}</div>
             </div>
           </div>
         ))}

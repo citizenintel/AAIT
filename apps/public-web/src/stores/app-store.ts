@@ -16,7 +16,7 @@ import type {
 } from '@/types/ontology';
 import type { ModuleKey, IncidentSeverity, AppRole } from '@/data/types';
 import type { MockIncident } from '@/data/mock-incidents';
-import { deduplicateByContent, incidentFingerprint } from '@/lib/utils/deduplicate';
+import { deduplicateByContent, mockIncidentFingerprint } from '@/lib/utils/deduplicate';
 import { ALL_TIME, isTimeFilter, type TimeFilter } from '@/lib/utils/time-filter';
 
 // ---------------------------------------------------------------------------
@@ -744,13 +744,19 @@ export const useAppStore = create<AppStore>()(
 
     // --- Imported incidents ---
     importedIncidents: [],
+    // Ingress duplicate check. It used to fingerprint on the TITLE, which is
+    // the key useIncidentData documents as wrong: auto-generated titles collide
+    // for distinct incidents in the same town on the same (now often empty)
+    // date, and the second record was refused here — before it ever reached
+    // storage. Both layers now use mockIncidentFingerprint, which keys on the
+    // summary and refuses to judge a record with no content at all.
     addImportedIncidents: (incidents) => set((s) => {
       const existingIds = new Set(s.importedIncidents.map(i => i.id));
-      const existingFps = new Set(s.importedIncidents.map(i =>
-        incidentFingerprint(i.title, i.dateOccurred ?? '', i.town ?? i.province ?? ''),
-      ));
+      const existingFps = new Set(
+        s.importedIncidents.map(mockIncidentFingerprint).filter(Boolean),
+      );
       for (const inc of incidents) {
-        const fp = incidentFingerprint(inc.title, inc.dateOccurred ?? '', inc.town ?? inc.province ?? '');
+        const fp = mockIncidentFingerprint(inc);
         if (existingIds.has(inc.id)) {
           const idx = s.importedIncidents.findIndex(i => i.id === inc.id);
           if (idx !== -1) s.importedIncidents[idx] = inc;
@@ -787,7 +793,7 @@ export const useAppStore = create<AppStore>()(
       const before = get().importedIncidents.length;
       const deduped = deduplicateByContent(
         get().importedIncidents,
-        (i) => incidentFingerprint(i.title, i.dateOccurred ?? '', i.town ?? i.province ?? ''),
+        mockIncidentFingerprint,
         (i) => i.id,
       );
       const removed = before - deduped.length;

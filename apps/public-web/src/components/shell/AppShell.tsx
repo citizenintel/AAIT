@@ -8,6 +8,8 @@ import { InvestigateView } from '@/components/investigate/InvestigateView';
 import { BriefView } from '@/components/brief/BriefView';
 import { CommandPalette } from '@/components/shared/CommandPalette';
 import { TickerBar } from '@/components/TickerBar';
+import { TimeFilterDropdown } from '@/components/shell/TimeFilterDropdown';
+import { ReviewQueueBanner } from '@/components/shell/ReviewQueueBanner';
 import { fetchEvents } from '@/lib/api/events';
 import { fetchAssets } from '@/lib/api/assets';
 import type { InterfaceLevel, RenderingTier } from '@/types/ontology';
@@ -64,7 +66,13 @@ export function AppShell() {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      // SELECT was missing from this guard. The year picker in
+      // TimeFilterDropdown is a <select>, and typing a digit into it to jump to
+      // a year would otherwise switch the whole interface level mid-selection.
+      if (
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' || target.isContentEditable
+      ) return;
 
       if (e.key === '1') { e.preventDefault(); setInterfaceLevel('glance'); }
       if (e.key === '2') { e.preventDefault(); setInterfaceLevel('investigate'); }
@@ -181,6 +189,11 @@ export function AppShell() {
           )}
         </div>
 
+        {/* Second filter control, sibling to "All Signals". The active time
+            window is always stated on its trigger — a filter you cannot see is
+            indistinguishable from a broken map. */}
+        <TimeFilterDropdown />
+
         <button className="header-nav-btn" onClick={() => navigate('/about')}>About</button>
         <button className="header-nav-btn" onClick={() => navigate('/methodology')}>Methodology</button>
         <button className="header-nav-btn accent" onClick={() => navigate('/report')}>+ Report</button>
@@ -234,6 +247,11 @@ export function AppShell() {
           {renderingTier}
         </button>
       </header>
+
+      {/* Withheld-import notice. Mounted here so it covers Glance, Investigate
+          and Brief with one instance, and because this tree is inside
+          IncidentDataProvider (App.tsx:38) — /admin/* is not. */}
+      <ReviewQueueBanner />
 
       <div className="app-content">
         <div key={interfaceLevel} className="level-panel" style={{ height: '100%' }}>

@@ -130,8 +130,10 @@ export function IncidentPage() {
                   <h3>Details</h3>
                   <div className="info-row"><span>Province</span><span>{incident.location?.province ?? '—'}</span></div>
                   <div className="info-row"><span>Town</span><span>{incident.location?.town ?? '—'}</span></div>
-                  <div className="info-row"><span>Date occurred</span><span>{incident.occurred_at ?? '—'}</span></div>
-                  <div className="info-row"><span>Date reported</span><span>{incident.published_at ?? incident.created_at}</span></div>
+                  {/* `|| `, not `?? ` — '' is "the source stated no date" and
+                      must read as such rather than as a blank cell. */}
+                  <div className="info-row"><span>Date occurred</span><span>{incident.occurred_at || 'Not stated'}</span></div>
+                  <div className="info-row"><span>Date reported</span><span>{incident.published_at || incident.created_at || 'Not stated'}</span></div>
                   <div className="info-row"><span>Category</span><span>{incident.category?.label_en ?? incident.category_id}</span></div>
                   <div className="info-row"><span>Module</span><span>{mod?.label ?? moduleKey}</span></div>
                   <div className="info-row"><span>Location tier</span><span>{incident.location?.location_tier?.replace(/l\d_/, '').replace(/_/g, ' ') ?? '—'}</span></div>
