@@ -17,6 +17,7 @@ import type {
 import type { ModuleKey, IncidentSeverity, AppRole } from '@/data/types';
 import type { MockIncident } from '@/data/mock-incidents';
 import { deduplicateByContent, incidentFingerprint } from '@/lib/utils/deduplicate';
+import { ALL_TIME, isTimeFilter, type TimeFilter } from '@/lib/utils/time-filter';
 
 // ---------------------------------------------------------------------------
 // IndexedDB persistence
@@ -198,6 +199,26 @@ interface AppStore {
   pause: () => void;
   setSpeed: (speed: number) => void;
 
+  // --- Incident time window slice ---
+  /**
+   * The window applied to INCIDENT dates by IncidentDataProvider.
+   *
+   * Deliberately separate from `currentTime` / `timeRange` above, which are
+   * playback state over `events` owned by TimeScrubber. Routing incidents
+   * through the scrubber would mean dragging it deletes historical incidents
+   * from the map, and its default is 24h — an instantly empty map.
+   *
+   * Default is All time: a historical import must never vanish on first load.
+   */
+  timeFilter: TimeFilter;
+  /**
+   * Whether records with no usable date are included when a window is active.
+   * Default true — excluding by default is a silent drop by another name.
+   */
+  includeUndated: boolean;
+  setTimeFilter: (f: TimeFilter) => void;
+  setIncludeUndated: (v: boolean) => void;
+
   // --- Watch areas slice ---
   watchAreas: WatchArea[];
   addWatchArea: (area: WatchArea) => void;
@@ -327,6 +348,48 @@ const DEFAULT_FILTERS: FilterState = {
   province: null,
 };
 
+// ---------------------------------------------------------------------------
+// Incident time window persistence
+//
+// localStorage, read SYNCHRONOUSLY in the store initialiser. IndexedDB
+// (hydrate()) is async and would paint an unfiltered map that then snaps to a
+// filtered one, which reads exactly like the map breaking.
+// ---------------------------------------------------------------------------
+
+const TIME_FILTER_KEY = 'aait.timeFilter.v1';
+
+interface TimeFilterPrefs {
+  filter: TimeFilter;
+  includeUndated: boolean;
+}
+
+function loadTimeFilter(): TimeFilterPrefs {
+  const fallback: TimeFilterPrefs = { filter: ALL_TIME, includeUndated: true };
+  try {
+    if (typeof localStorage === 'undefined') return fallback;
+    const raw = localStorage.getItem(TIME_FILTER_KEY);
+    if (!raw) return fallback;
+    const p = JSON.parse(raw) as { filter?: unknown; includeUndated?: unknown };
+    // Anything unrecognised falls back to All time. A corrupt key must never be
+    // able to hide the whole dataset.
+    return {
+      filter: isTimeFilter(p.filter) ? p.filter : ALL_TIME,
+      includeUndated: p.includeUndated !== false,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function saveTimeFilter(filter: TimeFilter, includeUndated: boolean): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(TIME_FILTER_KEY, JSON.stringify({ filter, includeUndated }));
+  } catch {
+    // Quota exceeded / private mode. The in-memory filter still works.
+  }
+}
+
 const DEFAULT_WIDGETS: WidgetConfig[] = [
   { id: 'stats_bar', enabled: true, position: 'right', order: 0 },
   { id: 'severity_pie', enabled: true, position: 'right', order: 0 },
@@ -344,6 +407,8 @@ const DEFAULT_WIDGETS: WidgetConfig[] = [
 
 const now = new Date();
 const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+const initialTimeFilterPrefs = loadTimeFilter();
 
 export const useAppStore = create<AppStore>()(
   immer((set, get) => ({
@@ -420,6 +485,18 @@ export const useAppStore = create<AppStore>()(
     play: () => set((s) => { s.isPlaying = true; }),
     pause: () => set((s) => { s.isPlaying = false; }),
     setSpeed: (speed) => set((s) => { s.playbackSpeed = speed; }),
+
+    // --- Incident time window ---
+    timeFilter: initialTimeFilterPrefs.filter,
+    includeUndated: initialTimeFilterPrefs.includeUndated,
+    setTimeFilter: (f) => set((s) => {
+      s.timeFilter = f;
+      saveTimeFilter(f, s.includeUndated);
+    }),
+    setIncludeUndated: (v) => set((s) => {
+      s.includeUndated = v;
+      saveTimeFilter(s.timeFilter as TimeFilter, v);
+    }),
 
     // --- Watch areas ---
     watchAreas: [],
