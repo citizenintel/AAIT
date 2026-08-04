@@ -14,11 +14,30 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/tiles\./,
-            handler: 'CacheFirst',
+            // Basemap tiles, style JSON, glyphs and sprites.
+            //
+            // This was previously /^https:\/\/tiles\./ with CacheFirst, which
+            // matched ONLY tiles.basemaps.cartocdn.com — the host serving the
+            // vector tiles.json, glyphs and sprite for the Standard and Light
+            // basemaps. Terrain (a.tile.opentopomap.org) and Satellite (ESRI)
+            // did not match, so they kept working while Standard and Light
+            // stayed blank. Under CacheFirst a single bad or partial response
+            // is served from the service worker cache forever, surviving
+            // reloads, rebuilds and redeploys.
+            //
+            // StaleWhileRevalidate still serves instantly from cache but always
+            // refreshes in the background, so a bad entry self-heals. The
+            // status filter means error responses are never cached at all.
+            urlPattern: ({ url }: { url: URL }) =>
+              /(^|\.)basemaps\.cartocdn\.com$/.test(url.hostname)
+              || /(^|\.)tile\.opentopomap\.org$/.test(url.hostname)
+              || /(^|\.)tiles\.openfreemap\.org$/.test(url.hostname)
+              || /(^|\.)arcgisonline\.com$/.test(url.hostname),
+            handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'map-tiles',
               expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              cacheableResponse: { statuses: [200] },
             },
           },
         ],

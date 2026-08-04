@@ -304,6 +304,10 @@ export function IntelligenceMap({
   const watchdogWarnedRef = useRef(false);
   const layersReadyRef = useRef(false);
   const [layersReady, setLayersReady] = useState(false);
+  // Set when the basemap's own tiles/style fail. Without this a broken basemap
+  // renders as an empty background layer and is indistinguishable from a bug in
+  // our own layers — which is exactly how this went undiagnosed for so long.
+  const [basemapError, setBasemapError] = useState<string | null>(null);
 
   // Style / control state
   const [activeStyle, setActiveStyle] = useState<MapStyleKey>('standard');
@@ -330,8 +334,19 @@ export function IntelligenceMap({
     [incidents],
   );
   const markerCount = incidentsGeoJson.features.length;
+  // Incidents that produced no feature because their location could not be
+  // resolved. Surfaced in the badge rather than silently discarded.
+  const unmappedCount = Math.max(0, incidents.length - markerCount);
   const incidentsGeoJsonRef = useRef(incidentsGeoJson);
   incidentsGeoJsonRef.current = incidentsGeoJson;
+
+  useEffect(() => {
+    if (unmappedCount > 0) {
+      console.warn(
+        `[Map] ${unmappedCount} of ${incidents.length} incidents have no resolvable location and are not plotted.`,
+      );
+    }
+  }, [unmappedCount, incidents.length]);
 
   const visibleCount = geojson.features.length;
 
@@ -711,8 +726,18 @@ export function IntelligenceMap({
 
     // Surface MapLibre ErrorEvents (addLayer spec-validation failures never throw in v6)
     map.on('error', (e) => {
-      const err = (e as unknown as { error?: unknown })?.error;
-      console.warn('[Map] maplibre error event:', err ?? e);
+      const ev = e as unknown as { error?: { message?: string; status?: number }; sourceId?: string };
+      const err = ev?.error;
+      console.warn('[Map] maplibre error event:', err ?? e, ev?.sourceId ? `(source: ${ev.sourceId})` : '');
+
+      // Distinguish a basemap failure from a failure of our own overlays.
+      const ours = ev?.sourceId === EVENTS_SOURCE
+        || ev?.sourceId === INCIDENTS_SOURCE
+        || ev?.sourceId === MEASURE_SOURCE;
+      if (!ours) {
+        const status = err?.status ? ` (HTTP ${err.status})` : '';
+        setBasemapError(`Basemap tiles failed to load${status}. Try another basemap.`);
+      }
     });
 
     map.on('load', () => {
@@ -950,6 +975,7 @@ export function IntelligenceMap({
     appliedStyleKeyRef.current = activeStyle;
 
     console.info('[Map] basemap switch ->', activeStyle);
+    setBasemapError(null);
 
     const is3D = activeStyle === '3d';
     if (!is3D) disable3D(map);
@@ -1262,7 +1288,23 @@ export function IntelligenceMap({
         </div>
       </div>
 
-      {/* Marker count badge — diagnostic + user feedback */}
+      {/* Basemap failure banner — a broken basemap must announce itself rather
+          than silently rendering as an empty background. */}
+      {basemapError && (
+        <div style={{
+          position: 'absolute', top: 56, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 25, background: 'rgba(197, 48, 48, 0.94)', color: '#fff',
+          fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 4,
+          maxWidth: '80%', textAlign: 'center',
+        }}>
+          {basemapError}
+        </div>
+      )}
+
+      {/* Marker count badge — diagnostic + user feedback.
+          Reports mapped vs unmappable honestly: incidents whose location could
+          not be resolved produce no feature, and saying "N incidents on map"
+          while silently dropping them is what hid this bug for so long. */}
       {(incidents.length > 0 || markerCount > 0) && (
         <div style={{
           position: 'absolute', bottom: 8, left: 12, zIndex: 20,
@@ -1270,10 +1312,24 @@ export function IntelligenceMap({
           color: '#fff', fontSize: 11, fontWeight: 600,
           padding: '3px 8px', borderRadius: 4,
           pointerEvents: 'none',
+          display: 'flex', gap: 8, alignItems: 'center',
         }}>
-          {layersReady
-            ? `${markerCount} incidents on map`
-            : `${incidents.length} incidents pending...`}
+          <span>
+            {layersReady
+              ? `${markerCount} incidents on map`
+              : `${incidents.length} incidents pending...`}
+          </span>
+          {unmappedCount > 0 && (
+            <span
+              title={`${unmappedCount} incident(s) have no resolvable location and cannot be plotted. They are still counted in the dashboard totals.`}
+              style={{
+                background: 'rgba(0,0,0,0.35)', padding: '1px 6px', borderRadius: 3,
+                fontWeight: 700,
+              }}
+            >
+              {unmappedCount} unmapped
+            </span>
+          )}
         </div>
       )}
     </div>

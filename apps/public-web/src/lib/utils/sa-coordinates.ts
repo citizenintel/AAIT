@@ -445,6 +445,26 @@ export function gaussianJitter(scale: number): number {
   return Math.sqrt(-2 * Math.log(u1 || 0.001)) * Math.cos(2 * Math.PI * u2) * scale;
 }
 
+// South Africa's real bounding box, with a small margin. Anything outside this
+// is not a South African coordinate and must not be plotted as one.
+const SA_BOUNDS = { minLng: 16.0, maxLng: 33.5, minLat: -35.0, maxLat: -22.0 };
+
+function isPlottable(lng: unknown, lat: unknown): boolean {
+  // Number.isFinite rejects NaN and Infinity. The previous `!= null` test did
+  // NOT: `NaN != null` is true, so once geocoding started returning NaN for
+  // unresolved locations (instead of fabricating random coordinates), every
+  // such incident produced a GeoJSON feature with NaN coordinates. MapLibre
+  // silently drops those, so the map showed a handful of dots while the badge
+  // still counted every feature. Silent drop is exactly the failure mode that
+  // made this bug so hard to see.
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return false;
+  const x = lng as number;
+  const y = lat as number;
+  if (x === 0 && y === 0) return false;
+  return x >= SA_BOUNDS.minLng && x <= SA_BOUNDS.maxLng
+    && y >= SA_BOUNDS.minLat && y <= SA_BOUNDS.maxLat;
+}
+
 export function resolveCoords(inc: {
   town?: string | null;
   lng?: number | null;
@@ -455,8 +475,8 @@ export function resolveCoords(inc: {
     const tc = lookupTown(inc.town);
     if (tc) return { lat: tc.lat + gaussianJitter(0.02), lng: tc.lng + gaussianJitter(0.02) };
   }
-  if (inc.lng != null && inc.lat != null && !(inc.lng === 0 && inc.lat === 0)) {
-    return { lng: inc.lng, lat: inc.lat };
+  if (isPlottable(inc.lng, inc.lat)) {
+    return { lng: inc.lng as number, lat: inc.lat as number };
   }
   const pc = lookupProvince(inc.province ?? '');
   if (pc) return { lat: pc.lat + gaussianJitter(0.3), lng: pc.lng + gaussianJitter(0.3) };
