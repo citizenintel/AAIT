@@ -192,7 +192,11 @@ export function TimeFilterDropdown() {
                   value={timeFilter.mode === 'year' ? String(timeFilter.year) : ''}
                   onChange={(e) => {
                     const v = e.target.value;
-                    if (v) setTimeFilter({ mode: 'year', year: Number(v) });
+                    // Route through choose() like every other option, so picking
+                    // a year closes the panel and restores focus to the trigger.
+                    // Otherwise the panel sits open over the map, hiding the very
+                    // result the user just asked for.
+                    if (v) choose(() => setTimeFilter({ mode: 'year', year: Number(v) }));
                   }}
                 >
                   <option value="">Choose a year…</option>
