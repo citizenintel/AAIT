@@ -300,6 +300,12 @@ interface AppStore {
   updateImportedIncident: (id: string, updates: Partial<MockIncident>) => void;
   deleteImportedIncident: (id: string) => void;
   clearImportedIncidents: () => void;
+  /**
+   * Atomically replace the whole imported set. Unlike clear-then-add there is no
+   * window in which the store is empty, and no fingerprint guard that could
+   * silently drop records from the replacement batch.
+   */
+  replaceImportedIncidents: (next: MockIncident[]) => void;
   deduplicateImportedIncidents: () => number;
   getStorageEstimate: () => { incidentCount: number; estimatedBytes: number };
 
@@ -312,9 +318,9 @@ interface AppStore {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_FILTERS: FilterState = {
-  modules: { ait: true, unrest: true, bias: true, infrastructure: true, natural: true, traffic: true },
+  modules: { ait: true, unrest: true, bias: true, infrastructure: true, natural: true, traffic: true, unclassified: true },
   categories: {},
-  severities: { critical: true, high: true, medium: true, low: true, informational: true },
+  severities: { critical: true, high: true, medium: true, low: true, informational: true, unassessed: true },
   showSynthetic: true,
   searchQuery: '',
   dateRange: { from: null, to: null },
@@ -695,6 +701,10 @@ export const useAppStore = create<AppStore>()(
     clearImportedIncidents: () => set((s) => {
       s.importedIncidents = [];
       debouncePersist('importedIncidents', [], true);
+    }),
+    replaceImportedIncidents: (next) => set((s) => {
+      s.importedIncidents = next;
+      debouncePersist('importedIncidents', next, true);
     }),
     deduplicateImportedIncidents: () => {
       const before = get().importedIncidents.length;

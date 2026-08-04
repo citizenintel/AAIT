@@ -54,6 +54,26 @@ const EVENT_TYPE_COLORS: Record<EventType, string> = {
   other: '#6366f1',
 };
 
+// Built once at module scope — depends on nothing reactive.
+const EVENT_COLOR_MATCH: maplibregl.ExpressionSpecification = [
+  'match',
+  ['get', 'type'],
+  'conflict', EVENT_TYPE_COLORS.conflict,
+  'protest', EVENT_TYPE_COLORS.protest,
+  'crime', EVENT_TYPE_COLORS.crime,
+  'natural_disaster', EVENT_TYPE_COLORS.natural_disaster,
+  'infrastructure_failure', EVENT_TYPE_COLORS.infrastructure_failure,
+  'political', EVENT_TYPE_COLORS.political,
+  'economic', EVENT_TYPE_COLORS.economic,
+  'health', EVENT_TYPE_COLORS.health,
+  'environmental', EVENT_TYPE_COLORS.environmental,
+  'cyber', EVENT_TYPE_COLORS.cyber,
+  'maritime', EVENT_TYPE_COLORS.maritime,
+  'aviation', EVENT_TYPE_COLORS.aviation,
+  'energy', EVENT_TYPE_COLORS.energy,
+  'market_event', EVENT_TYPE_COLORS.market_event,
+  '#6366f1', // default
+];
 
 // ---------------------------------------------------------------------------
 // Map basemaps — each key returns a fresh style; switching uses setStyle()
@@ -267,7 +287,23 @@ export function IntelligenceMap({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const deckOverlayRef = useRef<unknown>(null);
-  const didMountRef = useRef(false);
+
+  // Which basemap key the CURRENT map instance was built with. Reset by the
+  // init effect, so a StrictMode remount can never trigger a spurious setStyle.
+  const appliedStyleKeyRef = useRef<MapStyleKey | null>(null);
+
+  // (source instance, data object) pairs already pushed to the map. setStyle
+  // destroys and recreates sources, so comparing the instance is what makes
+  // re-population after a basemap switch automatic.
+  const appliedEventsRef = useRef<{ src: unknown; data: unknown } | null>(null);
+  const appliedIncidentsRef = useRef<{ src: unknown; data: unknown } | null>(null);
+
+  // Watchdog that drives syncMapContent until it reports success.
+  const watchdogRef = useRef<number | null>(null);
+  const watchdogStartRef = useRef<number>(0);
+  const watchdogWarnedRef = useRef(false);
+  const layersReadyRef = useRef(false);
+  const [layersReady, setLayersReady] = useState(false);
 
   // Style / control state
   const [activeStyle, setActiveStyle] = useState<MapStyleKey>('standard');
@@ -300,115 +336,234 @@ export function IntelligenceMap({
   const visibleCount = geojson.features.length;
 
   // ------------------------------------------------------------------
-  // Build the match expression for circle-color
+  // Error reporting — never silent again
   // ------------------------------------------------------------------
-  const colorMatchExpr: maplibregl.ExpressionSpecification = [
-    'match',
-    ['get', 'type'],
-    'conflict', EVENT_TYPE_COLORS.conflict,
-    'protest', EVENT_TYPE_COLORS.protest,
-    'crime', EVENT_TYPE_COLORS.crime,
-    'natural_disaster', EVENT_TYPE_COLORS.natural_disaster,
-    'infrastructure_failure', EVENT_TYPE_COLORS.infrastructure_failure,
-    'political', EVENT_TYPE_COLORS.political,
-    'economic', EVENT_TYPE_COLORS.economic,
-    'health', EVENT_TYPE_COLORS.health,
-    'environmental', EVENT_TYPE_COLORS.environmental,
-    'cyber', EVENT_TYPE_COLORS.cyber,
-    'maritime', EVENT_TYPE_COLORS.maritime,
-    'aviation', EVENT_TYPE_COLORS.aviation,
-    'energy', EVENT_TYPE_COLORS.energy,
-    'market_event', EVENT_TYPE_COLORS.market_event,
-    '#6366f1', // default
-  ];
+  const logMapError = useCallback((where: string, err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('Style is not done loading')) {
+      // Expected while the style is parsing; the watchdog will retry.
+      console.debug(`[Map] ${where}: style not ready, will retry`);
+    } else {
+      console.warn(`[Map] ${where} failed:`, err);
+    }
+  }, []);
 
   // ------------------------------------------------------------------
-  // Add all custom sources + layers to the map
+  // THE authoritative routine. Idempotent, cheap when already in sync.
+  // Creates every missing source/layer, then pushes current data.
+  // Returns true ONLY when both incident layers exist AND the current
+  // incident collection has been applied to the live source instance.
+  // Nothing else in this component may call addSource/addLayer/setData
+  // for the events or incidents layers.
   // ------------------------------------------------------------------
-  const addSourceAndLayer = useCallback(
-    (map: maplibregl.Map) => {
-      try {
-        if (!map.getSource(EVENTS_SOURCE)) {
-          map.addSource(EVENTS_SOURCE, { type: 'geojson', data: geojsonRef.current });
-        }
-        if (!map.getLayer(EVENTS_LAYER)) {
-          map.addLayer({
-            id: EVENTS_LAYER,
-            type: 'circle',
-            source: EVENTS_SOURCE,
-            paint: {
-              'circle-color': colorMatchExpr,
-              'circle-radius': ['interpolate', ['linear'], ['get', 'confidence'], 0, 4, 100, 12],
-              'circle-opacity': 0.85,
-              'circle-stroke-width': 1,
-              'circle-stroke-color': 'rgba(255,255,255,0.15)',
-            },
-          });
-        }
-      } catch {
-        // style not ready — will retry via load/idle/polling
-      }
+  const syncMapContent = useCallback((map: maplibregl.Map): boolean => {
+    if (!map) return false;
+    if (!(map as unknown as { style?: unknown }).style) return false;
 
-      try {
-        if (!map.getSource(INCIDENTS_SOURCE)) {
-          map.addSource(INCIDENTS_SOURCE, { type: 'geojson', data: incidentsGeoJsonRef.current });
-        }
-        if (!map.getLayer(INCIDENTS_PULSE_LAYER)) {
-          map.addLayer({
-            id: INCIDENTS_PULSE_LAYER,
-            type: 'circle',
-            source: INCIDENTS_SOURCE,
-            filter: ['==', ['get', 'severity'], 'critical'],
-            paint: {
-              'circle-color': ['get', 'severityColour'],
-              'circle-radius': 16,
-              'circle-opacity': 0.15,
-              'circle-stroke-width': 0,
-            },
-          });
-        }
-        if (!map.getLayer(INCIDENTS_LAYER)) {
-          map.addLayer({
-            id: INCIDENTS_LAYER,
-            type: 'circle',
-            source: INCIDENTS_SOURCE,
-            paint: {
-              'circle-color': ['get', 'moduleColour'],
-              'circle-radius': [
-                'match', ['get', 'severity'],
-                'critical', 9, 'high', 7, 'medium', 6, 'low', 5, 5,
-              ],
-              'circle-opacity': 0.9,
-              'circle-stroke-width': ['match', ['get', 'severity'], 'critical', 3, 'high', 2, 2],
-              'circle-stroke-color': ['get', 'severityColour'],
-            },
-          });
-        }
-      } catch {
-        // style not ready — will retry via load/idle/polling
+    // --- events source ---
+    try {
+      if (!map.getSource(EVENTS_SOURCE)) {
+        map.addSource(EVENTS_SOURCE, { type: 'geojson', data: geojsonRef.current });
+        appliedEventsRef.current = null;
+        console.info('[Map] addSource(intelligence-events) ok');
       }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+    } catch (err) { logMapError('addSource(intelligence-events)', err); }
+
+    // --- events layer (own try: must not be skipped by a source failure) ---
+    try {
+      if (map.getSource(EVENTS_SOURCE) && !map.getLayer(EVENTS_LAYER)) {
+        map.addLayer({
+          id: EVENTS_LAYER,
+          type: 'circle',
+          source: EVENTS_SOURCE,
+          paint: {
+            'circle-color': EVENT_COLOR_MATCH,
+            'circle-radius': ['interpolate', ['linear'], ['get', 'confidence'], 0, 4, 100, 12],
+            'circle-opacity': 0.85,
+            'circle-stroke-width': 1,
+            'circle-stroke-color': 'rgba(255,255,255,0.15)',
+          },
+        });
+        if (map.getLayer(EVENTS_LAYER)) {
+          console.info('[Map] addLayer(intelligence-events-circles) ok');
+        } else {
+          console.warn('[Map] addLayer(intelligence-events-circles) returned without creating the layer — style-spec validation rejected it.');
+        }
+      }
+    } catch (err) { logMapError('addLayer(intelligence-events-circles)', err); }
+
+    // --- incidents source ---
+    try {
+      if (!map.getSource(INCIDENTS_SOURCE)) {
+        map.addSource(INCIDENTS_SOURCE, { type: 'geojson', data: incidentsGeoJsonRef.current });
+        appliedIncidentsRef.current = null;
+        console.info('[Map] addSource(mock-incidents) ok');
+      }
+    } catch (err) { logMapError('addSource(mock-incidents)', err); }
+
+    const incidentSource = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
+
+    // --- incidents pulse layer (own try: MUST NOT block the main layer) ---
+    try {
+      if (incidentSource && !map.getLayer(INCIDENTS_PULSE_LAYER)) {
+        map.addLayer({
+          id: INCIDENTS_PULSE_LAYER,
+          type: 'circle',
+          source: INCIDENTS_SOURCE,
+          filter: ['==', ['get', 'severity'], 'critical'],
+          paint: {
+            'circle-color': ['get', 'severityColour'],
+            'circle-radius': 16,
+            'circle-opacity': 0.15,
+            'circle-stroke-width': 0,
+          },
+        });
+        if (map.getLayer(INCIDENTS_PULSE_LAYER)) {
+          console.info('[Map] addLayer(mock-incidents-pulse) ok');
+        } else {
+          console.warn('[Map] addLayer(mock-incidents-pulse) returned without creating the layer — style-spec validation rejected it.');
+        }
+      }
+    } catch (err) { logMapError('addLayer(mock-incidents-pulse)', err); }
+
+    // --- incidents main layer (own try) ---
+    try {
+      if (incidentSource && !map.getLayer(INCIDENTS_LAYER)) {
+        map.addLayer({
+          id: INCIDENTS_LAYER,
+          type: 'circle',
+          source: INCIDENTS_SOURCE,
+          paint: {
+            'circle-color': ['get', 'moduleColour'],
+            'circle-radius': [
+              'match', ['get', 'severity'],
+              'critical', 9, 'high', 7, 'medium', 6, 'low', 5, 5,
+            ],
+            'circle-opacity': 0.9,
+            'circle-stroke-width': ['match', ['get', 'severity'], 'critical', 3, 'high', 2, 2],
+            'circle-stroke-color': ['get', 'severityColour'],
+          },
+        });
+        if (map.getLayer(INCIDENTS_LAYER)) {
+          console.info('[Map] addLayer(mock-incidents-circles) ok');
+        } else {
+          console.warn('[Map] addLayer(mock-incidents-circles) returned without creating the layer — style-spec validation rejected it.');
+        }
+      }
+    } catch (err) { logMapError('addLayer(mock-incidents-circles)', err); }
+
+    // --- push events data ---
+    try {
+      const evSrc = map.getSource(EVENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
+      if (evSrc) {
+        const a = appliedEventsRef.current;
+        if (!a || a.src !== evSrc || a.data !== geojsonRef.current) {
+          evSrc.setData(geojsonRef.current);
+          appliedEventsRef.current = { src: evSrc, data: geojsonRef.current };
+          console.info('[Map] setData(intelligence-events):', geojsonRef.current.features.length, 'features');
+        }
+      }
+    } catch (err) { logMapError('setData(intelligence-events)', err); }
+
+    // --- push incidents data ---
+    try {
+      if (incidentSource) {
+        const a = appliedIncidentsRef.current;
+        if (!a || a.src !== incidentSource || a.data !== incidentsGeoJsonRef.current) {
+          incidentSource.setData(incidentsGeoJsonRef.current);
+          appliedIncidentsRef.current = { src: incidentSource, data: incidentsGeoJsonRef.current };
+          console.info('[Map] setData(mock-incidents):', incidentsGeoJsonRef.current.features.length, 'features');
+        }
+      }
+    } catch (err) { logMapError('setData(mock-incidents)', err); }
+
+    // --- post-conditions: layer presence, not source presence ---
+    // INCIDENTS_PULSE_LAYER is deliberately excluded: it is decorative, and in
+    // MapLibre v6 addLayer reports spec-validation failure via an ErrorEvent
+    // rather than throwing. Gating on it would let a cosmetic failure spin the
+    // watchdog forever while the real circles are already on screen.
+    const ok = !!map.getSource(INCIDENTS_SOURCE)
+      && !!map.getLayer(INCIDENTS_LAYER)
+      && appliedIncidentsRef.current?.data === incidentsGeoJsonRef.current;
+
+    if (ok !== layersReadyRef.current) {
+      layersReadyRef.current = ok;
+      setLayersReady(ok);
+      console.info('[Map] layersReady =', ok);
+    }
+    return ok;
+  }, [logMapError]);
+
+  // Stable handle so event listeners registered once can always call the latest closure.
+  const syncRef = useRef(syncMapContent);
+  syncRef.current = syncMapContent;
+
+  // ------------------------------------------------------------------
+  // Watchdog driver. Runs the sync immediately; if it fails, arms a poll
+  // that clears itself the moment the sync succeeds. No 30s cap, no latch.
+  // ------------------------------------------------------------------
+  const stopWatchdog = useCallback(() => {
+    if (watchdogRef.current !== null) {
+      clearInterval(watchdogRef.current);
+      watchdogRef.current = null;
+    }
+  }, []);
+
+  const requestSync = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (syncRef.current(map)) { stopWatchdog(); return; }
+    if (watchdogRef.current !== null) return;
+    watchdogStartRef.current = Date.now();
+    watchdogWarnedRef.current = false;
+    watchdogRef.current = window.setInterval(() => {
+      const m = mapRef.current;
+      if (!m) { stopWatchdog(); return; }
+      if (syncRef.current(m)) { stopWatchdog(); return; }
+      if (!watchdogWarnedRef.current && Date.now() - watchdogStartRef.current > 15000) {
+        watchdogWarnedRef.current = true;
+        console.warn('[Map] incident layers still not installed after 15s.', {
+          styleLoaded: m.isStyleLoaded(),
+          mapLoaded: m.loaded(),
+          hasSource: !!m.getSource(INCIDENTS_SOURCE),
+          hasLayer: !!m.getLayer(INCIDENTS_LAYER),
+          hasPulse: !!m.getLayer(INCIDENTS_PULSE_LAYER),
+          features: incidentsGeoJsonRef.current.features.length,
+          layerOrder: (m.getStyle()?.layers ?? []).map(l => l.id),
+        });
+      }
+    }, 400);
+  }, [stopWatchdog]);
+
+  const requestSyncRef = useRef(requestSync);
+  requestSyncRef.current = requestSync;
 
   // ------------------------------------------------------------------
   // Measure layers
   // ------------------------------------------------------------------
   const addMeasureLayers = useCallback((map: maplibregl.Map) => {
-    if (map.getSource(MEASURE_SOURCE)) return;
-    map.addSource(MEASURE_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-    map.addLayer({
-      id: MEASURE_LINE_LAYER, type: 'line', source: MEASURE_SOURCE,
-      filter: ['==', '$type', 'LineString'],
-      paint: { 'line-color': '#c9a84c', 'line-width': 2.5, 'line-dasharray': [3, 2] },
-    });
-    map.addLayer({
-      id: MEASURE_POINT_LAYER, type: 'circle', source: MEASURE_SOURCE,
-      filter: ['==', '$type', 'Point'],
-      paint: { 'circle-radius': 5, 'circle-color': '#ffffff', 'circle-stroke-color': '#c9a84c', 'circle-stroke-width': 2 },
-    });
-  }, []);
+    try {
+      if (!map.getSource(MEASURE_SOURCE)) {
+        map.addSource(MEASURE_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      }
+      if (map.getSource(MEASURE_SOURCE) && !map.getLayer(MEASURE_LINE_LAYER)) {
+        map.addLayer({
+          id: MEASURE_LINE_LAYER, type: 'line', source: MEASURE_SOURCE,
+          filter: ['==', '$type', 'LineString'],
+          paint: { 'line-color': '#c9a84c', 'line-width': 2.5, 'line-dasharray': [3, 2] },
+        });
+      }
+      if (map.getSource(MEASURE_SOURCE) && !map.getLayer(MEASURE_POINT_LAYER)) {
+        map.addLayer({
+          id: MEASURE_POINT_LAYER, type: 'circle', source: MEASURE_SOURCE,
+          filter: ['==', '$type', 'Point'],
+          paint: { 'circle-radius': 5, 'circle-color': '#ffffff', 'circle-stroke-color': '#c9a84c', 'circle-stroke-width': 2 },
+        });
+      }
+    } catch (err) {
+      logMapError('addMeasureLayers', err);
+    }
+  }, [logMapError]);
 
   const updateMeasureGeometry = useCallback((map: maplibregl.Map, points: [number, number][]) => {
     const source = map.getSource(MEASURE_SOURCE) as maplibregl.GeoJSONSource | undefined;
@@ -447,11 +602,17 @@ export function IntelligenceMap({
         'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.4, 'atmosphere-blend': 0.7,
       });
     }
-    if (map.getZoom() < 7) {
-      map.flyTo({ center: [18.45, -33.96], zoom: 11, pitch: 76, bearing: -30, duration: 2800, essential: true });
-    } else {
-      map.easeTo({ pitch: 78, duration: 1000 });
-    }
+    // Stay where the user is. Previously this flew to Cape Town at zoom 11
+    // whenever zoom < 7 — and since the default zoom is 5.5, the first click on
+    // 3D always teleported away from the incidents, which reads as "3D lost my
+    // data". Tilt in place instead, nudging zoom only enough for relief to show.
+    const zoom = map.getZoom();
+    map.easeTo({
+      ...(zoom < 7 ? { zoom: 7.5 } : {}),
+      pitch: zoom < 7 ? 70 : 78,
+      duration: 1400,
+      essential: true,
+    });
   }, []);
 
   const disable3D = useCallback((map: maplibregl.Map) => {
@@ -533,11 +694,32 @@ export function IntelligenceMap({
       attributionControl: false,
     });
 
+    // Assign before ANY listener is registered so every handler can rely on it.
+    mapRef.current = map;
+    appliedStyleKeyRef.current = 'standard';
+    appliedEventsRef.current = null;
+    appliedIncidentsRef.current = null;
+    layersReadyRef.current = false;
+
+    console.info('[Map] init: map instance created');
+
+    // Dev-only introspection handle — inspect the live map from the console.
+    if (import.meta.env.DEV) {
+      (window as unknown as Record<string, unknown>).__map = map;
+      console.info('[Map] window.__map is available (dev only)');
+    }
+
+    // Surface MapLibre ErrorEvents (addLayer spec-validation failures never throw in v6)
+    map.on('error', (e) => {
+      const err = (e as unknown as { error?: unknown })?.error;
+      console.warn('[Map] maplibre error event:', err ?? e);
+    });
+
     map.on('load', () => {
-      addSourceAndLayer(map);
+      console.info('[Map] load fired');
+      requestSyncRef.current();
       addMeasureLayers(map);
-      tryAddDeckOverlay(map);
-      didMountRef.current = true;
+      tryAddDeckOverlayRef.current(map);
     });
 
     // Force repaints when raster tiles finish loading (fixes blank tile boxes in MapLibre v6)
@@ -547,12 +729,20 @@ export function IntelligenceMap({
       }
     });
 
-    // If custom sources/layers go missing after a style change, re-add them
+    // Any style mutation (including setStyle, which wipes custom sources/layers).
+    // 'load' is not a reliable trigger — it has been observed never firing while
+    // the style is otherwise usable — so the deck.gl overlay hangs off this too.
+    // Both calls are idempotent.
     map.on('styledata', () => {
-      if (map.isStyleLoaded() && (!map.getLayer(EVENTS_LAYER) || !map.getLayer(INCIDENTS_LAYER))) {
-        addSourceAndLayer(map);
-        addMeasureLayers(map);
-      }
+      requestSyncRef.current();
+      addMeasureLayers(map);
+      tryAddDeckOverlayRef.current(map);
+    });
+
+    // Last-resort trigger — runs whenever the map settles.
+    map.on('idle', () => {
+      requestSyncRef.current();
+      tryAddDeckOverlayRef.current(map);
     });
 
     // Measure click handler (runs on every map click; only acts when measuring)
@@ -661,8 +851,6 @@ export function IntelligenceMap({
       if (!measureRef.current.active) map.getCanvas().style.cursor = '';
     });
 
-    mapRef.current = map;
-
     // Resize observer for container changes
     const ro = new ResizeObserver(() => {
       requestAnimationFrame(() => map.resize());
@@ -670,10 +858,21 @@ export function IntelligenceMap({
     ro.observe(containerRef.current);
 
     return () => {
+      stopWatchdog();
       ro.disconnect();
       if (popupRef.current) popupRef.current.remove();
       map.remove();
       mapRef.current = null;
+      appliedStyleKeyRef.current = null;
+      appliedEventsRef.current = null;
+      appliedIncidentsRef.current = null;
+      // Reset the state alongside the ref. Resetting only the ref lets the badge
+      // keep reading teal "N incidents on map" after a teardown while no layer
+      // exists — the transition guard in syncMapContent would never re-fire,
+      // and the badge is the primary diagnostic for exactly this bug class.
+      layersReadyRef.current = false;
+      setLayersReady(false);
+      deckOverlayRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -724,13 +923,20 @@ export function IntelligenceMap({
 
           map.addControl(overlay as unknown as maplibregl.IControl);
           deckOverlayRef.current = overlay;
-        } catch {
-          // deck.gl not available — Essential rendering only
+          console.info('[Map] deck.gl overlay added');
+        } catch (err) {
+          console.warn('[Map] deck.gl overlay unavailable:', err);
         }
       })();
     },
     [renderingTier, events, currentTime],
   );
+
+  // Stable handle: the init effect has [] deps, so calling tryAddDeckOverlay
+  // directly would pin the mount-time closure and a later renderingTier upgrade
+  // would never create the overlay.
+  const tryAddDeckOverlayRef = useRef(tryAddDeckOverlay);
+  tryAddDeckOverlayRef.current = tryAddDeckOverlay;
 
   // ------------------------------------------------------------------
   // Style change effect — uses setStyle() then re-adds custom layers
@@ -738,7 +944,12 @@ export function IntelligenceMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (!didMountRef.current) { didMountRef.current = true; return; }
+    // Per-map-instance guard. Survives StrictMode's unmount/remount because
+    // the init effect resets appliedStyleKeyRef for every new Map.
+    if (appliedStyleKeyRef.current === activeStyle) return;
+    appliedStyleKeyRef.current = activeStyle;
+
+    console.info('[Map] basemap switch ->', activeStyle);
 
     const is3D = activeStyle === '3d';
     if (!is3D) disable3D(map);
@@ -747,6 +958,9 @@ export function IntelligenceMap({
     canvas.style.transition = 'opacity 250ms ease';
     canvas.style.opacity = '0.15';
 
+    // setStyle destroys every custom source/layer.
+    appliedEventsRef.current = null;
+    appliedIncidentsRef.current = null;
     map.setStyle(getBasemapStyle(activeStyle));
     map.triggerRepaint();
 
@@ -756,20 +970,50 @@ export function IntelligenceMap({
     };
     const failsafe = setTimeout(showCanvas, 3000);
 
+    // Terrain and roads used to hang off map.once('idle') alone — the same dead
+    // trigger that stranded the incident layers. Drive them from styledata and a
+    // self-clearing poll as well, and never let a throw escape into MapLibre's
+    // event dispatch (which would abort before showCanvas and leave the canvas
+    // stuck at 15% opacity until the failsafe).
     let tries = 0;
+    let settled = false;
     const reAdd = () => {
-      addSourceAndLayer(map);
+      if (settled) return;
+      requestSyncRef.current();
       addMeasureLayers(map);
       if (measureRef.current.points.length > 0) updateMeasureGeometry(map, measureRef.current.points);
-      if (is3D) enable3D(map);
-      const applied = applyRoads(map, activeStyle, showRoadsRef.current);
-      if (!applied && tries < 6) { tries += 1; map.once('idle', reAdd); return; }
+      if (is3D) {
+        try { enable3D(map); } catch (err) { console.warn('[Map] enable3D failed:', err); }
+      }
+      let applied = false;
+      try {
+        applied = applyRoads(map, activeStyle, showRoadsRef.current);
+      } catch (err) {
+        console.warn('[Map] applyRoads failed:', err);
+      }
+      if (!applied && tries < 12) { tries += 1; return; }
+      settled = true;
       clearTimeout(failsafe);
       showCanvas();
     };
-    map.once('idle', reAdd);
-    return () => { map.off('idle', reAdd); clearTimeout(failsafe); };
-  }, [activeStyle, addSourceAndLayer, addMeasureLayers, updateMeasureGeometry, enable3D, disable3D, applyRoads]);
+
+    map.on('idle', reAdd);
+    map.on('styledata', reAdd);
+    const poll = setInterval(() => {
+      if (settled) { clearInterval(poll); return; }
+      reAdd();
+    }, 400);
+    const pollStop = setTimeout(() => clearInterval(poll), 20000);
+
+    return () => {
+      settled = true;
+      map.off('idle', reAdd);
+      map.off('styledata', reAdd);
+      clearInterval(poll);
+      clearTimeout(pollStop);
+      clearTimeout(failsafe);
+    };
+  }, [activeStyle, addMeasureLayers, updateMeasureGeometry, enable3D, disable3D, applyRoads]);
 
   // ------------------------------------------------------------------
   // Roads toggle
@@ -777,13 +1021,34 @@ export function IntelligenceMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (map.isStyleLoaded()) {
-      applyRoads(map, activeStyle, showRoads);
-    } else {
-      const h = () => applyRoads(map, activeStyle, showRoads);
-      map.once('idle', h);
-      return () => { map.off('idle', h); };
-    }
+
+    // Don't gate on isStyleLoaded()/idle — both have been observed permanently
+    // false while the style is otherwise usable. Attempt immediately, then retry
+    // from styledata plus a self-clearing poll until applyRoads reports success.
+    let settled = false;
+    const attempt = () => {
+      if (settled) return;
+      try {
+        if (applyRoads(map, activeStyle, showRoads)) settled = true;
+      } catch (err) {
+        console.warn('[Map] roads toggle failed:', err);
+      }
+    };
+
+    attempt();
+    map.on('styledata', attempt);
+    const poll = setInterval(() => {
+      if (settled) { clearInterval(poll); return; }
+      attempt();
+    }, 400);
+    const pollStop = setTimeout(() => clearInterval(poll), 20000);
+
+    return () => {
+      settled = true;
+      map.off('styledata', attempt);
+      clearInterval(poll);
+      clearTimeout(pollStop);
+    };
   }, [showRoads, activeStyle, applyRoads]);
 
   // ------------------------------------------------------------------
@@ -801,12 +1066,9 @@ export function IntelligenceMap({
   // ------------------------------------------------------------------
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
-
-    const source = map.getSource(EVENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
-    if (source) {
-      source.setData(geojson);
-    }
+    if (!map) return;
+    // syncMapContent owns every events/incidents source, layer and setData call.
+    requestSyncRef.current();
 
     // Update deck.gl overlay if present
     if (deckOverlayRef.current && renderingTier !== 'essential') {
@@ -842,60 +1104,21 @@ export function IntelligenceMap({
               }),
             ],
           });
-        } catch {
-          // deck.gl update failed — silent
+        } catch (err) {
+          console.warn('[Map] deck.gl overlay update failed:', err);
         }
       })();
     }
   }, [geojson, events, currentTime, renderingTier]);
 
   // ------------------------------------------------------------------
-  // Update incidents source when incidents change
+  // Incidents data changed — hand off to the single sync routine.
+  // The self-clearing watchdog inside requestSync plus the load/styledata/idle
+  // listeners registered once in the init effect drive it to completion.
   // ------------------------------------------------------------------
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    let done = false;
-
-    const doUpdate = () => {
-      if (done) return;
-      try {
-        if (!map.getLayer(INCIDENTS_LAYER)) {
-          addSourceAndLayer(map);
-        }
-        const source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
-        if (source) {
-          source.setData(incidentsGeoJson);
-          done = true;
-        }
-      } catch {
-        // style not ready yet — will retry
-      }
-    };
-
-    doUpdate();
-
-    const onLoad = () => doUpdate();
-    const onIdle = () => doUpdate();
-    if (!map.loaded()) map.once('load', onLoad);
-    map.on('idle', onIdle);
-
-    const interval = setInterval(() => {
-      doUpdate();
-      if (done) clearInterval(interval);
-    }, 500);
-    const timeout = setTimeout(() => clearInterval(interval), 30000);
-
-    return () => {
-      done = true;
-      map.off('load', onLoad);
-      map.off('idle', onIdle);
-      clearInterval(interval);
-      clearTimeout(timeout);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [incidentsGeoJson]);
+    requestSync();
+  }, [incidentsGeoJson, requestSync]);
 
   // ------------------------------------------------------------------
   // Fly to selected event when selectedEventId changes externally
@@ -1043,12 +1266,12 @@ export function IntelligenceMap({
       {(incidents.length > 0 || markerCount > 0) && (
         <div style={{
           position: 'absolute', bottom: 8, left: 12, zIndex: 20,
-          background: markerCount > 0 ? 'rgba(56, 178, 172, 0.9)' : 'rgba(197, 48, 48, 0.9)',
+          background: layersReady ? 'rgba(56, 178, 172, 0.9)' : 'rgba(197, 48, 48, 0.9)',
           color: '#fff', fontSize: 11, fontWeight: 600,
           padding: '3px 8px', borderRadius: 4,
           pointerEvents: 'none',
         }}>
-          {markerCount > 0
+          {layersReady
             ? `${markerCount} incidents on map`
             : `${incidents.length} incidents pending...`}
         </div>

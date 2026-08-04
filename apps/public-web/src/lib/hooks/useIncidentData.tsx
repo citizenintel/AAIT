@@ -6,13 +6,22 @@ import { useAppStore } from '../../stores/app-store';
 import { deduplicateByContent, incidentFingerprint } from '../utils/deduplicate';
 
 interface IncidentDataContextValue {
+  /**
+   * The published dataset — every surface that counts, maps or lists incidents
+   * reads this. Records still awaiting human review are NOT here: they are
+   * machine-derived and the app promises on the import page that "an editor must
+   * approve each record before it appears on the map".
+   */
   incidents: MockIncident[];
+  /** How many stored records are being withheld pending review. */
+  awaitingReview: number;
   campaigns: CampaignRow[];
   loading: boolean;
 }
 
 const IncidentDataContext = createContext<IncidentDataContextValue>({
   incidents: [],
+  awaitingReview: 0,
   campaigns: [],
   loading: true,
 });
@@ -37,10 +46,15 @@ function rowToMock(r: IncidentRow): MockIncident {
     sources: [],
     tags: (r.tags ?? []).map(t => t.tag),
     isSynthetic: true,
-    casualties: {
-      deceased: r.fatality_count_confirmed ?? 0,
-      injured: r.injury_count_confirmed ?? 0,
-    },
+    // `?? 0` here turned "the API returned no figure" into "zero confirmed
+    // deaths", which is then summed into published totals. A null figure stays
+    // absent.
+    casualties: (r.fatality_count_confirmed == null && r.injury_count_confirmed == null)
+      ? undefined
+      : {
+          ...(r.fatality_count_confirmed != null ? { deceased: r.fatality_count_confirmed } : {}),
+          ...(r.injury_count_confirmed != null ? { injured: r.injury_count_confirmed } : {}),
+        },
   };
 }
 
@@ -70,23 +84,51 @@ export function IncidentDataProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
+  /**
+   * BLOCKER FIX. `importedIncidents` used to be merged straight into the
+   * dataset the public map and every dashboard consume, with no needsReview
+   * filter — so a record whose category, severity, position and date were all
+   * machine-guesses was published beside a source-verified one and counted in
+   * the same totals. Every flag the importer and splitter set was written to
+   * storage and read by nobody.
+   *
+   * Records awaiting review are withheld here and surfaced in the admin import
+   * page, where an editor can inspect their derived fields and release them.
+   */
+  const reviewed = useMemo(
+    () => importedIncidents.filter(i => !i.needsReview),
+    [importedIncidents],
+  );
+  const awaitingReview = importedIncidents.length - reviewed.length;
+
   const incidents = useMemo(
     () => deduplicateByContent(
-      [...apiIncidents, ...importedIncidents],
-      (i) => incidentFingerprint(i.title, i.dateOccurred ?? '', i.town ?? i.province ?? ''),
+      [...apiIncidents, ...reviewed],
+      // Keyed on the SUMMARY, not the title. A title is a short, often
+      // generated string: two genuinely distinct incidents in the same town on
+      // the same day produced an identical fingerprint and one of them was
+      // silently dropped. The summary is the record's actual content.
+      (i) => incidentFingerprint(
+        i.summary || i.title,
+        i.dateOccurred ?? '',
+        i.town ?? i.province ?? '',
+      ),
       (i) => i.id,
     ),
-    [apiIncidents, importedIncidents],
+    [apiIncidents, reviewed],
   );
 
   const value = useMemo(
-    () => ({ incidents, campaigns, loading }),
-    [incidents, campaigns, loading],
+    () => ({ incidents, awaitingReview, campaigns, loading }),
+    [incidents, awaitingReview, campaigns, loading],
   );
 
   useEffect(() => {
-    console.log(`[IncidentDataProvider] incidents=${incidents.length} (api=${apiIncidents.length}, imported=${importedIncidents.length})`);
-  }, [incidents.length, apiIncidents.length, importedIncidents.length]);
+    console.log(
+      `[IncidentDataProvider] published=${incidents.length} ` +
+      `(api=${apiIncidents.length}, imported=${importedIncidents.length}, withheld pending review=${awaitingReview})`,
+    );
+  }, [incidents.length, apiIncidents.length, importedIncidents.length, awaitingReview]);
 
   return (
     <IncidentDataContext.Provider value={value}>

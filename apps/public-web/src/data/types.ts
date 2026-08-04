@@ -6,7 +6,12 @@ export type VerificationState =
   | 'v4_primary_source_confirmed'
   | 'v5_editorially_verified';
 
-export type IncidentSeverity = 'critical' | 'high' | 'medium' | 'low' | 'informational';
+/**
+ * `unassessed` is NOT a severity level — it means no severity has been
+ * established. It exists so an importer that cannot evidence a severity can say
+ * so, instead of defaulting to 'medium' (an assertion the source never made).
+ */
+export type IncidentSeverity = 'critical' | 'high' | 'medium' | 'low' | 'informational' | 'unassessed';
 
 export type LocationTier =
   | 'l0_none'
@@ -16,7 +21,12 @@ export type LocationTier =
   | 'l4_approximate_cell'
   | 'l5_exact_public';
 
-export type ModuleKey = 'ait' | 'unrest' | 'bias' | 'infrastructure' | 'natural' | 'traffic';
+/**
+ * `unclassified` is NOT a module — it means no module could be evidenced from
+ * the record. It exists so the importer can say "unknown" instead of defaulting
+ * every keyword-less record into 'ait' (Farm & Rural).
+ */
+export type ModuleKey = 'ait' | 'unrest' | 'bias' | 'infrastructure' | 'natural' | 'traffic' | 'unclassified';
 
 export type AppRole =
   | 'public_viewer'

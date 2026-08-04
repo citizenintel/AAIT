@@ -9,11 +9,45 @@ export interface IncidentEvidence {
   addedAt: string;
 }
 
+/**
+ * Provenance stamp written by lib/utils/incident-splitter.ts onto every incident
+ * produced by splitting a multi-incident source row.
+ *
+ * Its presence is the hard idempotency guard: an incident carrying splitFrom is
+ * never split again. Do not strip it when cleaning or persisting incidents.
+ */
+export interface SplitProvenance {
+  /** id of the original imported row this record ultimately derives from. */
+  rootId: string;
+  /** id of the record this one was split out of. */
+  parentId: string;
+  /** 1 for a direct product of an import row. */
+  generation: number;
+  /** Which structural strategy produced the entry boundaries. */
+  strategy: 'none' | 'surname-start' | 'numbered' | 'bullet' | 'newline' | 'semicolon';
+  /** Stable content hash — the identity component of the record's id. */
+  entryHash: string;
+  /** Set when the source row exceeded the per-row split cap and needs triage. */
+  capped?: boolean;
+  /** The parent's casualty figure, preserved for audit. NOT divided among children. */
+  parentCasualties?: { deceased?: number; injured?: number };
+  /**
+   * The parent's victimName, preserved for audit. For CSV / AI-sorted imports
+   * this came from an explicitly mapped SOURCE COLUMN, so it must survive the
+   * split even though it cannot be attributed to any one child.
+   */
+  parentVictimName?: string;
+  /** The parent's title, preserved for audit — the parent record is replaced. */
+  parentTitle?: string;
+  /** The parent's full summary text, so a child is always traceable to source. */
+  parentSummary?: string;
+}
+
 export interface MockIncident {
   id: string;
   title: string;
   summary: string;
-  module: 'ait' | 'unrest' | 'bias' | 'infrastructure' | 'natural' | 'traffic';
+  module: 'ait' | 'unrest' | 'bias' | 'infrastructure' | 'natural' | 'traffic' | 'unclassified';
   category: string;
   severity: IncidentSeverity;
   verification: VerificationState;
@@ -28,7 +62,13 @@ export interface MockIncident {
   sources: string[];
   tags: string[];
   isSynthetic: boolean;
-  casualties?: { deceased: number; injured: number };
+  /**
+   * Explicitly-stated casualty figures only. A field left undefined means the
+   * source did not state a number — it does NOT mean zero. Never coerce a
+   * missing figure to 0: that is a confirmed-zero assertion the source did not
+   * make, and it is summed into published totals.
+   */
+  casualties?: { deceased?: number; injured?: number };
   victimName?: string;
   suspectName?: string;
   incidentType?: string;
@@ -40,6 +80,12 @@ export interface MockIncident {
   contactPhone?: string;
   contactEmail?: string;
   evidence?: IncidentEvidence[];
+  /** Set by the incident splitter. Presence blocks any further splitting. */
+  splitFrom?: SplitProvenance;
+  /** Field names whose value was machine-derived rather than read from the source. */
+  inferredFields?: string[];
+  /** True when the record is machine-derived and must be excluded from published counts. */
+  needsReview?: boolean;
 }
 
 export const MOCK_INCIDENTS: MockIncident[] = [
@@ -520,6 +566,7 @@ export const MODULE_META = {
   infrastructure: { label: 'Infrastructure', colour: '#3182ce', description: 'Electricity, water, telecom, and municipal service failures' },
   natural: { label: 'Natural Events', colour: '#38a169', description: 'Fires, floods, droughts, and environmental incidents' },
   traffic: { label: 'Traffic', colour: '#718096', description: 'Road accidents, closures, hazmat spills, and traffic disruptions' },
+  unclassified: { label: 'Unclassified', colour: '#94a3b8', description: 'No module could be evidenced from the record — awaiting human classification' },
 } as const;
 
 export type ModuleKey = keyof typeof MODULE_META;
@@ -530,6 +577,7 @@ export const SEVERITY_META = {
   medium: { label: 'Medium', colour: '#d69e2e', order: 2 },
   low: { label: 'Low', colour: '#3182ce', order: 3 },
   informational: { label: 'Informational', colour: '#718096', order: 4 },
+  unassessed: { label: 'Unassessed', colour: '#94a3b8', order: 5 },
 } as const;
 
 export const VERIFICATION_META: Record<string, { label: string; ring: string; description: string }> = {

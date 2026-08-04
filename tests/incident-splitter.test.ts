@@ -156,16 +156,22 @@ describe('splitMultiIncidentEntry', () => {
   });
 
   it('joins continuation lines that do not start with ALL-CAPS', () => {
+    // NOTE: the NAUDE line now carries a date. Under the evidence gate an entry
+    // with no date is treated as a continuation of its neighbour, not as a
+    // separately-recordable incident, so the original dateless fixture
+    // (correctly) collapses to 1.
     const inc = makeIncident({
       summary: [
         'MEYBURGH Maria. Murdered. Maryvlei smallholding. Brakpan. 16',
         'Junie 2004',
-        'NAUDE SG. Murdered. Olyfenkloof farm, Jamestown.',
+        'NAUDE SG. Murdered. Olyfenkloof farm, Magaliesburg. 4 Julie 2004.',
       ].join('\n'),
     });
     const result = splitMultiIncidentEntry(inc, KNOWN_TOWNS, mockGeocode);
     // "Junie 2004" should be joined to MEYBURGH line, giving 2 entries
     expect(result.length).toBeGreaterThanOrEqual(2);
+    // and the wrapped continuation line must not have been discarded
+    expect(result.map(r => r.summary).join(' ')).toContain('Junie 2004');
   });
 });
 

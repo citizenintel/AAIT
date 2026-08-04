@@ -131,9 +131,15 @@ export function MapView() {
 
   const filteredIncidents = useMemo(() => {
     return incidents.filter((inc) => {
-      if (!filters.modules[inc.module]) return false;
+      // `=== false` (not `!`) so a module/severity key added after the operator's
+      // filter state was persisted defaults to VISIBLE instead of silently
+      // vanishing from the map.
+      if (filters.modules[inc.module] === false) return false;
       if (!filters.showSynthetic && inc.isSynthetic) return false;
-      if (!filters.severities[inc.severity]) return false;
+      if (filters.severities[inc.severity] === false) return false;
+      // A record whose location could not be resolved has no position to plot.
+      // It stays in the dataset (lists, counts) but is never given a made-up one.
+      if (!Number.isFinite(inc.lat) || !Number.isFinite(inc.lng)) return false;
       if (filters.searchQuery) {
         const q = filters.searchQuery.toLowerCase();
         if (!inc.title.toLowerCase().includes(q) && !inc.summary.toLowerCase().includes(q) && !inc.town.toLowerCase().includes(q) && !inc.province.toLowerCase().includes(q)) return false;
@@ -384,6 +390,14 @@ export function MapView() {
       const baseCoords = resolvedMap.get(incident.id);
       if (!baseCoords) return;
       const coords = coordMap.get(incident.id) ?? baseCoords;
+      // Undefined means the source stated no figure — it is NOT a confirmed zero,
+      // so it must render as nothing rather than as "0 deceased".
+      const dDeceased = incident.casualties?.deceased;
+      const dInjured = incident.casualties?.injured;
+      const casualtyParts = [
+        typeof dDeceased === 'number' && dDeceased > 0 ? `${dDeceased} deceased` : '',
+        typeof dInjured === 'number' && dInjured > 0 ? `${dInjured} injured` : '',
+      ].filter(Boolean);
 
       const el = document.createElement('div');
       el.style.cssText = 'width: 14px; height: 14px; cursor: pointer;';
@@ -414,7 +428,7 @@ export function MapView() {
             <span>${incident.sourceCount} source${incident.sourceCount !== 1 ? 's' : ''}</span>
             <span>${incident.dateOccurred}</span>
           </div>
-          ${incident.casualties ? `<div style="margin-top:4px;font-size:10px;color:#c53030">${incident.casualties.deceased > 0 ? incident.casualties.deceased + ' deceased' : ''}${incident.casualties.deceased > 0 && incident.casualties.injured > 0 ? ', ' : ''}${incident.casualties.injured > 0 ? incident.casualties.injured + ' injured' : ''}</div>` : ''}
+          ${casualtyParts.length > 0 ? `<div style="margin-top:4px;font-size:10px;color:#c53030">${casualtyParts.join(', ')}</div>` : ''}
           ${incident.isSynthetic ? '<div style="margin-top:6px;font-size:9px;color:#888;font-style:italic;border-top:1px solid #e2e8f0;padding-top:4px">SYNTHETIC TEST DATA</div>' : ''}
           <button onclick="window.dispatchEvent(new CustomEvent('select-incident',{detail:'${incident.id}'}))" style="margin-top:8px;padding:4px 10px;font-size:11px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:500">View details</button>
         </div>

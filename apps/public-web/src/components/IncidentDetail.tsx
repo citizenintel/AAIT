@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/stores/app-store';
 import { SEVERITY_META, VERIFICATION_META, MODULE_META } from '../data/mock-incidents';
 import { useIncidentData } from '@/lib/hooks/useIncidentData';
+import { INFERRED_FIELD_LABELS } from '@/lib/utils/inferred-fields';
 
 export function IncidentDetail() {
   const { incidents } = useIncidentData();
@@ -37,11 +38,11 @@ export function IncidentDetail() {
       <div className="incident-panel-meta">
         <div className="incident-meta-row">
           <span className="incident-meta-label">Location</span>
-          <span>{incident.town}, {incident.province}</span>
+          <span>{[incident.town, incident.province].filter(Boolean).join(', ') || 'Not stated'}</span>
         </div>
         <div className="incident-meta-row">
           <span className="incident-meta-label">Date occurred</span>
-          <span>{incident.dateOccurred}</span>
+          <span>{incident.dateOccurred || 'Not stated'}</span>
         </div>
         <div className="incident-meta-row">
           <span className="incident-meta-label">Date reported</span>
@@ -57,10 +58,40 @@ export function IncidentDetail() {
         </div>
       </div>
 
-      {incident.casualties && (incident.casualties.deceased > 0 || incident.casualties.injured > 0) && (
+      {/* An undefined figure means the source stated no number. It is NOT a
+          confirmed zero and must not be rendered as one. */}
+      {((incident.casualties?.deceased ?? 0) > 0 || (incident.casualties?.injured ?? 0) > 0) && (
         <div className="incident-panel-casualties">
-          {incident.casualties.deceased > 0 && <span className="casualty deceased">{incident.casualties.deceased} deceased</span>}
-          {incident.casualties.injured > 0 && <span className="casualty injured">{incident.casualties.injured} injured</span>}
+          {(incident.casualties?.deceased ?? 0) > 0 && <span className="casualty deceased">{incident.casualties!.deceased} deceased</span>}
+          {(incident.casualties?.injured ?? 0) > 0 && <span className="casualty injured">{incident.casualties!.injured} injured</span>}
+        </div>
+      )}
+
+      {/* Provenance. Machine-derived fields must never read as source-stated. */}
+      {(incident.inferredFields?.length || incident.needsReview) && (
+        <div className="incident-panel-inferred" style={{ marginTop: 10, padding: '8px 10px', border: '1px solid #d69e2e55', background: '#d69e2e14', borderRadius: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#d69e2e', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Machine-derived — not stated by the source
+          </div>
+          {incident.needsReview && (
+            <div style={{ fontSize: 11, marginTop: 4 }}>
+              This record was produced automatically and has not been confirmed by an editor. Do not cite its figures.
+            </div>
+          )}
+          {incident.inferredFields && incident.inferredFields.length > 0 && (
+            <ul style={{ margin: '6px 0 0', paddingLeft: 16, fontSize: 11, lineHeight: 1.5 }}>
+              {incident.inferredFields.map(f => (
+                <li key={f}>{INFERRED_FIELD_LABELS[f] ?? f}</li>
+              ))}
+            </ul>
+          )}
+          {incident.splitFrom && (
+            <div style={{ fontSize: 11, marginTop: 6, opacity: 0.85 }}>
+              Split out of source row <code>{incident.splitFrom.rootId}</code> by the “{incident.splitFrom.strategy}” rule.
+              {incident.splitFrom.parentVictimName && <> Parent record named <strong>{incident.splitFrom.parentVictimName}</strong>; that name has NOT been attributed to this entry.</>}
+              {incident.splitFrom.parentCasualties && <> Parent casualty figure: {incident.splitFrom.parentCasualties.deceased ?? '—'} deceased / {incident.splitFrom.parentCasualties.injured ?? '—'} injured (unassigned).</>}
+            </div>
+          )}
         </div>
       )}
 

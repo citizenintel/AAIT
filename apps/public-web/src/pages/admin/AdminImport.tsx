@@ -1,11 +1,21 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+﻿import { useCallback, useMemo, useRef, useState } from 'react';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import mammoth from 'mammoth';
 import { useAppStore } from '../../stores/app-store';
 import type { MockIncident } from '../../data/mock-incidents';
-import { splitAllMultiIncidents } from '../../lib/utils/incident-splitter';
+import {
+  splitAllMultiIncidents,
+  parseCasualties,
+  stableHash,
+  canonicalText,
+  MAX_BATCH_FACTOR,
+  MAX_SPLIT_FACTOR,
+  type SplitBatchResult,
+} from '../../lib/utils/incident-splitter';
 import { SA_TOWN_COORDS, PROVINCE_CENTROIDS } from '../../lib/utils/sa-coordinates';
+import { inferredFieldLabel } from '../../lib/utils/inferred-fields';
+import { incidentFingerprint } from '../../lib/utils/deduplicate';
 
 GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
@@ -53,11 +63,19 @@ interface AISortedRow {
   public: Record<string, string>;
   confidential: Record<string, string>;
   rawRow: string[];
-  confidence: number;
-  module: string;
-  severity: string;
+  /**
+   * Fraction of the row that was MAPPED, not an accuracy estimate. Named
+   * `completeness` (it used to be `confidence`) because a percentage badge
+   * labelled "confidence" over a deterministic regex pass reads to the operator
+   * as an assessed judgement about whether the record is correct. It is not.
+   */
+  completeness: number;
+  module: MockIncident['module'];
+  severity: MockIncident['severity'];
   warnings: string[];
   flags: AIFlag[];
+  /** Machine-derived field markers, carried onto the incident. See inferred-fields.ts. */
+  inferredFields: string[];
 }
 
 interface AIFlag {
@@ -82,7 +100,7 @@ function normalise(s: string): string {
 }
 
 function extractName(title: string): string {
-  const dash = title.indexOf(' — ');
+  const dash = title.indexOf(' â€” ');
   return dash > 0 ? normalise(title.slice(0, dash)) : normalise(title);
 }
 
@@ -156,7 +174,7 @@ function parseDelimited(text: string): string[][] {
         if (text[i + 1] === '"') { field += '"'; i++; }
         else inQuotes = false;
       } else if (c === '\n' && row.length + 1 >= expectedCols) {
-        // Unbalanced quote — force-close at row boundary
+        // Unbalanced quote â€” force-close at row boundary
         inQuotes = false;
         row.push(field); rows.push(row); row = []; field = '';
       } else {
@@ -218,46 +236,90 @@ async function extractPdfText(file: File): Promise<string[]> {
   return pages;
 }
 
+/**
+ * Tokens that are never part of a person's name. Checked PER TOKEN, not just on
+ * the first word â€” the old single-token check let "Free State", "High Court" and
+ * "Doring Street" through into the victimName column.
+ */
+const NOT_A_NAME_TOKEN = new Set([
+  'the', 'and', 'was', 'were', 'has', 'had', 'been', 'not', 'but', 'for', 'with',
+  'from', 'that', 'this', 'have', 'are', 'his', 'her', 'their',
+  'saps', 'police', 'water', 'municipality', 'metro', 'council', 'news',
+  'hospital', 'dam', 'road', 'street', 'avenue', 'drive', 'lane', 'zone',
+  'cape', 'town', 'city', 'province', 'provincial', 'department', 'eskom',
+  'johannesburg', 'pretoria', 'polokwane', 'soweto', 'musina', 'bloemfontein',
+  'durban', 'limpopo', 'gauteng', 'mpumalanga', 'kwazulu', 'natal',
+  'western', 'eastern', 'northern', 'southern', 'free', 'north', 'south', 'east', 'west',
+  'state', 'court', 'high', 'magistrate', 'magistrates', 'supreme', 'regional',
+  'farm', 'plaas', 'smallholding', 'district', 'area', 'region',
+  'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
+  'september', 'october', 'november', 'december',
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+  'accused', 'suspect', 'suspects', 'victim', 'deceased', 'complainant', 'witness',
+  'attack', 'murder', 'killed', 'shot', 'stabbed', 'robbery', 'unknown', 'incident',
+  'traffic', 'residents', 'two', 'three', 'four', 'five',
+]);
+
+/** A candidate whose FULL text matches is never a person. */
+const NOT_A_PERSON_PHRASE = new Set([
+  'western cape', 'eastern cape', 'northern cape', 'free state', 'north west',
+  'kwazulu natal', 'kwazulu-natal', 'south africa', 'high court',
+  'magistrates court', 'supreme court', 'crime scene', 'police station',
+]);
+
+function looksLikePersonName(candidate: string): boolean {
+  const trimmed = candidate.trim();
+  if (!trimmed) return false;
+  if (NOT_A_PERSON_PHRASE.has(trimmed.toLowerCase())) return false;
+  const tokens = trimmed.split(/\s+/);
+  if (tokens.length < 2 || tokens.length > 5) return false;
+  return !tokens.some(t => NOT_A_NAME_TOKEN.has(t.toLowerCase().replace(/[^a-z-]/g, '')));
+}
+
+/**
+ * A victim name is only taken where the document EXPLICITLY labels one
+ * ("the victim, Jan Botha", "Mr Jan Botha"). The old pattern 2 â€”
+ * `<Capitalised phrase> was killed` â€” captured any capitalised phrase before a
+ * violence verb, so a farm name, an organisation or a street became the named
+ * murder victim of the record. Naming a person as a murder victim on no
+ * evidence is the most consequential fabrication this file could make.
+ *
+ * Whatever this returns is machine-derived and is flagged 'victimName:from-text'.
+ */
 function extractVictimName(text: string): string {
   const patterns = [
-    /(?:victim|deceased|slain|murdered|killed)\s*(?:was|is|:)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/i,
-    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s*(?:was\s+(?:killed|murdered|slain|shot|stabbed|attacked))/,
-    /(?:farmer|mr|mrs|ms|dr)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/i,
+    /(?:the\s+)?(?:victim|deceased|slain)\s*(?:was|is|,|:)\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/,
+    /\b(?:Mr|Mrs|Ms|Dr|Prof)\.?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/,
   ];
   for (const p of patterns) {
     const m = text.match(p);
-    if (m?.[1] && !NOT_A_NAME.test(m[1].split(' ')[0] ?? '')) return m[1];
+    if (m?.[1] && looksLikePersonName(m[1])) return m[1];
   }
   return '';
 }
 
+/**
+ * Counts only â€” never a name. Extracting a SUSPECT's name from prose and
+ * publishing it beside a fabricated verdict is a defamation exposure, not a
+ * data-quality question. The prose stays in the summary where a human can read
+ * it; the machine does not name anyone as a suspect.
+ */
 function extractSuspectInfo(text: string): string {
-  const patterns = [
-    /(?:suspect|accused|perpetrator|attacker|arrested)\s*(?:was|is|:)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/i,
-    /(\d+)\s*(?:suspects?|men|attackers?|intruders?)\s*(?:were|have been)?\s*(?:arrested|apprehended|detained)/i,
-  ];
-  for (const p of patterns) {
-    const m = text.match(p);
-    if (m) return m[0].trim();
-  }
-  return '';
+  const m = text.match(/(\d+)\s*(?:suspects?|men|attackers?|intruders?)\s*(?:were|have been)?\s*(?:arrested|apprehended|detained)/i);
+  return m ? m[0].trim() : '';
 }
 
-function extractVerdict(text: string): string {
-  const lower = text.toLowerCase();
-  if (/found guilty|convicted|sentenced/i.test(lower)) return 'Guilty';
-  if (/acquitted|found not guilty|charges? dropped/i.test(lower)) return 'Not guilty';
-  if (/pending|awaiting trial|remanded/i.test(lower)) return 'Pending';
-  return '';
-}
-
-function extractCaseStatus(text: string): string {
-  const lower = text.toLowerCase();
-  if (/\bresolved\b|case closed|convicted|sentenced/i.test(lower)) return 'Resolved';
-  if (/\bunresolved\b|cold case|no arrest|unsolved/i.test(lower)) return 'Unresolved';
-  if (/\bpending\b|under investigation|awaiting|remanded|bail/i.test(lower)) return 'Pending';
-  return 'Unresolved';
-}
+// extractVerdict and extractCaseStatus are DELETED.
+//
+// extractVerdict returned 'Guilty' on a bare substring match of "convicted" or
+// "sentenced" anywhere in the chunk, with no tie to WHICH person the clause
+// concerned, and wrote it to the verdict field beside a machine-extracted
+// suspect name. extractCaseStatus returned 'Unresolved' as its default â€” a
+// legal-status assertion the source never made.
+//
+// Neither can be evidenced from free text by substring matching. Both fields
+// are now left blank for the PDF/DOCX path; the full chunk is still carried in
+// the summary, so nothing is lost, and a human can fill them in.
 
 function extractCasualties(text: string): string {
   const lower = text.toLowerCase();
@@ -277,13 +339,13 @@ function extractUrls(text: string): string {
 function splitPdfIntoIncidents(pages: string[]): string[][] {
   const fullText = pages.join('\n\n');
 
-  const numberedPattern = /(?:^|\n)(?:\d+[\.\)]\s|[-•]\s|Incident\s*[:#]?\s*\d+)/i;
+  const numberedPattern = /(?:^|\n)(?:\d+[\.\)]\s|[-â€¢]\s|Incident\s*[:#]?\s*\d+)/i;
   const hasNumbered = numberedPattern.test(fullText);
 
   const chunks: string[] = [];
 
   if (hasNumbered) {
-    const parts = fullText.split(/\n(?=\d+[\.\)]\s|[-•]\s|Incident\s*[:#]?\s*\d+)/i);
+    const parts = fullText.split(/\n(?=\d+[\.\)]\s|[-â€¢]\s|Incident\s*[:#]?\s*\d+)/i);
     for (const part of parts) {
       const trimmed = part.trim();
       if (trimmed.length > 20) chunks.push(trimmed);
@@ -319,25 +381,35 @@ function splitPdfIntoIncidents(pages: string[]): string[][] {
     const location = locationMatch?.[1] ?? '';
 
     return [
-      extractVictimName(chunk),         // victimName
-      date,                             // dateOccurred
+      extractVictimName(chunk),         // victimName  (machine-derived â€” flagged)
+      date,                             // dateOccurred (machine-derived â€” flagged)
       '',                               // incidentType
-      location,                         // location
+      location,                         // location    (machine-derived â€” flagged)
       '',                               // province
       '',                               // severity
-      chunk,                            // summary
-      extractCasualties(chunk),         // casualties
-      extractSuspectInfo(chunk),        // suspectName
+      chunk,                            // summary     (verbatim document text)
+      extractCasualties(chunk),         // casualties  (machine-derived â€” flagged)
+      extractSuspectInfo(chunk),        // suspectName (counts only, never a name)
       caseRefMatch?.[0] ?? '',          // courtCase
-      extractVerdict(chunk),            // verdict
-      extractCaseStatus(chunk),         // caseStatus
-      extractUrls(chunk),              // sourceUrl
+      '',                               // verdict    â€” never machine-derived
+      '',                               // caseStatus â€” never machine-derived
+      extractUrls(chunk),               // sourceUrl
       '',                               // reporter
       '',                               // contactPhone
       '',                               // contactEmail
     ];
   });
 }
+
+/**
+ * Column indices in the PDF/DOCX row shape above whose value is pattern-matched
+ * out of prose rather than read from a labelled source field. The Raw Preview
+ * marks these, and every incident built from such a row carries the matching
+ * inferredFields entry.
+ */
+const DOC_DERIVED_KEYS: ReadonlySet<TargetKey> = new Set<TargetKey>([
+  'victimName', 'dateOccurred', 'location', 'summary', 'casualties', 'suspectName',
+]);
 
 // ---------------------------------------------------------------------------
 // DOCX text extraction
@@ -350,13 +422,27 @@ async function extractDocxText(file: File): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// AI sort engine (deterministic mock — server-side AI in production)
+// AI sort engine (deterministic mock â€” server-side AI in production)
 // ---------------------------------------------------------------------------
 
 const SA_PHONE_RE = /(\+?27|0)\s?\d{2}[\s-]?\d{3}[\s-]?\d{4}/g;
 const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
 const CASE_REF_RE = /\b(CAS|CASE|MAS|CR)\s?\d+[\/\-]\d+[\/\-]?\d*/gi;
 const NAME_RE = /\b([A-Z][a-z]{2,})\s+([A-Z][a-z]{2,})\b/g;
+/**
+ * The ALL-CAPS-surname convention ("MOSTERT Susan") dominates this corpus and
+ * NAME_RE â€” which demands mixed case in BOTH tokens â€” never matched it. The
+ * redaction the splitter's safety depends on (its REDACTION_RE bail-out) was
+ * therefore never triggered for the commonest name shape in the data, and the
+ * splitter lifted those names straight into public titles.
+ */
+const CAPS_NAME_RE = /\b([A-Z]{2,})\s+([A-Z][a-z]{1,})\b/g;
+/** Acronyms CAPS_NAME_RE must not mistake for a surname. */
+const NOT_A_SURNAME_ACRONYM = new Set([
+  'SAPS', 'ANC', 'NPA', 'EFF', 'DA', 'KZN', 'DNA', 'CCTV', 'SABC', 'NGO',
+  'SANRAL', 'NSRI', 'IPID', 'HAWKS', 'SARS', 'SATU', 'TLU', 'AFRIFORUM',
+  'SAPA', 'PPE', 'CAS', 'MAS', 'GPS', 'SUV', 'ATM', 'ID', 'SA',
+]);
 const NOT_A_NAME = /^(SAPS|Police|Water|Municipality|Metro|Council|News|Hospital|Dam|Road|Street|Avenue|Zone|Cape|Town|Province|Department|Eskom|Johannesburg|Pretoria|Polokwane|Soweto|Musina|Limpopo|Gauteng|Western|Eastern|Northern|Free|North|South|The|Two|Three|Traffic|Residents)$/;
 
 const MODULE_KEYWORDS: Record<string, string[]> = {
@@ -406,23 +492,53 @@ function detectFakeNewsSignals(text: string): string[] {
   return hits;
 }
 
-function classifyModule(text: string): string {
-  const lower = text.toLowerCase();
-  let best = 'ait';
-  let bestScore = 0;
-  for (const [mod, kws] of Object.entries(MODULE_KEYWORDS)) {
-    const score = kws.filter(k => lower.includes(k)).length;
-    if (score > bestScore) { bestScore = score; best = mod; }
-  }
-  return best;
+/** Whole-word keyword match. Unbounded `includes()` matched "shot" inside
+ *  "gunshot" and "dead" inside "deadline". */
+function hasKeyword(lower: string, keyword: string): boolean {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:[^a-z0-9]|$)`, 'i').test(lower);
 }
 
-function classifySeverity(text: string): string {
+/**
+ * BLOCKER FIX. Previously initialised `best = 'ait'` with `bestScore = 0`, so a
+ * record matching no keyword in any module was ASSERTED to be a Farm & Rural
+ * incident. That single default is the mechanism behind the reported
+ * "Farm & Rural 5237".
+ *
+ * Now: no match â†’ `null`, and the caller stores module 'unclassified' with an
+ * inferredFields entry. Even a positive match is only a keyword guess, so it is
+ * flagged too â€” the source never stated a module.
+ */
+function classifyModule(text: string): { module: MockIncident['module']; inferred: string } {
+  const lower = text.toLowerCase();
+  let best: MockIncident['module'] | null = null;
+  let bestScore = 0;
+  for (const [mod, kws] of Object.entries(MODULE_KEYWORDS)) {
+    const score = kws.filter(k => hasKeyword(lower, k)).length;
+    if (score > bestScore) { bestScore = score; best = mod as MockIncident['module']; }
+  }
+  if (!best) return { module: 'unclassified', inferred: 'module:unclassified' };
+  return { module: best, inferred: 'module:keyword-guess' };
+}
+
+/**
+ * BLOCKER FIX. Previously returned 'medium' for any text matching no keyword â€”
+ * an assertion the source never made â€” and matched unbounded substrings in a
+ * fixed critical-first order, so the word "killed" anywhere in the row
+ * (including about a suspect, or in a court-outcome clause) yielded Critical.
+ * That produced the reported "Critical 4910".
+ *
+ * Now: no match â†’ 'unassessed', which claims nothing. A match is still only a
+ * keyword guess and is flagged as such.
+ */
+function classifySeverity(text: string): { severity: MockIncident['severity']; inferred: string } {
   const lower = text.toLowerCase();
   for (const [sev, kws] of Object.entries(SEVERITY_KEYWORDS)) {
-    if (kws.some(k => lower.includes(k))) return sev;
+    if (kws.some(k => hasKeyword(lower, k))) {
+      return { severity: sev as MockIncident['severity'], inferred: 'severity:keyword-guess' };
+    }
   }
-  return 'medium';
+  return { severity: 'unassessed', inferred: 'severity:unassessed' };
 }
 
 function extractProvinceFromText(text: string): string {
@@ -451,6 +567,16 @@ function redactText(text: string): { clean: string; extracted: string[] } {
     return '[name withheld]';
   });
 
+  // ALL-CAPS surname + given name ("MOSTERT Susan"). Without this pass the
+  // dominant name shape in this corpus was never redacted.
+  clean = clean.replace(CAPS_NAME_RE, (m, surname: string, given: string) => {
+    if (NOT_A_SURNAME_ACRONYM.has(surname.toUpperCase())) return m;
+    if (NOT_A_NAME.test(given)) return m;
+    if (NOT_A_NAME_TOKEN.has(surname.toLowerCase()) || NOT_A_NAME_TOKEN.has(given.toLowerCase())) return m;
+    extracted.push(`Name: ${m}`);
+    return '[name withheld]';
+  });
+
   return { clean: clean.replace(/\s{2,}/g, ' ').trim(), extracted };
 }
 
@@ -475,7 +601,7 @@ function aiSortRow(
   for (const f of TARGET_FIELDS) {
     const val = get(f.key);
     if (!val) {
-      flags.push({ type: 'gap', field: f.label, message: `No data provided for "${f.label}" — left blank` });
+      flags.push({ type: 'gap', field: f.label, message: `No data provided for "${f.label}" â€” left blank` });
       continue;
     }
     if (f.confidential) {
@@ -490,26 +616,39 @@ function aiSortRow(
     }
   }
 
-  const module = classifyModule(allText);
-  const severity = classifySeverity(allText);
+  const inferredFields: string[] = [];
 
-  publicFields['Module'] = module;
-  publicFields['AI Severity'] = severity;
+  const { module, inferred: moduleInferred } = classifyModule(allText);
+  const { severity, inferred: severityInferred } = classifySeverity(allText);
+  inferredFields.push(moduleInferred, severityInferred);
 
-  const province = get('province') || extractProvinceFromText(allText);
+  // Labels say plainly that these are guesses, not readings.
+  publicFields['Module (keyword guess)'] = module;
+  publicFields['Severity (keyword guess)'] = severity;
+
+  const mappedProvince = get('province');
+  const province = mappedProvince || extractProvinceFromText(allText);
   if (province) publicFields['Province'] = province;
+  // A province found by scanning the whole row can just as easily be a
+  // newspaper name, a court name or a suspect's home province. Flag it so it is
+  // not mistaken for the value of a mapped source column.
+  if (!mappedProvince && province) inferredFields.push('province:from-text');
 
   if (extracted.length > 0) {
     warnings.push(`${extracted.length} PII item${extracted.length > 1 ? 's' : ''} extracted and moved to confidential`);
   }
   if (!get('dateOccurred')) {
-    warnings.push('No date detected — review required');
-    flags.push({ type: 'gap', field: 'Date', message: 'No date found in submission — left blank for admin review' });
+    warnings.push('No date detected â€” review required');
+    // This message is now TRUE: the builders below leave dateOccurred empty.
+    // Previously the UI said "left blank" while the code stamped today's date.
+    flags.push({ type: 'gap', field: 'Date', message: 'No date found in submission â€” left blank for admin review' });
+    inferredFields.push('date:missing');
   }
   if (!province) {
-    warnings.push('No province detected — manual assignment needed');
-    flags.push({ type: 'gap', field: 'Province', message: 'Province could not be determined — left blank' });
+    warnings.push('No province detected â€” manual assignment needed');
+    flags.push({ type: 'gap', field: 'Province', message: 'Province could not be determined â€” left blank' });
   }
+  if (!get('location')) inferredFields.push('town:missing');
 
   const fakeSignals = detectFakeNewsSignals(allText);
   const hasStrongSignal = FAKE_NEWS_SIGNALS_STRONG.some(s => allText.toLowerCase().includes(s));
@@ -524,18 +663,21 @@ function aiSortRow(
     if (isNaN(d.getTime())) {
       flags.push({ type: 'inaccurate', field: 'Date', message: `Date "${dateVal}" is not a valid date format` });
     } else if (d.getTime() > Date.now() + 86400000) {
-      flags.push({ type: 'inaccurate', field: 'Date', message: `Date "${dateVal}" is in the future — likely incorrect` });
+      flags.push({ type: 'inaccurate', field: 'Date', message: `Date "${dateVal}" is in the future â€” likely incorrect` });
     }
   }
 
   if (summary.length < 15 && summary.length > 0) {
-    flags.push({ type: 'suspicious', field: 'Summary', message: 'Very short description — may lack useful detail' });
+    flags.push({ type: 'suspicious', field: 'Summary', message: 'Very short description â€” may lack useful detail' });
   }
 
+  // NOT a confidence score. It measures how much of the row was MAPPED â€” it
+  // says nothing about whether any value is accurate. Labelled accordingly
+  // everywhere it is displayed.
   const mappedFields = Object.values(mapping).filter(v => v >= 0).length;
-  const confidence = Math.min(100, Math.round((mappedFields / TARGET_FIELDS.length) * 80 + (province ? 10 : 0) + (get('dateOccurred') ? 10 : 0)));
+  const completeness = Math.min(100, Math.round((mappedFields / TARGET_FIELDS.length) * 80 + (province ? 10 : 0) + (get('dateOccurred') ? 10 : 0)));
 
-  return { public: publicFields, confidential: confidentialFields, rawRow: row, confidence, module, severity, warnings, flags };
+  return { public: publicFields, confidential: confidentialFields, rawRow: row, completeness, module, severity, warnings, flags, inferredFields };
 }
 
 // ---------------------------------------------------------------------------
@@ -626,78 +768,189 @@ const MODULE_LABELS: Record<string, { label: string; colour: string }> = {
   infrastructure: { label: 'Infrastructure', colour: '#3182ce' },
   natural: { label: 'Natural Events', colour: '#38a169' },
   traffic: { label: 'Traffic', colour: '#718096' },
+  unclassified: { label: 'Unclassified', colour: '#94a3b8' },
 };
 
 const SEV_COLOURS: Record<string, string> = {
   critical: '#c53030', high: '#ed8936', medium: '#d69e2e', low: '#38a169', informational: '#718096',
+  unassessed: '#94a3b8',
 };
 
 // Province centroids and town coords imported from sa-coordinates.ts
 
-function geocodeIncident(town: string, province: string): { lat: number; lng: number } {
-  const townKey = Object.keys(SA_TOWN_COORDS).find(k => k.toLowerCase() === town.toLowerCase());
-  if (townKey) {
-    const coords = SA_TOWN_COORDS[townKey]!;
-    return { lat: coords.lat + (Math.random() - 0.5) * 0.05, lng: coords.lng + (Math.random() - 0.5) * 0.05 };
+/**
+ * BLOCKER FIX. The old final fallback returned
+ *   { lat: -28.5 + (Math.random() - 0.5) * 4, lng: 25.5 + (Math.random() - 0.5) * 6 }
+ * â€” a random point spanning roughly 440 km x 600 km of South Africa â€” whenever
+ * both town and province were unresolved, and plotted it on the public map as
+ * the incident's position. It never returned null, so the splitter's
+ * null-tolerant GeocodeFn contract and its coords:unresolved flag could never
+ * fire from this call site.
+ *
+ * It also added undisclosed Math.random() jitter to RESOLVED coordinates, so the
+ * same record landed somewhere different on every import â€” a record's position
+ * was not even reproducible from its own source row.
+ *
+ * Now: exact gazetteer/centroid values, no jitter, and null when unresolved.
+ * `resolution` tells the caller how precise the answer is so it can be flagged.
+ */
+type GeocodeResult = { lat: number; lng: number; resolution: 'town' | 'province' };
+
+function geocodeIncident(town: string, province: string): GeocodeResult | null {
+  if (town) {
+    const townKey = Object.keys(SA_TOWN_COORDS).find(k => k.toLowerCase() === town.toLowerCase());
+    if (townKey) {
+      const coords = SA_TOWN_COORDS[townKey]!;
+      return { lat: coords.lat, lng: coords.lng, resolution: 'town' };
+    }
   }
-  const provKey = Object.keys(PROVINCE_CENTROIDS).find(k => k.toLowerCase() === province.toLowerCase());
-  if (provKey) {
-    const coords = PROVINCE_CENTROIDS[provKey]!;
-    return { lat: coords.lat + (Math.random() - 0.5) * 0.5, lng: coords.lng + (Math.random() - 0.5) * 0.5 };
+  if (province) {
+    const provKey = Object.keys(PROVINCE_CENTROIDS).find(k => k.toLowerCase() === province.toLowerCase());
+    if (provKey) {
+      const coords = PROVINCE_CENTROIDS[provKey]!;
+      return { lat: coords.lat, lng: coords.lng, resolution: 'province' };
+    }
   }
-  return { lat: -28.5 + (Math.random() - 0.5) * 4, lng: 25.5 + (Math.random() - 0.5) * 6 };
+  return null;
 }
 
-function sortedRowToIncident(row: AISortedRow, index: number): MockIncident {
+/** Adapter matching the splitter's GeocodeFn contract (null == unresolved). */
+const geocodeForSplitter = (town: string, province: string): { lat: number; lng: number } | null => {
+  const r = geocodeIncident(town, province);
+  return r ? { lat: r.lat, lng: r.lng } : null;
+};
+
+/**
+ * Build the coordinate + provenance pair for an imported record.
+ * An unresolved location yields NaN â€” a value every consumer can test with
+ * Number.isFinite â€” rather than a plausible-looking point somewhere in the
+ * Free State. MapView skips non-finite positions; the record still exists.
+ */
+function resolvePosition(town: string, province: string): { lat: number; lng: number; flag: string } {
+  const geo = geocodeIncident(town, province);
+  if (!geo) return { lat: NaN, lng: NaN, flag: 'coords:unresolved' };
+  return {
+    lat: geo.lat,
+    lng: geo.lng,
+    flag: geo.resolution === 'town' ? 'coords:from-town' : 'coords:from-province',
+  };
+}
+
+/**
+ * Explicit casualty digits from a casualties CELL. Each figure is independently
+ * optional: a cell reading "2 injured" says nothing about fatalities, so
+ * `deceased` stays undefined rather than being written as a confirmed 0.
+ */
+function parseCasualtyCell(cell: string): { deceased?: number; injured?: number } | undefined {
+  const killedMatch = cell.match(/(\d+)\s*killed/i);
+  const injuredMatch = cell.match(/(\d+)\s*injured/i);
+  if (!killedMatch && !injuredMatch) return undefined;
+  const out: { deceased?: number; injured?: number } = {};
+  if (killedMatch?.[1]) out.deceased = parseInt(killedMatch[1], 10);
+  if (injuredMatch?.[1]) out.injured = parseInt(injuredMatch[1], 10);
+  return out;
+}
+
+/**
+ * Title for an imported record.
+ *
+ * A victimName that came from a MAPPED SOURCE COLUMN is source-stated and safe
+ * to use. Everything else falls back to a structural title stamped with a hash
+ * of the record's own text: unique (so it cannot collide in
+ * incidentFingerprint) and honest (it claims nothing the source did not say).
+ * The old fallback â€” `summary.slice(0, 80)` â€” republished raw, possibly
+ * un-redacted source text as a public title.
+ */
+function buildImportTitle(
+  sourceVictimName: string,
+  town: string,
+  province: string,
+  summary: string,
+  dateOccurred: string,
+): { title: string; structural: boolean } {
+  const place = town || province || 'Unknown location';
+  if (sourceVictimName) return { title: `${sourceVictimName} â€” ${place}`, structural: false };
+  const stamp = stableHash(canonicalText(summary || `${place}|${dateOccurred}`));
+  return {
+    title: `Unidentified incident â€” ${place}${dateOccurred ? ` â€” ${dateOccurred}` : ''} Â· entry ${stamp}`,
+    structural: true,
+  };
+}
+
+/** Options shared by both builders. */
+interface BuildOptions {
+  /** True when rows came from a PDF/DOCX, i.e. every field is pattern-matched. */
+  documentDerived: boolean;
+}
+
+function sortedRowToIncident(row: AISortedRow, index: number, opts: BuildOptions): MockIncident {
   const get = (label: string): string => row.public[label] ?? '';
   const town = get('Location / where');
   const province = get('Province');
-  const coords = geocodeIncident(town, province);
-  const dateOccurred = get('Date occurred') || new Date().toISOString().slice(0, 10);
+  const pos = resolvePosition(town, province);
 
-  let deceased = 0;
-  let injured = 0;
-  const casualties = get('Casualties');
-  const killedMatch = casualties.match(/(\d+)\s*killed/i);
-  const injuredMatch = casualties.match(/(\d+)\s*injured/i);
-  if (killedMatch?.[1]) deceased = parseInt(killedMatch[1], 10);
-  if (injuredMatch?.[1]) injured = parseInt(injuredMatch[1], 10);
+  // BLOCKER FIX. There is no `|| new Date()` fallback any more. A source that
+  // states no date leaves this blank; today's date is not evidence about when
+  // anything happened, and it drove timelines and the splitter's date logic.
+  const dateOccurred = get('Date occurred');
 
   const victimName = get('Victim name');
-  const title = victimName
-    ? `${victimName} — ${town || province || 'Unknown location'}`
-    : get('Summary / notes').slice(0, 80) || `Imported incident #${index + 1}`;
+  const summary = get('Summary / notes');
+  const { title, structural } = buildImportTitle(victimName, town, province, summary, dateOccurred);
+
+  const inferredFields = new Set<string>(row.inferredFields);
+  inferredFields.add(pos.flag);
+  if (structural) inferredFields.add('title:structural');
+  if (!dateOccurred) inferredFields.add('date:missing');
+  if (opts.documentDerived) {
+    inferredFields.add('summary:from-document');
+    if (victimName) inferredFields.add('victimName:from-text');
+    if (get('Casualties')) inferredFields.add('casualties:from-text');
+  }
+
+  const sources: string[] = [];
+  const sourceUrl = get('Source URL');
+  if (sourceUrl) sources.push(sourceUrl);
 
   return {
     id: `imp-${Date.now().toString(36)}-${index.toString(36)}`,
     title,
-    summary: get('Summary / notes'),
-    module: row.module as MockIncident['module'],
+    summary,
+    module: row.module,
     category: row.module,
-    severity: row.severity as MockIncident['severity'],
-    verification: 'v1_unverified' as MockIncident['verification'],
+    severity: row.severity,
+    // 'v1_unverified' is not a member of VerificationState — the cast hid that, so
+    // these records carried a verification value no lookup could resolve and the
+    // badge rendered blank rather than saying 'unverified'.
+    verification: 'v0_unverified',
     locationTier: 'l3_area' as MockIncident['locationTier'],
-    lng: coords.lng,
-    lat: coords.lat,
+    lng: pos.lng,
+    lat: pos.lat,
     province: province,
     town: town,
     dateOccurred,
     dateReported: new Date().toISOString().slice(0, 10),
-    sourceCount: 1,
-    sources: [],
+    // Never claim a source that is not there.
+    sourceCount: sources.length,
+    sources,
     tags: [],
     isSynthetic: false,
-    casualties: deceased > 0 || injured > 0 ? { deceased, injured } : undefined,
+    casualties: parseCasualtyCell(get('Casualties')),
     victimName: victimName || undefined,
     suspectName: row.confidential['Suspect name'] || undefined,
     incidentType: get('Incident type') || undefined,
     courtCase: row.confidential['Court case / docket'] || undefined,
     verdict: get('Verdict / outcome') || undefined,
     caseStatus: get('Case status') || undefined,
-    sourceUrl: get('Source URL') || undefined,
+    sourceUrl: sourceUrl || undefined,
     reporter: row.confidential['Reporter / contact'] || undefined,
     contactPhone: row.confidential['Phone number'] || undefined,
     contactEmail: row.confidential['Email address'] || undefined,
+    inferredFields: [...inferredFields],
+    // Everything on this path carries at least one machine-derived field
+    // (module and severity are always keyword guesses), so nothing from an
+    // import is publishable until an editor has looked at it.
+    needsReview: true,
   };
 }
 
@@ -705,6 +958,7 @@ function rawRowToIncident(
   row: string[],
   mapping: Record<TargetKey, number | -1>,
   index: number,
+  opts: BuildOptions,
 ): MockIncident {
   const get = (key: TargetKey): string => {
     const idx = mapping[key];
@@ -713,58 +967,398 @@ function rawRowToIncident(
 
   const allText = row.join(' ');
   const town = get('location');
-  const province = get('province') || extractProvinceFromText(allText);
-  const coords = geocodeIncident(town, province);
-  const dateOccurred = get('dateOccurred') || new Date().toISOString().slice(0, 10);
+  const mappedProvince = get('province');
+  const province = mappedProvince || extractProvinceFromText(allText);
+  const pos = resolvePosition(town, province);
+
+  // BLOCKER FIX (second call site). Same reasoning as above: no date fallback.
+  const dateOccurred = get('dateOccurred');
   const summary = get('summary');
   const victimName = get('victimName');
+  const { title, structural } = buildImportTitle(victimName, town, province, summary, dateOccurred);
 
-  let deceased = 0;
-  let injured = 0;
-  const casualties = get('casualties');
-  const killedMatch = casualties.match(/(\d+)\s*killed/i);
-  const injuredMatch = casualties.match(/(\d+)\s*injured/i);
-  if (killedMatch?.[1]) deceased = parseInt(killedMatch[1], 10);
-  if (injuredMatch?.[1]) injured = parseInt(injuredMatch[1], 10);
+  const { module, inferred: moduleInferred } = classifyModule(allText);
+  const { severity, inferred: severityInferred } = classifySeverity(allText);
 
-  const title = victimName
-    ? `${victimName} — ${town || province || 'Unknown location'}`
-    : summary.slice(0, 80) || `Imported incident #${index + 1}`;
+  const inferredFields = new Set<string>([moduleInferred, severityInferred, pos.flag]);
+  if (structural) inferredFields.add('title:structural');
+  if (!dateOccurred) inferredFields.add('date:missing');
+  if (!town) inferredFields.add('town:missing');
+  if (!mappedProvince && province) inferredFields.add('province:from-text');
+  if (opts.documentDerived) {
+    inferredFields.add('summary:from-document');
+    if (victimName) inferredFields.add('victimName:from-text');
+    if (get('casualties')) inferredFields.add('casualties:from-text');
+  }
 
-  const module = classifyModule(allText);
-  const severity = classifySeverity(allText);
+  const sources: string[] = [];
+  const sourceUrl = get('sourceUrl');
+  if (sourceUrl) sources.push(sourceUrl);
 
   return {
     id: `imp-${Date.now().toString(36)}-${index.toString(36)}`,
     title,
     summary,
-    module: module as MockIncident['module'],
+    module,
     category: module,
-    severity: severity as MockIncident['severity'],
-    verification: 'v1_unverified' as MockIncident['verification'],
+    severity,
+    // 'v1_unverified' is not a member of VerificationState — the cast hid that, so
+    // these records carried a verification value no lookup could resolve and the
+    // badge rendered blank rather than saying 'unverified'.
+    verification: 'v0_unverified',
     locationTier: 'l3_area' as MockIncident['locationTier'],
-    lng: coords.lng,
-    lat: coords.lat,
+    lng: pos.lng,
+    lat: pos.lat,
     province,
     town,
     dateOccurred,
     dateReported: new Date().toISOString().slice(0, 10),
-    sourceCount: 1,
-    sources: [],
+    sourceCount: sources.length,
+    sources,
     tags: [],
     isSynthetic: false,
-    casualties: deceased > 0 || injured > 0 ? { deceased, injured } : undefined,
+    casualties: parseCasualtyCell(get('casualties')),
     victimName: victimName || undefined,
     suspectName: get('suspectName') || undefined,
     incidentType: get('incidentType') || undefined,
     courtCase: get('courtCase') || undefined,
     verdict: get('verdict') || undefined,
     caseStatus: get('caseStatus') || undefined,
-    sourceUrl: get('sourceUrl') || undefined,
+    sourceUrl: sourceUrl || undefined,
     reporter: get('reporter') || undefined,
     contactPhone: get('contactPhone') || undefined,
     contactEmail: get('contactEmail') || undefined,
+    inferredFields: [...inferredFields],
+    needsReview: true,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Split safety rails (design part F)
+// ---------------------------------------------------------------------------
+
+/** A split that has been COMPUTED but NOT committed. Held in state until the
+ *  operator confirms it. Nothing here has touched the store. */
+interface SplitPreview {
+  /** Hash of the id list the plan was computed against â€” detects ANY change,
+   *  not just one that alters the record count. */
+  setKey: string;
+  /** importedIncidents.length when the plan was computed. */
+  before: number;
+  after: number;
+  factor: number;
+  /** Source rows that produced more than one record. */
+  splitCount: number;
+  /** Rows the splitter refused to touch because they are already split products. */
+  alreadySplit: number;
+  /** Rows that hit MAX_SPLIT_FACTOR; their tail is kept as one record, never dropped. */
+  capped: number;
+  /** Chunks that failed the evidence gate and were folded back into a neighbour. */
+  mergedFragments: number;
+  worstOffenders: SplitBatchResult['worstOffenders'];
+  /** The already-computed output, reused on confirm so geocoding is not re-rolled. */
+  result: MockIncident[];
+}
+
+/**
+ * Identity of a whole stored set â€” every id, in order, hashed.
+ *
+ * The old staleness guard compared record COUNTS only, so a same-length change
+ * between preview and apply (one record removed and one added) went undetected
+ * and the stale plan was written wholesale, discarding the intervening change.
+ */
+function incidentSetKey(incidents: MockIncident[]): string {
+  return stableHash(incidents.map(i => i.id).join('|')) + `:${incidents.length}`;
+}
+
+/** A deletion that has been COMPUTED but NOT committed. */
+interface DedupPreview {
+  setKey: string;
+  total: number;
+  wouldRemove: number;
+  /** Exactly which records would be deleted, and what they collide with. */
+  pairs: { keep: MockIncident; remove: MockIncident; fingerprint: string }[];
+}
+
+/**
+ * Work out precisely which records `deduplicateImportedIncidents` would delete,
+ * using the same fingerprint rule the store uses, so what the operator is shown
+ * is what actually happens.
+ */
+function computeDedupPreview(incidents: MockIncident[]): DedupPreview {
+  const seenFp = new Map<string, MockIncident>();
+  const seenId = new Set<string>();
+  const pairs: DedupPreview['pairs'] = [];
+  for (const inc of incidents) {
+    if (seenId.has(inc.id)) continue;
+    seenId.add(inc.id);
+    const fp = incidentFingerprint(inc.title, inc.dateOccurred ?? '', inc.town ?? inc.province ?? '');
+    const first = fp ? seenFp.get(fp) : undefined;
+    if (first && first.id !== inc.id) {
+      pairs.push({ keep: first, remove: inc, fingerprint: fp });
+      continue;
+    }
+    if (fp && !seenFp.has(fp)) seenFp.set(fp, inc);
+  }
+  return {
+    setKey: incidentSetKey(incidents),
+    total: incidents.length,
+    wouldRemove: pairs.length,
+    pairs,
+  };
+}
+
+/** Operator-facing refusal text for a batch that blew through MAX_BATCH_FACTOR. */
+function buildRefusalMessage(batch: SplitBatchResult, context: string): string {
+  const lines: string[] = [
+    `REFUSED â€” nothing was written. ${context} would take ${batch.originalTotal} record${batch.originalTotal === 1 ? '' : 's'} to ${batch.newTotal} (${batch.factor.toFixed(2)}Ã—), above the ${MAX_BATCH_FACTOR}Ã— safety limit.`,
+  ];
+  if (batch.capped > 0) {
+    lines.push(`${batch.capped} row${batch.capped === 1 ? '' : 's'} also hit the per-row cap of ${MAX_SPLIT_FACTOR}.`);
+  }
+  lines.push('A legitimate multi-incident sheet does not triple. Review these source rows by hand:');
+  for (const o of batch.worstOffenders) {
+    lines.push(`â€¢ ${o.id} â†’ ${o.childCount} records${o.capped ? ' (capped)' : ''}: ${o.excerpt}â€¦`);
+  }
+  return lines.join('\n');
+}
+
+/** What the "Split & Clean" / "Clean only" action actually did. Every number
+ *  shown to the operator comes from here â€” no figure is estimated. */
+interface CleanupReport {
+  action: 'split-clean' | 'clean-only';
+  before: number;
+  after: number;
+  /** Source rows that fanned out into more than one record. */
+  rowsSplit: number;
+  /** Extra records produced by splitting (after âˆ’ before). */
+  recordsAdded: number;
+  /** Fragments the splitter merged back into a neighbour instead of promoting. */
+  fragmentsMerged: number;
+  /** Records skipped by the idempotency guard because they were already split. */
+  alreadySplit: number;
+  capped: number;
+  titlesFixed: number;
+  casualtiesFilled: number;
+  unchanged: number;
+  /** Cleaning never deletes. Always 0 â€” kept explicit so the report cannot mislead. */
+  removed: number;
+}
+
+/** What an import actually staged, including anything the store rejected. */
+interface ImportReport {
+  fileName: string;
+  sourceRows: number;
+  rowsSplit: number;
+  recordsAdded: number;
+  fragmentsMerged: number;
+  capped: number;
+  offered: number;
+  skippedByOperator: number;
+  staged: number;
+  /** Offered records the store refused as duplicates of what was already there. */
+  rejectedByStore: number;
+  /**
+   * Offered records that REPLACED a stored record with the same id. The store
+   * overwrites in place, leaving the array length unchanged, so a length-delta
+   * calculation reported these as "not added" â€” the exact opposite of what
+   * happened, and it hid the fact that any editor changes to those records were
+   * discarded.
+   */
+  replacedInStore: number;
+  storedTotal: number;
+  /** True when the operator imported without splitting after an F5 refusal. */
+  unsplit?: boolean;
+}
+
+const GARBAGE_TITLE_RE = /^(?:\d+\s*(?:killed|dead)|[A-Z]\s+killed|unknown|imported incident)/i;
+
+// NAME_IN_SUMMARY_RE is DELETED. It was a bare two-capitalised-word pattern with
+// no stopword filtering at all, and its match was used to build the record's
+// public title â€” so "Free State", "High Court" and "Doring Street" became the
+// named subject of an incident. A title is a published claim about who this
+// record is about; it is not somewhere to guess.
+//
+// A broken title is now replaced by a structural one stamped with a hash of the
+// record's own text: it asserts nothing, and (unlike a bare place+date title) it
+// cannot collide with a sibling in incidentFingerprint and be deleted as a
+// duplicate.
+
+interface CleanOutcome {
+  incidents: MockIncident[];
+  titlesFixed: number;
+  casualtiesFilled: number;
+  unchanged: number;
+}
+
+/**
+ * Repair obviously-broken titles and fill in casualty figures that are stated
+ * explicitly in the summary text.
+ *
+ * Three properties this function must keep:
+ *  1. It NEVER mutates its input. The store is immer-backed and deep-frozen;
+ *     assigning to a stored object throws in strict mode (design part F2).
+ *  2. It is idempotent. A field is only written when the new value differs from
+ *     the old, so running it twice changes nothing and reports nothing.
+ *  3. It NEVER invents a number. A summary that says someone was killed without
+ *     saying how many yields no casualty figure at all (design part E1).
+ *  4. It emits exactly one record per input record. Nothing is dropped.
+ */
+function cleanIncidents(source: MockIncident[]): CleanOutcome {
+  const incidents: MockIncident[] = [];
+  let titlesFixed = 0;
+  let casualtiesFilled = 0;
+  let unchanged = 0;
+
+  for (const src of source) {
+    const inc: MockIncident = {
+      ...src,
+      casualties: src.casualties ? { ...src.casualties } : undefined,
+      inferredFields: src.inferredFields ? [...src.inferredFields] : undefined,
+    };
+    let changed = false;
+
+    if (GARBAGE_TITLE_RE.test(inc.title)) {
+      // No name guessing, and no echoing raw source text. A structural title
+      // stamped with a hash of the record's own summary asserts nothing and is
+      // unique, so incidentFingerprint cannot confuse two distinct records.
+      const place = inc.town || inc.province || 'Unknown location';
+      const stamp = stableHash(canonicalText(inc.summary || `${inc.id}|${place}`));
+      const nextTitle = `Unidentified incident â€” ${place}${inc.dateOccurred ? ` â€” ${inc.dateOccurred}` : ''} Â· entry ${stamp}`;
+      if (nextTitle !== inc.title) {
+        inc.title = nextTitle;
+        inc.inferredFields = [...new Set([...(inc.inferredFields ?? []), 'title:structural'])];
+        inc.needsReview = true;
+        titlesFixed++;
+        changed = true;
+      }
+    }
+
+    // Only ever FILL a missing figure, and only from an explicit digit in the
+    // text. An existing figure came from the source column and is authoritative.
+    if (!inc.casualties) {
+      const parsed = parseCasualties(inc.summary);
+      if (parsed && ((parsed.deceased ?? 0) > 0 || (parsed.injured ?? 0) > 0)) {
+        inc.casualties = parsed;
+        inc.inferredFields = [...new Set([...(inc.inferredFields ?? []), 'casualties:from-summary'])];
+        inc.needsReview = true;
+        casualtiesFilled++;
+        changed = true;
+      }
+    }
+
+    if (!changed) unchanged++;
+    incidents.push(inc);
+  }
+
+  return { incidents, titlesFixed, casualtiesFilled, unchanged };
+}
+
+// ---------------------------------------------------------------------------
+// Recovery diagnostics (design part D)
+// ---------------------------------------------------------------------------
+
+/** Legacy accreting split ids look like `imp-x-y-s0-s1`. Current ones carry
+ *  provenance and are read directly. */
+const LEGACY_SPLIT_SUFFIX_RE = /(-s[0-9a-z]+(?:\.\d+)?)+$/i;
+
+function lineageRootId(inc: MockIncident): string {
+  if (inc.splitFrom?.rootId) return inc.splitFrom.rootId;
+  return inc.id.replace(LEGACY_SPLIT_SUFFIX_RE, '') || inc.id;
+}
+
+interface Inventory {
+  total: number;
+  distinctRoots: number;
+  splitProducts: number;
+  legacySplitProducts: number;
+  needsReview: number;
+  cappedProducts: number;
+  withoutCoordinates: number;
+  topParents: { rootId: string; count: number }[];
+  /**
+   * Sum of every EXPLICITLY-STATED fatality figure currently stored. Records
+   * whose source stated no figure contribute nothing â€” they are counted
+   * separately in `withoutStatedDeceased` so the operator can see how much of
+   * the set the total does not cover.
+   */
+  totalDeceased: number;
+  /** Records that state no fatality figure at all. */
+  withoutStatedDeceased: number;
+  /** Count of every inferredFields marker across the set, by marker. */
+  inferredCounts: { key: string; count: number }[];
+  /** Records carrying at least one machine-derived field. */
+  withInferredFields: number;
+}
+
+function buildInventory(incidents: MockIncident[]): Inventory {
+  const byRoot = new Map<string, number>();
+  let splitProducts = 0;
+  let legacySplitProducts = 0;
+  let needsReview = 0;
+  let cappedProducts = 0;
+  let withoutCoordinates = 0;
+  let totalDeceased = 0;
+  let withoutStatedDeceased = 0;
+  let withInferredFields = 0;
+  const inferred = new Map<string, number>();
+
+  for (const inc of incidents) {
+    const root = lineageRootId(inc);
+    byRoot.set(root, (byRoot.get(root) ?? 0) + 1);
+    if (inc.splitFrom) splitProducts++;
+    else if (root !== inc.id) legacySplitProducts++;
+    if (inc.needsReview) needsReview++;
+    if (inc.splitFrom?.capped) cappedProducts++;
+    if (!Number.isFinite(inc.lat) || !Number.isFinite(inc.lng)) withoutCoordinates++;
+    // Only explicitly-stated figures are summed. `?? 0` would let "unknown"
+    // masquerade as "confirmed none" inside the published total.
+    if (typeof inc.casualties?.deceased === 'number') totalDeceased += inc.casualties.deceased;
+    else withoutStatedDeceased++;
+    if (inc.inferredFields?.length) {
+      withInferredFields++;
+      for (const f of inc.inferredFields) inferred.set(f, (inferred.get(f) ?? 0) + 1);
+    }
+  }
+
+  return {
+    total: incidents.length,
+    distinctRoots: byRoot.size,
+    splitProducts,
+    legacySplitProducts,
+    needsReview,
+    cappedProducts,
+    withoutCoordinates,
+    totalDeceased,
+    withoutStatedDeceased,
+    withInferredFields,
+    inferredCounts: [...inferred.entries()]
+      .map(([key, count]) => ({ key, count }))
+      .sort((a, b) => b.count - a.count),
+    topParents: [...byRoot.entries()]
+      .map(([rootId, count]) => ({ rootId, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10),
+  };
+}
+
+/** Write the current imported set to a JSON file on the operator's machine.
+ *  This is the audit trail for how any published figure was produced, and it is
+ *  the precondition for the reset below. */
+function downloadSnapshot(incidents: MockIncident[]): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const name = `incidents-snapshot-${stamp}.json`;
+  const blob = new Blob(
+    [JSON.stringify({ exportedAt: new Date().toISOString(), count: incidents.length, incidents }, null, 2)],
+    { type: 'application/json' },
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return name;
 }
 
 // ---------------------------------------------------------------------------
@@ -778,6 +1372,7 @@ export function AdminImport() {
   const addImportedIncidents = useAppStore((s) => s.addImportedIncidents);
   const importedIncidents = useAppStore((s) => s.importedIncidents);
   const clearImportedIncidents = useAppStore((s) => s.clearImportedIncidents);
+  const replaceImportedIncidents = useAppStore((s) => s.replaceImportedIncidents);
   const deduplicateImportedIncidents = useAppStore((s) => s.deduplicateImportedIncidents);
   const getStorageEstimate = useAppStore((s) => s.getStorageEstimate);
 
@@ -800,6 +1395,12 @@ export function AdminImport() {
 
   // Import state
   const [imported, setImported] = useState<number | null>(null);
+  const [importReport, setImportReport] = useState<ImportReport | null>(null);
+  /** Batch computed by runImport, held across the duplicate-review step so the
+   *  operator confirms exactly the records they were shown. */
+  const [pendingBatch, setPendingBatch] = useState<SplitBatchResult | null>(null);
+  /** Source rows held after an F5 refusal, offered for import WITHOUT splitting. */
+  const [unsplitOffer, setUnsplitOffer] = useState<MockIncident[] | null>(null);
   const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
   const [skipIds, setSkipIds] = useState<Set<string>>(new Set());
   const [showDedupScan, setShowDedupScan] = useState(false);
@@ -816,7 +1417,8 @@ export function AdminImport() {
   const reset = () => {
     setHeaders([]); setDataRows([]); setMapping({} as Record<TargetKey, number | -1>);
     setError(''); setNotice(''); setSortedRows([]); setSorting(false); setSorted(false);
-    setImported(null); setFileName('');
+    setImported(null); setImportReport(null); setPendingBatch(null); setUnsplitOffer(null);
+    setDuplicates([]); setSkipIds(new Set()); setFileName('');
     setPdfExtracting(false); setPdfPageCount(0); setIsPdf(false);
     attachments.forEach(a => { if (a.thumbnailUrl) URL.revokeObjectURL(a.thumbnailUrl); });
     setAttachments([]); setExpandedRow(null);
@@ -848,14 +1450,14 @@ export function AdminImport() {
           setPdfExtracting(false);
         })
         .catch(() => {
-          setError('Failed to read PDF — the file may be encrypted or corrupted.');
+          setError('Failed to read PDF â€” the file may be encrypted or corrupted.');
           setPdfExtracting(false);
         });
       return;
     }
 
     if (['xlsx', 'xls'].includes(ext)) {
-      setNotice('Spreadsheet detected — XLS/XLSX files are parsed server-side (SheetJS). Export as CSV for local preview and column mapping.');
+      setNotice('Spreadsheet detected â€” XLS/XLSX files are parsed server-side (SheetJS). Export as CSV for local preview and column mapping.');
       return;
     }
     if (ext === 'docx') {
@@ -879,13 +1481,13 @@ export function AdminImport() {
           setPdfExtracting(false);
         })
         .catch(() => {
-          setError('Failed to read document — the file may be corrupted or password-protected.');
+          setError('Failed to read document â€” the file may be corrupted or password-protected.');
           setPdfExtracting(false);
         });
       return;
     }
     if (ext === 'doc') {
-      setNotice('Legacy .doc format detected — please save as .docx or .pdf and re-upload for automatic extraction.');
+      setNotice('Legacy .doc format detected â€” please save as .docx or .pdf and re-upload for automatic extraction.');
       return;
     }
     if (!['csv', 'tsv', 'txt'].includes(ext)) {
@@ -967,8 +1569,11 @@ export function AdminImport() {
   const runAISort = useCallback(async () => {
     if (dataRows.length === 0) return;
     setSorting(true);
-    // Simulate processing delay for UX
-    await new Promise(r => setTimeout(r, 800 + Math.random() * 600));
+    // No artificial delay. `setTimeout(800 + Math.random() * 600)` existed only
+    // to make a deterministic regex pass feel like an assessed AI judgement.
+    // Dressing up a rules engine as a model is how the operator ends up
+    // trusting a keyword guess.
+    await Promise.resolve();
 
     const results = dataRows.map(row => aiSortRow(row, mapping));
     setSortedRows(results);
@@ -976,46 +1581,129 @@ export function AdminImport() {
     setSorting(false);
   }, [dataRows, mapping]);
 
+  const buildIncidentsFromSource = (): MockIncident[] | null => {
+    // `isPdf` is set for PDF and DOCX. Every field on that path is
+    // pattern-matched out of prose, so each record is marked as such.
+    const opts: BuildOptions = { documentDerived: isPdf };
+    if (sorted && sortedRows.length > 0) return sortedRows.map((row, i) => sortedRowToIncident(row, i, opts));
+    if (dataRows.length > 0) return dataRows.map((row, i) => rawRowToIncident(row, mapping, i, opts));
+    return null;
+  };
+
+  /** Stage a computed batch and report precisely what the store accepted. */
+  const commitImport = (
+    batch: SplitBatchResult,
+    toStage: MockIncident[],
+    skippedByOperator: number,
+    unsplit = false,
+  ) => {
+    // Identify outcomes by ID, not by array length. The store OVERWRITES on an
+    // id match, so a length delta cannot tell "replaced an existing record"
+    // apart from "refused as a duplicate" â€” and it reported the former as the
+    // latter, stating the opposite of what happened.
+    const beforeIds = new Set(useAppStore.getState().importedIncidents.map(i => i.id));
+    if (toStage.length > 0) addImportedIncidents(toStage);
+    const afterState = useAppStore.getState().importedIncidents;
+    const afterIds = new Set(afterState.map(i => i.id));
+
+    let staged = 0;
+    let replacedInStore = 0;
+    let rejectedByStore = 0;
+    for (const inc of toStage) {
+      if (beforeIds.has(inc.id)) replacedInStore++;
+      else if (afterIds.has(inc.id)) staged++;
+      else rejectedByStore++;
+    }
+
+    setImported(staged);
+    setImportReport({
+      fileName,
+      sourceRows: batch.originalTotal,
+      rowsSplit: batch.splitCount,
+      recordsAdded: batch.newTotal - batch.originalTotal,
+      fragmentsMerged: batch.mergedFragments,
+      capped: batch.capped,
+      offered: toStage.length,
+      skippedByOperator,
+      staged,
+      rejectedByStore,
+      replacedInStore,
+      storedTotal: afterState.length,
+      unsplit,
+    });
+    setPendingBatch(null);
+  };
+
+  /**
+   * Stage the source rows exactly as read, with no splitting at all. Used after
+   * an F5 refusal. Nothing is invented: one stored record per source row, each
+   * marked needsReview so it cannot reach the map before a human has read it.
+   */
+  const importWithoutSplitting = () => {
+    const rows = unsplitOffer;
+    if (!rows) return;
+    setError('');
+    setUnsplitOffer(null);
+    const flat = rows.map(r => ({
+      ...r,
+      inferredFields: [...new Set([...(r.inferredFields ?? [])])],
+      needsReview: true,
+    }));
+    commitImport(
+      {
+        result: flat, splitCount: 0, newTotal: flat.length, originalTotal: rows.length,
+        skipped: 0, capped: 0, mergedFragments: 0, factor: 1,
+        exceedsBatchLimit: false, worstOffenders: [],
+      },
+      flat,
+      0,
+      true,
+    );
+  };
+
   const runImport = () => {
-    let newIncidents: MockIncident[];
-    if (sorted && sortedRows.length > 0) {
-      newIncidents = sortedRows.map((row, i) => sortedRowToIncident(row, i));
-    } else if (dataRows.length > 0) {
-      newIncidents = dataRows.map((row, i) => rawRowToIncident(row, mapping, i));
-    } else {
+    const newIncidents = buildIncidentsFromSource();
+    if (!newIncidents) return;
+    setError('');
+    setUnsplitOffer(null);
+
+    const towns = Object.keys(SA_TOWN_COORDS);
+    const batch = splitAllMultiIncidents(newIncidents, towns, geocodeForSplitter);
+
+    // F5 â€” import-time rail. A multiplication must be discovered here, not later
+    // on the dashboard. Refusal is hard: nothing reaches the store.
+    if (batch.exceedsBatchLimit) {
+      setError(buildRefusalMessage(batch, 'Importing this file'));
+      // Offer the escape hatch. Previously a legitimately dense multi-incident
+      // source became wholly unimportable with no path forward but hand-editing
+      // the file. The rows themselves are fine â€” it is the SPLIT that is
+      // untrustworthy â€” so they can be staged unsplit, flagged for review.
+      setUnsplitOffer(newIncidents);
       return;
     }
 
-    // Split multi-incident entries before importing
-    const towns = Object.keys(SA_TOWN_COORDS);
-    const { result: splitIncidents, splitCount } = splitAllMultiIncidents(newIncidents, towns, geocodeIncident);
-    if (splitCount > 0) {
-      console.log(`[Import] Split ${splitCount} multi-incident entries → ${splitIncidents.length} total`);
-    }
+    // Keep the computed batch. Re-deriving it on confirm would re-roll geocoding
+    // and mint different ids for the very records the operator just reviewed.
+    setPendingBatch(batch);
 
-    const dupes = findDuplicates(splitIncidents, importedIncidents);
+    const dupes = findDuplicates(batch.result, importedIncidents);
     if (dupes.length > 0) {
       setDuplicates(dupes);
       setSkipIds(new Set(dupes.map(d => d.newIncident.id)));
       return;
     }
 
-    addImportedIncidents(splitIncidents);
-    setImported(splitIncidents.length);
+    commitImport(batch, batch.result, 0);
   };
 
-  const confirmImportWithDupes = () => {
-    let newIncidents: MockIncident[];
-    if (sorted && sortedRows.length > 0) {
-      newIncidents = sortedRows.map((row, i) => sortedRowToIncident(row, i));
-    } else {
-      newIncidents = dataRows.map((row, i) => rawRowToIncident(row, mapping, i));
-    }
-    const towns = Object.keys(SA_TOWN_COORDS);
-    const { result: splitIncidents } = splitAllMultiIncidents(newIncidents, towns, geocodeIncident);
-    const filtered = splitIncidents.filter(inc => !skipIds.has(inc.id));
-    if (filtered.length > 0) addImportedIncidents(filtered);
-    setImported(filtered.length);
+  /** `skip` is passed explicitly â€” reading it from state here would use the value
+   *  from before the caller's setSkipIds, which is how "Import all anyway"
+   *  previously dropped the very records it promised to keep. */
+  const confirmImportWithDupes = (skip: Set<string>) => {
+    const batch = pendingBatch;
+    if (!batch) return;
+    const toStage = batch.result.filter(inc => !skip.has(inc.id));
+    commitImport(batch, toStage, batch.result.length - toStage.length);
     setDuplicates([]);
     setSkipIds(new Set());
   };
@@ -1027,63 +1715,143 @@ export function AdminImport() {
   };
 
   const removeInternalDupe = (id: string) => {
-    const updated = importedIncidents.filter(i => i.id !== id);
-    clearImportedIncidents();
-    if (updated.length > 0) addImportedIncidents(updated);
+    // Atomic replace â€” clear-then-add leaves the store empty if the second call
+    // never runs, and re-adding passes every record back through the store's
+    // fingerprint guard, which can silently discard survivors.
+    replaceImportedIncidents(importedIncidents.filter(i => i.id !== id));
     setInternalDupes(prev => prev.filter(d => d.newIncident.id !== id && d.existing.id !== id));
   };
 
-  const [cleanupReport, setCleanupReport] = useState<{ fixed: number; split: number; removed: number; deduplicated: number } | null>(null);
+  const [cleanupReport, setCleanupReport] = useState<CleanupReport | null>(null);
   const [dedupReport, setDedupReport] = useState<number | null>(null);
   const [actionInProgress, setActionInProgress] = useState<'dedup' | 'split' | 'scan' | null>(null);
+  const [splitPreview, setSplitPreview] = useState<SplitPreview | null>(null);
+  const [splitRefusal, setSplitRefusal] = useState('');
+  const [cleanupError, setCleanupError] = useState('');
+  const [dedupPreview, setDedupPreview] = useState<DedupPreview | null>(null);
+  const [reviewReport, setReviewReport] = useState<string>('');
 
-  const runDedup = () => {
+  /**
+   * "Remove Duplicates" used to call deduplicateImportedIncidents() straight
+   * from the button handler: no preview, no confirmation, no list of what it
+   * deleted, no undo â€” only an after-the-fact count. Every other destructive
+   * path in this file is behind a preview-then-confirm rail or a typed RESET
+   * gate; this one now is too, because a fingerprint collision here deletes a
+   * genuinely distinct incident permanently.
+   */
+  const previewDedup = () => {
+    setDedupReport(null);
+    setDedupPreview(computeDedupPreview(importedIncidents));
+  };
+
+  const applyDedup = () => {
+    const plan = dedupPreview;
+    if (!plan) return;
+    // Refuse a stale plan: the set must be byte-identical to what was shown.
+    const currentKey = incidentSetKey(importedIncidents);
+    if (plan.setKey !== currentKey) {
+      setDedupPreview(null);
+      setCleanupError('The stored set changed since these duplicates were listed. Nothing was deleted â€” run Remove Duplicates again.');
+      return;
+    }
     const removed = deduplicateImportedIncidents();
+    setDedupPreview(null);
     setDedupReport(removed);
   };
 
-  const cleanImportedData = () => {
+  /**
+   * Clear needsReview on records an editor has actually looked at. Without this
+   * there is no path from "imported" to "publishable", and the needsReview flag
+   * would be a one-way trap rather than a review queue.
+   */
+  const markReviewed = (ids: Set<string> | null) => {
+    const target = ids ?? new Set(importedIncidents.filter(i => i.needsReview).map(i => i.id));
+    let n = 0;
+    const next = importedIncidents.map(inc => {
+      if (!target.has(inc.id) || !inc.needsReview) return inc;
+      n++;
+      return { ...inc, needsReview: false };
+    });
+    if (n === 0) { setReviewReport('Nothing to confirm â€” no record is awaiting review.'); return; }
+    replaceImportedIncidents(next);
+    setReviewReport(`${n} record${n === 1 ? '' : 's'} confirmed by you and released to the public map. Their machine-derived fields are still listed on each record.`);
+  };
+
+  /**
+   * F4 â€” compute a split plan and commit NOTHING. The operator sees before â†’
+   * after, the factor, what was capped, and the rows responsible, then decides.
+   */
+  const previewSplitAndClean = () => {
+    setSplitRefusal('');
+    setCleanupError('');
+    setSplitPreview(null);
+
     const towns = Object.keys(SA_TOWN_COORDS);
-    let fixed = 0;
-    let removed = 0;
+    const batch = splitAllMultiIncidents(importedIncidents, towns, geocodeForSplitter);
 
-    // Step 1: Split multi-incident entries using the robust splitter
-    const { result: splitResult, splitCount } = splitAllMultiIncidents(
-      importedIncidents, towns, geocodeIncident,
-    );
-    const splitTotal = splitResult.length - importedIncidents.length;
-
-    // Step 2: Fix titles, casualties, and other data quality issues
-    const cleaned: MockIncident[] = [];
-    for (const inc of splitResult) {
-      let needsFix = false;
-
-      // Fix generic/garbage titles
-      if (/^(?:\d+\s*(?:killed|dead)|[A-Z]\s+killed|unknown|imported incident)/i.test(inc.title)) {
-        const nameMatch = inc.summary.match(/([A-Z][a-z]+(?:\s+(?:van|de|du|le|von)\s+)?(?:\s+[A-Z][a-z]+)+)/);
-        if (nameMatch) {
-          inc.title = `${nameMatch[0]} — ${inc.town || inc.province || 'Unknown location'}`;
-        } else if (inc.summary.length > 10) {
-          inc.title = inc.summary.slice(0, 80);
-        }
-        needsFix = true;
-      }
-
-      // Fix missing casualties: if summary mentions killing but no casualties set
-      if (!inc.casualties && /\b(killed|murdered|dead|fatal|slain|shot dead)\b/i.test(inc.summary)) {
-        const countMatch = inc.summary.match(/(\d+)\s*(?:killed|dead|deceased|murdered)/i);
-        inc.casualties = { deceased: countMatch ? parseInt(countMatch[1]!, 10) : 1, injured: 0 };
-        needsFix = true;
-      }
-
-      if (needsFix) fixed++;
-      cleaned.push(inc);
+    if (batch.exceedsBatchLimit) {
+      setSplitRefusal(buildRefusalMessage(batch, 'Splitting the stored set'));
+      return;
     }
 
-    clearImportedIncidents();
-    if (cleaned.length > 0) addImportedIncidents(cleaned);
-    const deduplicated = deduplicateImportedIncidents();
-    setCleanupReport({ fixed, split: splitTotal, removed, deduplicated });
+    setSplitPreview({
+      setKey: incidentSetKey(importedIncidents),
+      before: batch.originalTotal,
+      after: batch.newTotal,
+      factor: batch.factor,
+      splitCount: batch.splitCount,
+      alreadySplit: batch.skipped,
+      capped: batch.capped,
+      mergedFragments: batch.mergedFragments,
+      worstOffenders: batch.worstOffenders,
+      result: batch.result,
+    });
+  };
+
+  /**
+   * F1/F2/F3 â€” the cleanup pass itself never splits. Pass a confirmed preview to
+   * apply split + clean; pass null to clean only. Either way the write is a
+   * single atomic replace of a freshly cloned array.
+   */
+  const applyCleanup = (preview: SplitPreview | null) => {
+    setCleanupError('');
+    const before = importedIncidents.length;
+
+    // Compare the full id list, not just the count. A same-length change
+    // (one record removed, one added) previously slipped past this guard and
+    // the stale plan was then written wholesale over the live set.
+    if (preview && preview.setKey !== incidentSetKey(importedIncidents)) {
+      setSplitPreview(null);
+      setCleanupError(`The stored set changed (${preview.before} â†’ ${before} records, or the same count with different records) since this plan was computed. Nothing was written â€” run Split & Clean again.`);
+      return;
+    }
+
+    const source = preview ? preview.result : importedIncidents;
+    const { incidents, titlesFixed, casualtiesFilled, unchanged } = cleanIncidents(source);
+
+    // Invariant: cleaning is one-in-one-out. If that ever stops being true, stop
+    // rather than write a set that has quietly lost records.
+    if (incidents.length !== source.length) {
+      setCleanupError(`Aborted â€” the cleanup pass would have changed the record count from ${source.length} to ${incidents.length}. Nothing was written.`);
+      return;
+    }
+
+    replaceImportedIncidents(incidents);
+    setSplitPreview(null);
+    setCleanupReport({
+      action: preview ? 'split-clean' : 'clean-only',
+      before,
+      after: incidents.length,
+      rowsSplit: preview?.splitCount ?? 0,
+      recordsAdded: preview ? preview.after - preview.before : 0,
+      fragmentsMerged: preview?.mergedFragments ?? 0,
+      alreadySplit: preview?.alreadySplit ?? 0,
+      capped: preview?.capped ?? 0,
+      titlesFixed,
+      casualtiesFilled,
+      unchanged,
+      removed: 0,
+    });
   };
 
   const handleDedup = () => {
@@ -1091,7 +1859,7 @@ export function AdminImport() {
     setDedupReport(null);
     setCleanupReport(null);
     setTimeout(() => {
-      runDedup();
+      previewDedup();
       setActionInProgress(null);
     }, 50);
   };
@@ -1101,7 +1869,26 @@ export function AdminImport() {
     setDedupReport(null);
     setCleanupReport(null);
     setTimeout(() => {
-      cleanImportedData();
+      previewSplitAndClean();
+      setActionInProgress(null);
+    }, 50);
+  };
+
+  const handleApplyPlan = () => {
+    const plan = splitPreview;
+    setActionInProgress('split');
+    setTimeout(() => {
+      applyCleanup(plan);
+      setActionInProgress(null);
+    }, 50);
+  };
+
+  const handleCleanOnly = () => {
+    setActionInProgress('split');
+    setDedupReport(null);
+    setCleanupReport(null);
+    setTimeout(() => {
+      applyCleanup(null);
       setActionInProgress(null);
     }, 50);
   };
@@ -1112,6 +1899,30 @@ export function AdminImport() {
       scanForInternalDupes();
       setActionInProgress(null);
     }, 50);
+  };
+
+  // --- Recovery & reset (design part D) ---
+  const inventory = useMemo(() => buildInventory(importedIncidents), [importedIncidents]);
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [snapshotName, setSnapshotName] = useState('');
+  const [resetResult, setResetResult] = useState<number | null>(null);
+
+  const handleSnapshot = () => {
+    setSnapshotName(downloadSnapshot(importedIncidents));
+  };
+
+  const handleReset = () => {
+    if (resetConfirmText.trim().toUpperCase() !== 'RESET') return;
+    const cleared = importedIncidents.length;
+    clearImportedIncidents();
+    setResetConfirmText('');
+    setResetResult(cleared);
+    setSplitPreview(null);
+    setCleanupReport(null);
+    setDedupReport(null);
+    setInternalDupes([]);
+    setShowDedupScan(false);
   };
 
   const mappedCount = useMemo(() => Object.values(mapping).filter((v) => v >= 0).length, [mapping]);
@@ -1134,7 +1945,7 @@ export function AdminImport() {
       fakeNewsCount += r.flags.filter(f => f.type === 'fake_news').length;
       gapCount += r.flags.filter(f => f.type === 'gap').length;
     }
-    return { modules, severities, piiCount, warningCount, flagCount, fakeNewsCount, gapCount, avgConfidence: Math.round(sortedRows.reduce((s, r) => s + r.confidence, 0) / sortedRows.length) };
+    return { modules, severities, piiCount, warningCount, flagCount, fakeNewsCount, gapCount, avgCompleteness: Math.round(sortedRows.reduce((s, r) => s + r.completeness, 0) / sortedRows.length) };
   }, [sortedRows]);
 
   const oversizedAttachments = attachments.filter(a => a.sizeBytes > MAX_IMAGE_BYTES);
@@ -1144,10 +1955,10 @@ export function AdminImport() {
     <div className="admin-page">
       <div className="admin-page-header">
         <h1>Import Data</h1>
-        <p>Upload incident records, attach evidence files, and use AI to sort public vs. confidential fields. Everything enters the review queue — nothing publishes automatically.</p>
+        <p>Upload incident records, attach evidence files, and use AI to sort public vs. confidential fields. Everything enters the review queue â€” nothing publishes automatically.</p>
       </div>
 
-      {/* ── Upload zone ──────────────────────────────────────────────── */}
+      {/* â”€â”€ Upload zone â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="admin-card">
         <div
           className="import-dropzone"
@@ -1159,7 +1970,7 @@ export function AdminImport() {
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
           </svg>
           <div className="import-dropzone-main">{fileName || 'Drop a file here, or click to choose'}</div>
-          <div className="import-dropzone-sub">CSV / TSV / PDF parsed here · XLS / XLSX / DOC handled on upload</div>
+          <div className="import-dropzone-sub">CSV / TSV / PDF parsed here Â· XLS / XLSX / DOC handled on upload</div>
           <input
             ref={inputRef}
             type="file"
@@ -1168,27 +1979,42 @@ export function AdminImport() {
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
           />
         </div>
-        {error && <div className="import-msg error">{error}</div>}
+        {error && (
+          <div className="import-msg error" style={{ whiteSpace: 'pre-wrap' }}>
+            {error}
+            {unsplitOffer && (
+              <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={importWithoutSplitting}>
+                  Import all {unsplitOffer.length} rows WITHOUT splitting
+                </button>
+                <span style={{ fontSize: 11 }}>
+                  One stored record per source row, exactly as read. Nothing is separated out, so no record count is inflated â€”
+                  each row keeps all of its incidents in one summary and is held for review.
+                </span>
+              </div>
+            )}
+          </div>
+        )}
         {notice && <div className="import-msg notice">{notice}</div>}
         {pdfExtracting && (
           <div className="import-msg notice" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="spinner-dot" />
-            Extracting text from document — reading content…
+            Extracting text from document â€” reading contentâ€¦
           </div>
         )}
         {isPdf && !pdfExtracting && dataRows.length > 0 && (
           <div className="import-msg notice">
-            Document extracted — {dataRows.length} potential incident{dataRows.length !== 1 ? 's' : ''} identified. Fields are auto-mapped. Use <strong>AI Sort</strong> to classify, extract PII, and assess each record.
+            Document extracted â€” {dataRows.length} potential incident{dataRows.length !== 1 ? 's' : ''} identified. Fields are auto-mapped. Use <strong>AI Sort</strong> to classify, extract PII, and assess each record.
           </div>
         )}
       </div>
 
-      {/* ── Attachments / Evidence ────────────────────────────────────── */}
+      {/* â”€â”€ Attachments / Evidence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="admin-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ margin: 0 }}>Evidence Attachments</h2>
           <button className="btn btn-secondary" onClick={() => attachRef.current?.click()} disabled={compressing}>
-            {compressing ? 'Processing…' : '+ Add files'}
+            {compressing ? 'Processingâ€¦' : '+ Add files'}
           </button>
           <input
             ref={attachRef}
@@ -1221,18 +2047,18 @@ export function AdminImport() {
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <span>{formatBytes(a.sizeBytes)}</span>
                     {a.compressedSizeBytes && (
-                      <span style={{ color: '#38a169' }}>→ {formatBytes(a.compressedSizeBytes)} compressed</span>
+                      <span style={{ color: '#38a169' }}>â†’ {formatBytes(a.compressedSizeBytes)} compressed</span>
                     )}
                     {a.sizeBytes > MAX_IMAGE_BYTES && !a.compressedBlob && !a.isImage && (
-                      <span style={{ color: '#ed8936' }}>Large file — 7-day retention</span>
+                      <span style={{ color: '#ed8936' }}>Large file â€” 7-day retention</span>
                     )}
-                    <span>·</span>
+                    <span>Â·</span>
                     {a.isImage ? (
                       <span style={{ color: a.status === 'approved' ? '#38a169' : a.status === 'rejected' ? '#c53030' : '#d69e2e' }}>
-                        {a.status === 'approved' ? '✓ Approved for public' : a.status === 'rejected' ? '✗ Confidential only' : '◌ Pending review'}
+                        {a.status === 'approved' ? 'âœ“ Approved for public' : a.status === 'rejected' ? 'âœ— Confidential only' : 'â—Œ Pending review'}
                       </span>
                     ) : (
-                      <span style={{ color: 'var(--text-muted)' }}>Document — admin only</span>
+                      <span style={{ color: 'var(--text-muted)' }}>Document â€” admin only</span>
                     )}
                   </div>
                   {a.sizeBytes > MAX_IMAGE_BYTES && (
@@ -1259,7 +2085,7 @@ export function AdminImport() {
                         onClick={() => updateAttachment(a.id, { status: a.status === 'approved' ? 'pending' : 'approved' })}
                         title="Approve for public viewing"
                       >
-                        ✓
+                        âœ“
                       </button>
                       <button
                         className="btn btn-secondary"
@@ -1267,7 +2093,7 @@ export function AdminImport() {
                         onClick={() => updateAttachment(a.id, { status: a.status === 'rejected' ? 'pending' : 'rejected' })}
                         title="Keep confidential (admin only)"
                       >
-                        ✗
+                        âœ—
                       </button>
                     </>
                   )}
@@ -1277,7 +2103,7 @@ export function AdminImport() {
                     onClick={() => removeAttachment(a.id)}
                     title="Remove"
                   >
-                    ×
+                    Ã—
                   </button>
                 </div>
               </div>
@@ -1287,20 +2113,20 @@ export function AdminImport() {
 
         {oversizedAttachments.length > 0 && (
           <div className="import-msg warning" style={{ marginTop: 8 }}>
-            <strong>{oversizedAttachments.length} oversized file{oversizedAttachments.length > 1 ? 's' : ''}</strong> — originals stored in 7-day retention queue.
+            <strong>{oversizedAttachments.length} oversized file{oversizedAttachments.length > 1 ? 's' : ''}</strong> â€” originals stored in 7-day retention queue.
             {' '}Check "Keep permanently" for files that should not auto-delete. All others are removed after 7 days to save storage.
           </div>
         )}
       </div>
 
-      {/* ── Column mapping ───────────────────────────────────────────── */}
+      {/* â”€â”€ Column mapping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {headers.length > 0 && (
         <>
           <div className="admin-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div>
                 <h2 style={{ margin: 0 }}>Map Columns to Fields</h2>
-                <p className="form-hint" style={{ margin: '4px 0 0' }}>{mappedCount} of {TARGET_FIELDS.length} fields mapped. Confidential fields marked with 🔒</p>
+                <p className="form-hint" style={{ margin: '4px 0 0' }}>{mappedCount} of {TARGET_FIELDS.length} fields mapped. Confidential fields marked with ðŸ”’</p>
               </div>
               <button
                 className="btn btn-primary"
@@ -1309,9 +2135,9 @@ export function AdminImport() {
                 style={{ display: 'flex', alignItems: 'center', gap: 6, background: sorted ? '#38a169' : undefined }}
               >
                 {sorting ? (
-                  <><span className="spinner-dot" /> Sorting…</>
+                  <><span className="spinner-dot" /> Sortingâ€¦</>
                 ) : sorted ? (
-                  '✓ AI Sorted'
+                  'âœ“ AI Sorted'
                 ) : (
                   <>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1327,7 +2153,7 @@ export function AdminImport() {
               {TARGET_FIELDS.map((f) => (
                 <div key={f.key} className="import-map-row">
                   <span className="import-map-target">
-                    {f.confidential && <span style={{ marginRight: 4 }} title="Confidential — admin only">🔒</span>}
+                    {f.confidential && <span style={{ marginRight: 4 }} title="Confidential â€” admin only">ðŸ”’</span>}
                     {f.label}
                   </span>
                   <select
@@ -1335,7 +2161,7 @@ export function AdminImport() {
                     value={mapping[f.key] ?? -1}
                     onChange={(e) => { setMapping((m) => ({ ...m, [f.key]: Number(e.target.value) })); setSorted(false); setSortedRows([]); }}
                   >
-                    <option value={-1}>— not mapped —</option>
+                    <option value={-1}>â€” not mapped â€”</option>
                     {headers.map((h, i) => <option key={i} value={i}>{h || `Column ${i + 1}`}</option>)}
                   </select>
                 </div>
@@ -1343,7 +2169,7 @@ export function AdminImport() {
             </div>
           </div>
 
-          {/* ── AI Sort results ─────────────────────────────────────────── */}
+          {/* â”€â”€ AI Sort results â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           {sorted && sortedRows.length > 0 && stats && (
             <>
               <div className="admin-card">
@@ -1362,8 +2188,10 @@ export function AdminImport() {
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Warnings</div>
                   </div>
                   <div style={{ background: 'var(--bg-elevated)', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: '#38a169' }}>{stats.avgConfidence}%</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Avg confidence</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: '#38a169' }}>{stats.avgCompleteness}%</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }} title="Share of target fields that were mapped. This is a completeness measure, not an accuracy or confidence judgement.">
+                      Avg fields mapped
+                    </div>
                   </div>
                   {stats.fakeNewsCount > 0 && (
                     <div style={{ background: '#ef444422', padding: '10px 12px', borderRadius: 6, border: '1px solid #ef444444' }}>
@@ -1410,7 +2238,7 @@ export function AdminImport() {
               <div className="admin-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                   <h2 style={{ margin: 0 }}>Sorted Records</h2>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{sortedRows.length} rows · click to expand</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{sortedRows.length} rows Â· click to expand</span>
                 </div>
                 <div style={{ display: 'grid', gap: 6 }}>
                   {sortedRows.map((row, i) => {
@@ -1445,29 +2273,32 @@ export function AdminImport() {
                             {row.severity}
                           </span>
                           <span style={{ color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {row.public['Summary / notes'] || row.public['Location / where'] || row.rawRow[0] || '—'}
+                            {row.public['Summary / notes'] || row.public['Location / where'] || row.rawRow[0] || 'â€”'}
                           </span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             {row.flags.some(f => f.type === 'fake_news') && (
-                              <span title="Possible fake news detected" style={{ fontSize: 10, color: '#ef4444', fontWeight: 700 }}>🚩 FAKE?</span>
+                              <span title="Possible fake news detected" style={{ fontSize: 10, color: '#ef4444', fontWeight: 700 }}>ðŸš© FAKE?</span>
                             )}
                             {row.flags.some(f => f.type === 'inaccurate') && (
-                              <span title="Inaccurate data flagged" style={{ fontSize: 10, color: '#ef4444' }}>❌</span>
+                              <span title="Inaccurate data flagged" style={{ fontSize: 10, color: '#ef4444' }}>âŒ</span>
                             )}
                             {row.warnings.length > 0 && (
-                              <span title={row.warnings.join('\n')} style={{ fontSize: 10, color: '#d69e2e' }}>⚠ {row.warnings.length}</span>
+                              <span title={row.warnings.join('\n')} style={{ fontSize: 10, color: '#d69e2e' }}>âš  {row.warnings.length}</span>
                             )}
                             {Object.keys(row.confidential).length > 0 && (
-                              <span style={{ fontSize: 10, color: '#c53030' }} title="Contains confidential data">🔒</span>
+                              <span style={{ fontSize: 10, color: '#c53030' }} title="Contains confidential data">ðŸ”’</span>
                             )}
-                            <span style={{
-                              fontSize: 9, padding: '1px 5px', borderRadius: 4,
-                              background: row.confidence >= 70 ? 'rgba(56,161,105,0.15)' : row.confidence >= 40 ? 'rgba(214,158,46,0.15)' : 'rgba(197,48,48,0.15)',
-                              color: row.confidence >= 70 ? '#38a169' : row.confidence >= 40 ? '#d69e2e' : '#c53030',
-                            }}>
-                              {row.confidence}%
+                            <span
+                              title="Share of target fields mapped for this row. Completeness, NOT accuracy â€” it says nothing about whether any value is correct."
+                              style={{
+                                fontSize: 9, padding: '1px 5px', borderRadius: 4,
+                                background: row.completeness >= 70 ? 'rgba(56,161,105,0.15)' : row.completeness >= 40 ? 'rgba(214,158,46,0.15)' : 'rgba(197,48,48,0.15)',
+                                color: row.completeness >= 70 ? '#38a169' : row.completeness >= 40 ? '#d69e2e' : '#c53030',
+                              }}
+                            >
+                              {row.completeness}% mapped
                             </span>
-                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{expanded ? '▲' : '▼'}</span>
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{expanded ? 'â–²' : 'â–¼'}</span>
                           </div>
                         </div>
 
@@ -1480,7 +2311,7 @@ export function AdminImport() {
                             {/* Public fields */}
                             <div>
                               <div style={{ fontSize: 10, fontWeight: 700, color: '#38a169', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-                                Public — visible on map
+                                Public â€” visible on map
                               </div>
                               {Object.entries(row.public).map(([key, val]) => (
                                 <div key={key} style={{ fontSize: 11, marginBottom: 3 }}>
@@ -1496,7 +2327,7 @@ export function AdminImport() {
                             {/* Confidential fields */}
                             <div>
                               <div style={{ fontSize: 10, fontWeight: 700, color: '#c53030', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-                                🔒 Confidential — admin only
+                                ðŸ”’ Confidential â€” admin only
                               </div>
                               {Object.entries(row.confidential).map(([key, val]) => (
                                 <div key={key} style={{ fontSize: 11, marginBottom: 3 }}>
@@ -1510,16 +2341,29 @@ export function AdminImport() {
                               {row.warnings.length > 0 && (
                                 <div style={{ marginTop: 6 }}>
                                   {row.warnings.map((w, wi) => (
-                                    <div key={wi} style={{ fontSize: 10, color: '#d69e2e', marginBottom: 2 }}>⚠ {w}</div>
+                                    <div key={wi} style={{ fontSize: 10, color: '#d69e2e', marginBottom: 2 }}>âš  {w}</div>
                                   ))}
                                 </div>
                               )}
                             </div>
 
+                            {row.inferredFields.length > 0 && (
+                              <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, color: '#d69e2e' }}>
+                                  Machine-derived â€” the source did not state these
+                                </div>
+                                {row.inferredFields.map(f => (
+                                  <div key={f} style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>
+                                    â—‹ {inferredFieldLabel(f)}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
                             {row.flags.length > 0 && (
                               <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, color: 'var(--text-muted)' }}>
-                                  AI Flags — admin review required
+                                  AI Flags â€” admin review required
                                 </div>
                                 {row.flags.map((flag, fi) => (
                                   <div key={fi} style={{
@@ -1529,9 +2373,9 @@ export function AdminImport() {
                                     border: `1px solid ${flag.type === 'fake_news' || flag.type === 'inaccurate' ? '#ef444433' : flag.type === 'suspicious' ? '#f9731633' : 'var(--border)'}`,
                                   }}>
                                     <span style={{ fontWeight: 600 }}>
-                                      {flag.type === 'fake_news' ? '🚩 POSSIBLE FAKE' : flag.type === 'inaccurate' ? '❌ INACCURATE' : flag.type === 'suspicious' ? '⚠ SUSPICIOUS' : '○ GAP'}
+                                      {flag.type === 'fake_news' ? 'ðŸš© POSSIBLE FAKE' : flag.type === 'inaccurate' ? 'âŒ INACCURATE' : flag.type === 'suspicious' ? 'âš  SUSPICIOUS' : 'â—‹ GAP'}
                                     </span>
-                                    {' — '}{flag.field}: {flag.message}
+                                    {' â€” '}{flag.field}: {flag.message}
                                   </div>
                                 ))}
                               </div>
@@ -1546,31 +2390,58 @@ export function AdminImport() {
             </>
           )}
 
-          {/* ── Preview (before AI sort) ────────────────────────────────── */}
+          {/* â”€â”€ Preview (before AI sort) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           {!sorted && headers.length > 0 && (
             <div className="admin-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <h2 style={{ margin: 0 }}>Raw Preview</h2>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{dataRows.length} rows</span>
               </div>
+              {isPdf && (
+                <div className="import-msg warning" style={{ marginBottom: 10 }}>
+                  These rows were pattern-matched out of document prose â€” there were no labelled source columns to read.
+                  Columns marked <strong>â—† derived</strong> below were produced by this machine, not stated by the document as a field.
+                  Verdict and case status are never derived: they stay blank until a human fills them in.
+                </div>
+              )}
               <div style={{ overflowX: 'auto' }}>
                 <table className="admin-table">
                   <thead>
-                    <tr>{TARGET_FIELDS.filter((f) => mapping[f.key] >= 0).map((f) => (
-                      <th key={f.key}>
-                        {f.confidential && <span title="Confidential" style={{ marginRight: 3 }}>🔒</span>}
-                        {f.label}
-                      </th>
-                    ))}</tr>
+                    <tr>{TARGET_FIELDS.filter((f) => mapping[f.key] >= 0).map((f) => {
+                      const derived = isPdf && DOC_DERIVED_KEYS.has(f.key);
+                      return (
+                        <th key={f.key}>
+                          {f.confidential && <span title="Confidential" style={{ marginRight: 3 }}>ðŸ”’</span>}
+                          {f.label}
+                          {derived && (
+                            <span title="Machine-derived from document text â€” not a source-supplied field" style={{ marginLeft: 4, fontSize: 9, color: '#d69e2e' }}>
+                              â—† derived
+                            </span>
+                          )}
+                        </th>
+                      );
+                    })}</tr>
                   </thead>
                   <tbody>
                     {dataRows.slice(0, 8).map((r, ri) => (
                       <tr key={ri}>
-                        {TARGET_FIELDS.filter((f) => mapping[f.key] >= 0).map((f) => (
-                          <td key={f.key} style={f.confidential ? { color: '#e78', fontStyle: 'italic' } : undefined}>
-                            {r[mapping[f.key]] ?? ''}
-                          </td>
-                        ))}
+                        {TARGET_FIELDS.filter((f) => mapping[f.key] >= 0).map((f) => {
+                          const derived = isPdf && DOC_DERIVED_KEYS.has(f.key);
+                          return (
+                            <td
+                              key={f.key}
+                              style={
+                                f.confidential
+                                  ? { color: '#e78', fontStyle: 'italic' }
+                                  : derived
+                                    ? { color: '#d69e2e' }
+                                    : undefined
+                              }
+                            >
+                              {r[mapping[f.key]] ?? ''}
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>
@@ -1580,12 +2451,12 @@ export function AdminImport() {
             </div>
           )}
 
-          {/* ── Import button ──────────────────────────────────────────── */}
+          {/* â”€â”€ Import button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="admin-card">
             {duplicates.length > 0 ? (
               <div>
                 <div className="import-msg warning" style={{ marginBottom: 12 }}>
-                  Found {duplicates.length} potential duplicate{duplicates.length !== 1 ? 's' : ''} in the new data. Review below — uncheck any you want to keep.
+                  Found {duplicates.length} potential duplicate{duplicates.length !== 1 ? 's' : ''} in the new data. Review below â€” uncheck any you want to keep.
                 </div>
                 <div style={{ overflowX: 'auto', marginBottom: 12 }}>
                   <table className="admin-table">
@@ -1617,11 +2488,11 @@ export function AdminImport() {
                           </td>
                           <td style={{ fontSize: 12 }}>
                             <div style={{ fontWeight: 600 }}>{d.newIncident.title}</div>
-                            <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{d.newIncident.dateOccurred} · {d.newIncident.town || d.newIncident.province}</div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{d.newIncident.dateOccurred} Â· {d.newIncident.town || d.newIncident.province}</div>
                           </td>
                           <td style={{ fontSize: 12 }}>
                             <div style={{ fontWeight: 600 }}>{d.existing.title}</div>
-                            <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{d.existing.dateOccurred} · {d.existing.town || d.existing.province}</div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{d.existing.dateOccurred} Â· {d.existing.town || d.existing.province}</div>
                           </td>
                           <td style={{ fontSize: 12, fontWeight: 700, color: d.score >= 80 ? '#c53030' : '#d69e2e' }}>{d.score}%</td>
                           <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{d.reasons.join(', ')}</td>
@@ -1631,13 +2502,13 @@ export function AdminImport() {
                   </table>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button className="btn btn-primary" onClick={confirmImportWithDupes}>
-                    Import {(sorted ? sortedRows.length : dataRows.length) - skipIds.size} records (skip {skipIds.size} duplicate{skipIds.size !== 1 ? 's' : ''})
+                  <button className="btn btn-primary" onClick={() => confirmImportWithDupes(skipIds)}>
+                    Import {(pendingBatch?.newTotal ?? 0) - skipIds.size} records (skip {skipIds.size} duplicate{skipIds.size !== 1 ? 's' : ''})
                   </button>
-                  <button className="btn btn-secondary" onClick={() => { setSkipIds(new Set()); confirmImportWithDupes(); }}>
-                    Import all anyway
+                  <button className="btn btn-secondary" onClick={() => confirmImportWithDupes(new Set())}>
+                    Import all {pendingBatch?.newTotal ?? 0} anyway
                   </button>
-                  <button className="btn btn-secondary" onClick={() => { setDuplicates([]); setSkipIds(new Set()); }}>Cancel</button>
+                  <button className="btn btn-secondary" onClick={() => { setDuplicates([]); setSkipIds(new Set()); setPendingBatch(null); }}>Cancel</button>
                 </div>
               </div>
             ) : imported === null ? (
@@ -1650,18 +2521,58 @@ export function AdminImport() {
                 {attachments.length > 0 && (
                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                     {attachments.length} attachment{attachments.length > 1 ? 's' : ''} will be linked
-                    {pendingAttachments.length > 0 && <span style={{ color: '#d69e2e' }}> · {pendingAttachments.length} pending approval</span>}
+                    {pendingAttachments.length > 0 && <span style={{ color: '#d69e2e' }}> Â· {pendingAttachments.length} pending approval</span>}
                   </span>
                 )}
               </div>
             ) : (
               <div className="import-msg success">
-                ✓ {imported} records staged to the review queue from <strong>{fileName}</strong>.
-                {sorted && <> AI separated public/confidential fields. </>}
+                âœ“ {imported} records staged to the review queue from <strong>{importReport?.fileName || fileName}</strong>.
+                {sorted && <> The sorter separated public/confidential fields. </>}
                 {attachments.length > 0 && (
                   <> {attachments.filter(a => a.status === 'approved').length} attachment{attachments.filter(a => a.status === 'approved').length !== 1 ? 's' : ''} approved for public, {attachments.filter(a => a.status !== 'approved').length} kept confidential. </>
                 )}
                 An editor must approve each record before it appears on the map.
+                {importReport && (
+                  <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, lineHeight: 1.6 }}>
+                    <li><strong>{importReport.sourceRows}</strong> source row{importReport.sourceRows === 1 ? '' : 's'} read from the file</li>
+                    {importReport.unsplit && (
+                      <li style={{ color: '#d69e2e' }}>
+                        Imported <strong>without splitting</strong> at your request â€” one record per source row, exactly as read. Rows holding several incidents still hold them.
+                      </li>
+                    )}
+                    <li>
+                      <strong>{importReport.rowsSplit}</strong> row{importReport.rowsSplit === 1 ? '' : 's'} contained more than one incident and were split,
+                      producing <strong>{importReport.recordsAdded}</strong> extra record{importReport.recordsAdded === 1 ? '' : 's'}
+                      {importReport.sourceRows > 0 && <> ({(importReport.offered / importReport.sourceRows).toFixed(2)}Ã— before duplicate handling)</>}
+                    </li>
+                    <li><strong>{importReport.fragmentsMerged}</strong> fragment{importReport.fragmentsMerged === 1 ? '' : 's'} merged back into a neighbouring entry (too little evidence to stand alone â€” text kept, not discarded)</li>
+                    {importReport.capped > 0 && (
+                      <li style={{ color: '#d69e2e' }}>
+                        <strong>{importReport.capped}</strong> row{importReport.capped === 1 ? '' : 's'} hit the {MAX_SPLIT_FACTOR}-per-row cap. Their remaining text is kept in one record flagged for review â€” nothing was dropped, but these need manual triage.
+                      </li>
+                    )}
+                    {importReport.skippedByOperator > 0 && (
+                      <li><strong>{importReport.skippedByOperator}</strong> record{importReport.skippedByOperator === 1 ? '' : 's'} skipped by you as duplicates</li>
+                    )}
+                    {importReport.rejectedByStore > 0 && (
+                      <li style={{ color: '#d69e2e' }}>
+                        <strong>{importReport.rejectedByStore}</strong> record{importReport.rejectedByStore === 1 ? '' : 's'} not added â€” the store already held a record with the same title + date + place
+                      </li>
+                    )}
+                    {importReport.replacedInStore > 0 && (
+                      <li style={{ color: '#d69e2e' }}>
+                        <strong>{importReport.replacedInStore}</strong> record{importReport.replacedInStore === 1 ? '' : 's'} <strong>replaced</strong> a stored record with the same id. Any edits previously made to those records were overwritten.
+                      </li>
+                    )}
+                    <li><strong>{importReport.staged}</strong> newly staged Â· <strong>{importReport.storedTotal}</strong> incidents now stored in total</li>
+                    <li>
+                      Nothing staged here is on the public map yet â€” every imported record is held for review because at least one of its
+                      fields (module and severity are always keyword guesses) was produced by machine. Release them from
+                      <em> Stored Incidents â†’ Review queue</em> once you have checked them.
+                    </li>
+                  </ul>
+                )}
                 <div style={{ marginTop: 10 }}><button className="btn btn-secondary" onClick={reset}>Import another file</button></div>
               </div>
             )}
@@ -1669,7 +2580,7 @@ export function AdminImport() {
         </>
       )}
 
-      {/* ── Retention queue ─────────────────────────────────────────── */}
+      {/* â”€â”€ Retention queue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {attachments.filter(a => a.sizeBytes > MAX_IMAGE_BYTES).length > 0 && (
         <div className="admin-card">
           <h2>7-Day Retention Queue</h2>
@@ -1718,23 +2629,23 @@ export function AdminImport() {
         </div>
       )}
 
-      {/* ── Stored incidents & storage ──────────────────────────────── */}
-      {importedIncidents.length > 0 && (
+      {/* â”€â”€ Stored incidents & storage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {(importedIncidents.length > 0 || resetResult !== null) && (
         <div className="admin-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
             <h2 style={{ margin: 0 }}>Stored Incidents</h2>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button className="btn btn-secondary" onClick={handleDedup} disabled={!!actionInProgress} style={{ fontSize: 11, color: '#d97706', display: 'flex', alignItems: 'center', gap: 4 }}>
-                {actionInProgress === 'dedup' ? <><span className="spinner-dot" /> Removing…</> : 'Remove Duplicates'}
+              <button className="btn btn-secondary" onClick={handleDedup} disabled={!!actionInProgress} style={{ fontSize: 11, color: '#d97706', display: 'flex', alignItems: 'center', gap: 4 }} title="Lists exactly which records would be deleted and waits for your confirmation. Nothing is deleted until you approve it.">
+                {actionInProgress === 'dedup' ? <><span className="spinner-dot" /> Checkingâ€¦</> : 'Remove Duplicatesâ€¦'}
               </button>
-              <button className="btn btn-secondary" onClick={handleSplitClean} disabled={!!actionInProgress} style={{ fontSize: 11, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 4 }}>
-                {actionInProgress === 'split' ? <><span className="spinner-dot" /> Splitting &amp; cleaning…</> : 'Split & Clean'}
+              <button className="btn btn-secondary" onClick={handleSplitClean} disabled={!!actionInProgress} style={{ fontSize: 11, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 4 }} title="Computes a plan and shows it for confirmation. Nothing is written until you approve it.">
+                {actionInProgress === 'split' ? <><span className="spinner-dot" /> Workingâ€¦</> : 'Split & Cleanâ€¦'}
               </button>
               <button className="btn btn-secondary" onClick={handleScan} disabled={!!actionInProgress} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
-                {actionInProgress === 'scan' ? <><span className="spinner-dot" /> Scanning…</> : 'Scan for duplicates'}
+                {actionInProgress === 'scan' ? <><span className="spinner-dot" /> Scanningâ€¦</> : 'Scan for duplicates'}
               </button>
-              <button className="btn btn-secondary" onClick={() => { if (confirm('Clear all imported incidents? This cannot be undone.')) clearImportedIncidents(); }} disabled={!!actionInProgress} style={{ fontSize: 11, color: '#c53030' }}>
-                Clear all
+              <button className="btn btn-secondary" onClick={() => { setShowRecovery(v => !v); setResetResult(null); }} disabled={!!actionInProgress} style={{ fontSize: 11, color: '#c53030' }}>
+                {showRecovery ? 'Hide recovery & reset' : 'Recovery & resetâ€¦'}
               </button>
             </div>
           </div>
@@ -1748,31 +2659,332 @@ export function AdminImport() {
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Storage used</div>
             </div>
             <div style={{ background: 'var(--bg-elevated)', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: importedIncidents.filter(i => !i.isSynthetic).length > 0 ? '#38a169' : 'var(--text-muted)' }}>
-                {importedIncidents.filter(i => !i.isSynthetic).length}
+              <div style={{ fontSize: 20, fontWeight: 700, color: importedIncidents.filter(i => !i.isSynthetic && !i.needsReview).length > 0 ? '#38a169' : 'var(--text-muted)' }}>
+                {importedIncidents.filter(i => !i.isSynthetic && !i.needsReview).length}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>On map (real data)</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }} title="Only records you have confirmed reach the public map. Records awaiting review are held back.">
+                On map (confirmed)
+              </div>
+            </div>
+            <div style={{ background: 'var(--bg-elevated)', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: inventory.withInferredFields > 0 ? '#d69e2e' : 'var(--text-muted)' }}>{inventory.withInferredFields}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }} title="Records carrying at least one field this machine derived rather than read from the source.">
+                With derived fields
+              </div>
+            </div>
+            <div style={{ background: 'var(--bg-elevated)', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{inventory.distinctRoots}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Distinct source rows</div>
+            </div>
+            <div style={{ background: 'var(--bg-elevated)', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: inventory.needsReview > 0 ? '#d69e2e' : 'var(--text-muted)' }}>{inventory.needsReview}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Awaiting review</div>
             </div>
           </div>
+
+          {inventory.total > inventory.distinctRoots * 3 && (
+            <div className="import-msg warning" style={{ marginTop: 10 }}>
+              <strong>{inventory.total}</strong> records trace back to only <strong>{inventory.distinctRoots}</strong> source rows
+              ({(inventory.total / Math.max(1, inventory.distinctRoots)).toFixed(1)}Ã— multiplication).
+              Do not publish counts from this set. Open <em>Recovery &amp; reset</em>, export a snapshot, then re-import the original file.
+            </div>
+          )}
+
+          {/* â”€â”€ Provenance: what in this set was NOT stated by the source â”€â”€
+              This is the reader that makes inferredFields mean something. Before
+              it existed the flags were written to storage and shown to nobody,
+              so a machine-derived value was indistinguishable from a
+              source-stated one everywhere it mattered. */}
+          {inventory.inferredCounts.length > 0 && (
+            <div style={{ marginTop: 12, padding: 12, border: '1px solid #d69e2e55', borderRadius: 6, background: '#d69e2e10' }}>
+              <h3 style={{ margin: '0 0 4px', fontSize: 13, color: '#d69e2e' }}>Machine-derived fields in this set</h3>
+              <p className="form-hint" style={{ marginTop: 0 }}>
+                Every entry below is a value this application produced, not one the source stated.
+                <strong> {inventory.withInferredFields}</strong> of <strong>{inventory.total}</strong> stored records carry at least one.
+                They are also listed on each incident where it is displayed.
+              </p>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="admin-table">
+                  <thead><tr><th style={{ width: 90 }}>Records</th><th>What was derived</th></tr></thead>
+                  <tbody>
+                    {inventory.inferredCounts.map(f => (
+                      <tr key={f.key}>
+                        <td style={{ fontSize: 12, fontWeight: 700 }}>{f.count}</td>
+                        <td style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{inferredFieldLabel(f.key)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {inventory.withoutStatedDeceased > 0 && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+                  <strong>{inventory.withoutStatedDeceased}</strong> record{inventory.withoutStatedDeceased === 1 ? '' : 's'} state no fatality figure at all.
+                  They contribute nothing to the â€œTotal deceased recordedâ€ number â€” that total covers only the {inventory.total - inventory.withoutStatedDeceased} records
+                  whose source gave an explicit figure. It is not a count of deaths across the whole set.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* â”€â”€ Review queue release â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {inventory.needsReview > 0 && (
+            <div style={{ marginTop: 12, padding: 12, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-elevated)' }}>
+              <h3 style={{ margin: '0 0 4px', fontSize: 13 }}>Review queue</h3>
+              <p className="form-hint" style={{ marginTop: 0 }}>
+                <strong>{inventory.needsReview}</strong> record{inventory.needsReview === 1 ? ' is' : 's are'} held back from the public map because at least one of their
+                fields was produced by machine. Read the derived-field list above, check the records, then confirm them â€”
+                confirming is you taking responsibility for those values, not the machine.
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={() => markReviewed(null)} disabled={!!actionInProgress}>
+                  I have checked these â€” release {inventory.needsReview} record{inventory.needsReview === 1 ? '' : 's'} to the map
+                </button>
+                {reviewReport && <span style={{ fontSize: 11, color: '#38a169' }}>{reviewReport}</span>}
+              </div>
+            </div>
+          )}
+
+          {/* â”€â”€ Duplicate deletion preview â€” nothing is deleted until confirmed â”€â”€ */}
+          {dedupPreview && (
+            <div style={{ marginTop: 10, padding: 12, border: '1px solid #d97706', borderRadius: 6, background: 'var(--bg-elevated)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Review before anything is deleted</div>
+              {dedupPreview.wouldRemove === 0 ? (
+                <>
+                  <div className="import-msg success" style={{ marginBottom: 8 }}>No duplicates found â€” nothing would be deleted.</div>
+                  <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={() => setDedupPreview(null)}>Close</button>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 13, marginBottom: 8 }}>
+                    <strong>{dedupPreview.wouldRemove}</strong> of <strong>{dedupPreview.total}</strong> records would be
+                    <strong style={{ color: '#c53030' }}> permanently deleted</strong>. This cannot be undone â€” export a snapshot first if you are unsure.
+                  </div>
+                  <div style={{ overflowX: 'auto', marginBottom: 10 }}>
+                    <table className="admin-table">
+                      <thead><tr><th>Kept</th><th>Deleted</th><th>Matched on</th></tr></thead>
+                      <tbody>
+                        {dedupPreview.pairs.slice(0, 50).map(p => (
+                          <tr key={p.remove.id}>
+                            <td style={{ fontSize: 12 }}>
+                              <div style={{ fontWeight: 600 }}>{p.keep.title}</div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: 11, fontFamily: 'monospace' }}>{p.keep.id}</div>
+                            </td>
+                            <td style={{ fontSize: 12, color: '#c53030' }}>
+                              <div style={{ fontWeight: 600 }}>{p.remove.title}</div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: 11, fontFamily: 'monospace' }}>{p.remove.id}</div>
+                            </td>
+                            <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>identical title + date + place</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {dedupPreview.pairs.length > 50 && (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>Showing the first 50 of {dedupPreview.pairs.length} pairs.</div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button className="btn btn-secondary" style={{ fontSize: 11, color: '#c53030' }} onClick={applyDedup} disabled={!!actionInProgress}>
+                      Delete these {dedupPreview.wouldRemove} records
+                    </button>
+                    <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={() => setDedupPreview(null)} disabled={!!actionInProgress}>Cancel</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* â”€â”€ Recovery & reset (design part D) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {showRecovery && (
+            <div style={{ marginTop: 12, padding: 12, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-elevated)' }}>
+              <h3 style={{ margin: '0 0 6px', fontSize: 13 }}>Recovery &amp; reset</h3>
+              <p className="form-hint" style={{ marginTop: 0 }}>
+                Inspect what is actually stored, keep a copy of it, then start again from the original file.
+                These records live only in this browser (IndexedDB) â€” nothing has been written to a server.
+                The Backup &amp; Restore feature does <strong>not</strong> cover incidents, so the export below is the only copy you will have.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8, margin: '10px 0' }}>
+                {[
+                  { label: 'Records stored', value: inventory.total },
+                  { label: 'Distinct source rows', value: inventory.distinctRoots },
+                  { label: 'Split products', value: inventory.splitProducts },
+                  { label: 'Legacy split ids', value: inventory.legacySplitProducts },
+                  { label: 'From capped rows', value: inventory.cappedProducts },
+                  { label: 'No resolvable position', value: inventory.withoutCoordinates },
+                  { label: 'Deceased â€” from explicit figures only', value: inventory.totalDeceased },
+                  { label: 'Records stating no fatality figure', value: inventory.withoutStatedDeceased },
+                ].map(s => (
+                  <div key={s.label} style={{ padding: '8px 10px', background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 5 }}>
+                    <div style={{ fontSize: 16, fontWeight: 700 }}>{s.value}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {inventory.legacySplitProducts > 0 && (
+                <div className="import-msg warning" style={{ marginBottom: 10 }}>
+                  {inventory.legacySplitProducts} record{inventory.legacySplitProducts === 1 ? ' carries' : 's carry'} an accreting id from the old splitter and no provenance stamp.
+                  Their original titles and casualty figures were overwritten in place and cannot be recovered from the store â€” only a re-import restores them.
+                </div>
+              )}
+
+              {inventory.topParents.length > 0 && inventory.topParents[0]!.count > 1 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Source rows that produced the most records</div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="admin-table">
+                      <thead><tr><th>Source row id</th><th style={{ width: 120 }}>Records produced</th></tr></thead>
+                      <tbody>
+                        {inventory.topParents.filter(p => p.count > 1).map(p => (
+                          <tr key={p.rootId}>
+                            <td style={{ fontSize: 11, fontFamily: 'monospace' }}>{p.rootId}</td>
+                            <td style={{ fontSize: 12, fontWeight: 700, color: p.count > MAX_SPLIT_FACTOR ? '#c53030' : 'var(--text-secondary)' }}>{p.count}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={handleSnapshot} disabled={inventory.total === 0}>
+                  â¬‡ Export snapshot ({inventory.total} records)
+                </button>
+                {snapshotName && <span style={{ fontSize: 11, color: '#38a169' }}>Saved {snapshotName}</span>}
+              </div>
+
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#c53030', marginBottom: 4 }}>Delete every stored incident</div>
+                <p className="form-hint" style={{ marginTop: 0 }}>
+                  Irreversible. Export a snapshot first. Afterwards the app falls back to its built-in sample incidents â€” that is expected, and those are not your data.
+                  Close any other tab of this app before resetting, or a stale tab may write its old copy back.
+                  Type <strong>RESET</strong> to enable the button.
+                </p>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input
+                    type="text"
+                    value={resetConfirmText}
+                    onChange={(e) => setResetConfirmText(e.target.value)}
+                    placeholder="RESET"
+                    style={{ width: 120, padding: '4px 8px', fontSize: 12, background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-primary)' }}
+                  />
+                  <button
+                    className="btn btn-secondary"
+                    style={{ fontSize: 11, color: '#c53030' }}
+                    disabled={resetConfirmText.trim().toUpperCase() !== 'RESET' || !!actionInProgress}
+                    onClick={handleReset}
+                  >
+                    Delete all {inventory.total} records
+                  </button>
+                </div>
+                {resetResult !== null && (
+                  <div className="import-msg success" style={{ marginTop: 8 }}>
+                    Deleted {resetResult} records. Re-import the original file â€” the import now refuses any batch above {MAX_BATCH_FACTOR}Ã—.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {dedupReport !== null && (
             <div className="import-msg success" style={{ marginTop: 10 }}>
               {dedupReport > 0
                 ? `Removed ${dedupReport} duplicate incidents. Total incidents now: ${importedIncidents.length}.`
-                : 'No duplicates found — all incidents are unique.'}
+                : 'No duplicates found â€” all incidents are unique.'}
               <button onClick={() => setDedupReport(null)} style={{ marginLeft: 8, background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', fontSize: 11 }}>Dismiss</button>
             </div>
           )}
+          {splitRefusal && (
+            <div className="import-msg error" style={{ marginTop: 10, whiteSpace: 'pre-wrap' }}>
+              {splitRefusal}
+              <div style={{ marginTop: 8 }}>
+                <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={() => setSplitRefusal('')}>Dismiss</button>
+              </div>
+            </div>
+          )}
+
+          {cleanupError && (
+            <div className="import-msg error" style={{ marginTop: 10 }}>
+              {cleanupError}
+              <button onClick={() => setCleanupError('')} style={{ marginLeft: 8, background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', fontSize: 11 }}>Dismiss</button>
+            </div>
+          )}
+
+          {/* â”€â”€ Split plan preview â€” nothing is written until confirmed â”€â”€â”€â”€ */}
+          {splitPreview && (
+            <div style={{ marginTop: 10, padding: 12, border: '1px solid #2563eb', borderRadius: 6, background: 'var(--bg-elevated)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Review before anything is written</div>
+              <div style={{ fontSize: 13, marginBottom: 8 }}>
+                <strong>{splitPreview.before}</strong> â†’ <strong style={{ color: splitPreview.factor > 1.5 ? '#d69e2e' : '#38a169' }}>{splitPreview.after}</strong> records
+                {' '}(<strong>{splitPreview.factor.toFixed(2)}Ã—</strong>, limit {MAX_BATCH_FACTOR}Ã—)
+              </div>
+              <ul style={{ margin: '0 0 10px', paddingLeft: 18, fontSize: 12, lineHeight: 1.6 }}>
+                <li><strong>{splitPreview.splitCount}</strong> row{splitPreview.splitCount === 1 ? '' : 's'} would be split into more than one incident</li>
+                <li><strong>{splitPreview.after - splitPreview.before}</strong> record{splitPreview.after - splitPreview.before === 1 ? '' : 's'} added</li>
+                <li><strong>{splitPreview.mergedFragments}</strong> fragment{splitPreview.mergedFragments === 1 ? '' : 's'} merged back into a neighbour (kept, not discarded)</li>
+                <li><strong>{splitPreview.alreadySplit}</strong> record{splitPreview.alreadySplit === 1 ? '' : 's'} left untouched â€” already a product of an earlier split</li>
+                {splitPreview.capped > 0 && (
+                  <li style={{ color: '#d69e2e' }}>
+                    <strong>{splitPreview.capped}</strong> row{splitPreview.capped === 1 ? '' : 's'} hit the {MAX_SPLIT_FACTOR}-per-row cap â€” the remaining text stays in one record flagged for review
+                  </li>
+                )}
+              </ul>
+              {splitPreview.worstOffenders.length > 0 && (
+                <div style={{ overflowX: 'auto', marginBottom: 10 }}>
+                  <table className="admin-table">
+                    <thead><tr><th>Source row</th><th style={{ width: 80 }}>Produces</th><th>Text</th></tr></thead>
+                    <tbody>
+                      {splitPreview.worstOffenders.map(o => (
+                        <tr key={o.id}>
+                          <td style={{ fontSize: 11, fontFamily: 'monospace' }}>{o.id}</td>
+                          <td style={{ fontSize: 12, fontWeight: 700, color: o.capped ? '#c53030' : 'var(--text-secondary)' }}>
+                            {o.childCount}{o.capped ? ' (capped)' : ''}
+                          </td>
+                          <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{o.excerpt}â€¦</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="btn btn-primary" style={{ fontSize: 11 }} onClick={handleApplyPlan} disabled={!!actionInProgress}>
+                  Apply split &amp; clean ({splitPreview.before} â†’ {splitPreview.after})
+                </button>
+                <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={handleCleanOnly} disabled={!!actionInProgress}>
+                  Clean only â€” do not split
+                </button>
+                <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={() => setSplitPreview(null)} disabled={!!actionInProgress}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           {cleanupReport && (
             <div className="import-msg success" style={{ marginTop: 10 }}>
-              Data cleanup complete: {cleanupReport.fixed} titles/casualties fixed{cleanupReport.split > 0 ? `, ${cleanupReport.split} merged rows split into individual incidents` : ''}{cleanupReport.deduplicated > 0 ? `, ${cleanupReport.deduplicated} duplicates removed` : ''}.
-              Total incidents now: {importedIncidents.length}.
-              <button onClick={() => setCleanupReport(null)} style={{ marginLeft: 8, background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', fontSize: 11 }}>Dismiss</button>
+              <strong>{cleanupReport.action === 'split-clean' ? 'Split & clean applied' : 'Clean applied (no splitting)'}</strong>
+              {' â€” '}{cleanupReport.before} â†’ {cleanupReport.after} records.
+              <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12, lineHeight: 1.6 }}>
+                <li><strong>{cleanupReport.rowsSplit}</strong> split Â· <strong>{cleanupReport.recordsAdded}</strong> record{cleanupReport.recordsAdded === 1 ? '' : 's'} added</li>
+                <li><strong>{cleanupReport.fragmentsMerged}</strong> merged back into a neighbour</li>
+                <li><strong>{cleanupReport.alreadySplit}</strong> already split, left untouched</li>
+                <li><strong>{cleanupReport.titlesFixed}</strong> title{cleanupReport.titlesFixed === 1 ? '' : 's'} repaired Â· <strong>{cleanupReport.casualtiesFilled}</strong> casualty figure{cleanupReport.casualtiesFilled === 1 ? '' : 's'} filled from an explicit number in the summary</li>
+                <li><strong>{cleanupReport.unchanged}</strong> record{cleanupReport.unchanged === 1 ? '' : 's'} unchanged</li>
+                <li><strong>{cleanupReport.removed}</strong> removed â€” cleaning never deletes a record. Use <em>Remove Duplicates</em> for that.</li>
+                {cleanupReport.capped > 0 && <li style={{ color: '#d69e2e' }}><strong>{cleanupReport.capped}</strong> capped row{cleanupReport.capped === 1 ? '' : 's'} need manual triage</li>}
+              </ul>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                Running this again changes nothing â€” split products are stamped and never re-split.
+              </div>
+              <button onClick={() => setCleanupReport(null)} style={{ marginLeft: 0, marginTop: 6, background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', fontSize: 11, display: 'block' }}>Dismiss</button>
             </div>
           )}
           {showDedupScan && (
             <div style={{ marginTop: 12 }}>
               {internalDupes.length === 0 ? (
-                <div className="import-msg success">No duplicates found — data is clean.</div>
+                <div className="import-msg success">No duplicates found â€” data is clean.</div>
               ) : (
                 <>
                   <div className="import-msg warning" style={{ marginBottom: 8 }}>
@@ -1794,11 +3006,11 @@ export function AdminImport() {
                           <tr key={i}>
                             <td style={{ fontSize: 12 }}>
                               <div style={{ fontWeight: 600 }}>{d.existing.title}</div>
-                              <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{d.existing.dateOccurred} · {d.existing.town || d.existing.province}</div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{d.existing.dateOccurred} Â· {d.existing.town || d.existing.province}</div>
                             </td>
                             <td style={{ fontSize: 12 }}>
                               <div style={{ fontWeight: 600 }}>{d.newIncident.title}</div>
-                              <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{d.newIncident.dateOccurred} · {d.newIncident.town || d.newIncident.province}</div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{d.newIncident.dateOccurred} Â· {d.newIncident.town || d.newIncident.province}</div>
                             </td>
                             <td style={{ fontSize: 12, fontWeight: 700, color: d.score >= 80 ? '#c53030' : '#d69e2e' }}>{d.score}%</td>
                             <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{d.reasons.join(', ')}</td>
@@ -1833,8 +3045,12 @@ export function AdminImport() {
       )}
 
       <div className="admin-note">
-        <strong>How AI Sort works:</strong> The AI engine scans each row to (1) classify the incident module and severity, (2) extract names, phone numbers, email addresses, and case references from free text and move them to a confidential store visible only to admins, (3) produce a clean public summary safe for map display. <strong>PDF import:</strong> Text is extracted page-by-page and split into individual incident records using paragraph boundaries and structural markers (numbered lists, headings). Dates and locations are auto-detected where possible. In production, this runs through a server-side AI model (Groq/Gemini) with the same PII-separation guardrails. Images attached to submissions are individually approvable — only approved images are ever visible to the public. Originals of large files are kept in a 7-day retention queue; admins can mark specific files for permanent storage.
+        <strong>How Sort works â€” and what it does not do.</strong> This is a deterministic keyword and regular-expression pass running in your browser. It is not a model and it makes no judgement about whether anything is true. It (1) <em>guesses</em> a module and severity from keywords â€” a row matching no keyword is left <em>Unclassified</em> and <em>Unassessed</em> rather than defaulted into Farm &amp; Rural / Medium; (2) extracts names, phone numbers, email addresses and case references from free text and moves them to a confidential store visible only to admins; (3) produces a redacted public summary. Every value it produces rather than reads is recorded on the record and listed under <em>Machine-derived fields</em>, and those records are held back from the public map until you confirm them.
+        {' '}<strong>What is never derived:</strong> a verdict, a case status, a suspect's name, a date, or a map position. A source that states no date gets no date; a location that cannot be matched to the built-in gazetteer gets no coordinates rather than an approximate point.
+        {' '}<strong>PDF/DOCX import:</strong> text is extracted page-by-page and split into records using paragraph boundaries and structural markers. Every field on that path is pattern-matched out of prose, is marked <em>â—† derived</em> in the preview, and the full source chunk is always kept verbatim in the summary.
+        {' '}Images attached to submissions are individually approvable â€” only approved images are ever visible to the public. Originals of large files are kept in a 7-day retention queue; admins can mark specific files for permanent storage.
       </div>
     </div>
   );
 }
+
