@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import { useAppStore } from '@/stores/app-store';
 
-const SA_CENTER: [number, number] = [25.5, -30.0];
+const SA_CENTER: [number, number] = [25.5, -28.0];
 const SA_ZOOM = 3.0;
 const MIN_BOX_DEG = 1.5;
 const SA_BOUNDS = { w: 16.5, e: 32.9, s: -34.8, n: -22.1 };
@@ -89,6 +89,8 @@ export function MiniMap() {
         coordinates: [[[cx - halfW, cy - halfH], [cx + halfW, cy - halfH], [cx + halfW, cy + halfH], [cx - halfW, cy + halfH], [cx - halfW, cy - halfH]]],
       },
     });
+
+    map.jumpTo({ center: [cx, cy] });
   }, [viewport, sourceReady]);
 
   return (
