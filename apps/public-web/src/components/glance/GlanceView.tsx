@@ -149,10 +149,11 @@ export function GlanceView() {
 
       <section className="glance-ad-primary glance-ad-primary-split">
         <ManagedContentSlot slotKey="BOTTOM_SECONDARY_BILLBOARD" />
-        <BottomTicker />
+        <ManagedContentSlot slotKey="BOTTOM_PRIMARY_BILLBOARD" />
       </section>
 
       <section className="glance-ad-secondary-slot">
+        <BottomTicker />
       </section>
 
       <section className="glance-ad-right" data-placement-location="right-lower-rail">
