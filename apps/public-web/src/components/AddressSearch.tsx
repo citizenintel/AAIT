@@ -66,7 +66,7 @@ export function AddressSearch() {
 
   const handleSearch = () => {
     if (suggestions.length > 0) {
-      selectResult(suggestions[0]);
+      selectResult(suggestions[0]!);
     } else if (query.length >= 3) {
       geocode(query).then(() => {
         // Will select first result on next render
