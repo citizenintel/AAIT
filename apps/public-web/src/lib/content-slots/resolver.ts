@@ -191,7 +191,7 @@ function resolvePlaceholder(slotId: PlacementId): ResolvedContent | null {
 const ADS_OFF_FALLBACKS: Record<string, string> = {
   'LEFT_RAIL_HALF_PAGE': 'verification_funnel',
   'BOTTOM_PRIMARY_BILLBOARD': 'weekly_trend',
-  'BOTTOM_SECONDARY_BILLBOARD': 'impact_summary',
+  'BOTTOM_SECONDARY_BILLBOARD': 'data_dashboard',
   'RIGHT_RAIL_HALF_PAGE': 'activity_timeline',
 };
 

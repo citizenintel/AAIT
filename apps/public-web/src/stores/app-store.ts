@@ -729,7 +729,7 @@ export const useAppStore = create<AppStore>()(
     }),
 
     // --- Content slots ---
-    sponsorsEnabled: (() => { try { const v = localStorage.getItem('aait_sponsors_enabled'); return v === null ? true : v === 'true'; } catch { return true; } })(),
+    sponsorsEnabled: (() => { try { const v = localStorage.getItem('aait_sponsors_enabled'); return v === null ? false : v === 'true'; } catch { return false; } })(),
     setSponsorsEnabled: (enabled) => set((s) => { s.sponsorsEnabled = enabled; try { localStorage.setItem('aait_sponsors_enabled', String(enabled)); } catch { /* private browsing */ } }),
     globalInfographicFallback: (() => { try { const v = localStorage.getItem('aait_infographic_fallback'); return v === null ? true : v === 'true'; } catch { return true; } })(),
     setGlobalInfographicFallback: (enabled) => set((s) => { s.globalInfographicFallback = enabled; try { localStorage.setItem('aait_infographic_fallback', String(enabled)); } catch {} }),

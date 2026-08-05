@@ -421,6 +421,123 @@ function ImpactSummary({ incidents }: { incidents: any[] }) {
   );
 }
 
+function DataDashboard({ incidents: _filtered }: { incidents: any[] }) {
+  const { allIncidents } = useIncidentData();
+  const incidents = allIncidents.length > 0 ? allIncidents : _filtered;
+  const data = useMemo(() => {
+    let deceased = 0, injured = 0;
+    const sevCounts: Record<string, number> = {};
+    const modCounts: Record<string, { count: number; colour: string; label: string }> = {};
+    const provCounts: Record<string, number> = {};
+    const yearCounts: Record<string, number> = {};
+    for (const i of incidents) {
+      deceased += i?.casualties?.deceased ?? 0;
+      injured += i?.casualties?.injured ?? 0;
+      const sev = String(i.severity ?? 'unassessed').toLowerCase();
+      sevCounts[sev] = (sevCounts[sev] || 0) + 1;
+      const m = MODULE_META[i.module as keyof typeof MODULE_META];
+      if (m) {
+        if (!modCounts[i.module]) modCounts[i.module] = { count: 0, colour: m.colour, label: m.label };
+        modCounts[i.module]!.count++;
+      }
+      if (i.province) provCounts[i.province] = (provCounts[i.province] || 0) + 1;
+      const d = normalizeIncidentDate(i?.dateOccurred);
+      if (d.kind !== 'none') {
+        const yr = d.start.slice(0, 4);
+        yearCounts[yr] = (yearCounts[yr] || 0) + 1;
+      }
+    }
+    const provinces = Object.entries(provCounts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const modules = Object.values(modCounts).sort((a, b) => b.count - a.count);
+    const years = Object.entries(yearCounts).sort((a, b) => a[0].localeCompare(b[0]));
+    const critical = sevCounts['critical'] || 0;
+    const high = sevCounts['high'] || 0;
+    const verified = incidents.filter(i => i.verification?.startsWith('v4') || i.verification?.startsWith('v5')).length;
+    return { deceased, injured, critical, high, verified, provinces, modules, years, total: incidents.length };
+  }, [incidents]);
+
+  const provMax = data.provinces[0]?.[1] || 1;
+  const yearMax = Math.max(...data.years.map(y => y[1]), 1);
+
+  return (
+    <div className="sponsor-slot" style={{ background: '#111827', border: '1px solid #c9a84c22', borderRadius: 8, padding: '10px 14px', height: '100%', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: '#c9a84c', letterSpacing: '0.05em' }}>DATA INTELLIGENCE</div>
+        <div style={{ fontSize: 8, color: '#64748b' }}>{data.total} incidents</div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, flex: 1, minHeight: 0 }}>
+        {/* Column 1: Key stats + casualties */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+            <div style={{ background: '#1e293b', borderRadius: 4, padding: '6px 4px', textAlign: 'center', borderTop: '2px solid #e53e3e' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#e53e3e' }}>{data.deceased}</div>
+              <div style={{ fontSize: 6, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Deaths</div>
+            </div>
+            <div style={{ background: '#1e293b', borderRadius: 4, padding: '6px 4px', textAlign: 'center', borderTop: '2px solid #ed8936' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#ed8936' }}>{data.injured}</div>
+              <div style={{ fontSize: 6, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Injured</div>
+            </div>
+            <div style={{ background: '#1e293b', borderRadius: 4, padding: '6px 4px', textAlign: 'center', borderTop: '2px solid #d69e2e' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#d69e2e' }}>{data.critical}</div>
+              <div style={{ fontSize: 6, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Critical</div>
+            </div>
+            <div style={{ background: '#1e293b', borderRadius: 4, padding: '6px 4px', textAlign: 'center', borderTop: '2px solid #805ad5' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#805ad5' }}>{data.verified}</div>
+              <div style={{ fontSize: 6, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Verified</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 7, fontWeight: 700, color: '#64748b', letterSpacing: '0.05em', marginTop: 2 }}>BY TYPE</div>
+          {data.modules.slice(0, 5).map(m => (
+            <div key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: m.colour, flexShrink: 0 }} />
+              <span style={{ fontSize: 7, color: '#94a3b8', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.label}</span>
+              <span style={{ fontSize: 7, fontWeight: 600, color: '#e2e8f0' }}>{m.count}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Column 2: Province breakdown */}
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ fontSize: 7, fontWeight: 700, color: '#64748b', letterSpacing: '0.05em', marginBottom: 4 }}>TOP PROVINCES</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1 }}>
+            {data.provinces.map(([prov, count]) => (
+              <div key={prov} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 7, color: '#94a3b8', width: 50, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', flexShrink: 0 }}>{prov}</span>
+                <div style={{ flex: 1, height: 8, background: '#1e293b', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ width: `${(count / provMax) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #3182ce, #63b3ed)', borderRadius: 2 }} />
+                </div>
+                <span style={{ fontSize: 7, fontWeight: 600, color: '#e2e8f0', width: 22, textAlign: 'right', flexShrink: 0 }}>{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Column 3: Year timeline */}
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ fontSize: 7, fontWeight: 700, color: '#64748b', letterSpacing: '0.05em', marginBottom: 4 }}>YEAR DISTRIBUTION</div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: 1 }}>
+            {data.years.map(([yr, count]) => {
+              const pct = (count / yearMax) * 100;
+              return (
+                <div key={yr} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0 }}>
+                  <span style={{ fontSize: 6, color: '#94a3b8', marginBottom: 1 }}>{count}</span>
+                  <div style={{ width: '80%', height: `${Math.max(pct, 4)}%`, background: pct > 60 ? '#e53e3e' : pct > 30 ? '#d69e2e' : '#38a169', borderRadius: '2px 2px 0 0', minHeight: 2 }} />
+                  <span style={{ fontSize: 6, color: '#64748b', marginTop: 1, transform: 'rotate(-45deg)', transformOrigin: 'top left', whiteSpace: 'nowrap' }}>{yr.slice(2)}</span>
+                </div>
+              );
+            })}
+          </div>
+          {data.years.length > 0 && (
+            <div style={{ fontSize: 7, color: '#64748b', textAlign: 'center', marginTop: 10 }}>
+              {data.years[0]![0]} – {data.years[data.years.length - 1]![0]}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ActivityTimeline({ incidents }: { incidents: any[] }) {
   // Was sorted by `new Date(...)` over fields that are often '' — Invalid Date
   // sorts unpredictably — and rendered `${Math.floor(ago/24)}d ago`, which
@@ -478,6 +595,7 @@ const INFOGRAPHIC_COMPONENTS: Record<string, React.FC<{ incidents: any[] }>> = {
   weekly_trend: WeeklyTrend,
   impact_summary: ImpactSummary,
   activity_timeline: ActivityTimeline,
+  data_dashboard: DataDashboard,
 };
 
 export const INFOGRAPHIC_LABELS: Record<string, string> = {
@@ -491,6 +609,7 @@ export const INFOGRAPHIC_LABELS: Record<string, string> = {
   weekly_trend: '7-day trend',
   impact_summary: 'Impact summary',
   activity_timeline: 'Recent activity',
+  data_dashboard: 'Data intelligence',
 };
 
 // ---------------------------------------------------------------------------

@@ -286,7 +286,15 @@ export function MapView() {
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
     map.addControl(new maplibregl.ScaleControl({ maxWidth: 150 }), 'bottom-left');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
-    map.on('load', () => { addMarkers(map, filteredIncidents); addMeasureLayers(map); });
+    map.on('load', () => {
+      addMarkers(map, filteredIncidents);
+      addMeasureLayers(map);
+      for (const bid of ['boundary_country_outline', 'boundary_country_inner']) {
+        if (map.getLayer(bid)) {
+          try { map.setLayoutProperty(bid, 'visibility', 'none'); } catch { /* gone */ }
+        }
+      }
+    });
     map.on('click', (e: maplibregl.MapMouseEvent) => {
       const state = measureRef.current;
       if (!state.active) return;

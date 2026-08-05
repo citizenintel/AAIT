@@ -799,6 +799,13 @@ export function IntelligenceMap({
       requestSyncRef.current();
       addMeasureLayers(map);
       tryAddDeckOverlayRef.current(map);
+      // Hide basemap country boundary lines — they extend into the ocean
+      // as maritime borders (Cape Town → EEZ) despite the maritime=0 filter.
+      for (const bid of ['boundary_country_outline', 'boundary_country_inner']) {
+        if (map.getLayer(bid)) {
+          try { map.setLayoutProperty(bid, 'visibility', 'none'); } catch { /* gone */ }
+        }
+      }
     });
 
     // Last-resort trigger — runs whenever the map settles.
