@@ -104,7 +104,7 @@
 
   /* Legacy spacing */
   --topbar-h: 48px;
-  --ticker-h: 30px;
+  --ticker-h: 44px;
   --footer-h: 26px;
   --panel-w: 380px;
 
@@ -671,16 +671,14 @@ body {
   border-left: 1px solid var(--border);
 }
 
-/* Infographic mode: right-ad spans full height, dashboard hidden, priority ticker at bottom */
+/* Infographic mode: right-ad spans full height, dashboard hidden */
 .glance-commercial-layout.infographic-mode {
   grid-template-rows:
     minmax(0, 1fr)
-    clamp(140px, 20vh, 200px)
-    clamp(32px, 5vh, 44px);
+    clamp(180px, 26vh, 250px);
   grid-template-areas:
     "priority    map          map            right-ad"
-    "left-ad     primary-ad   secondary-ad   right-ad"
-    "p-ticker    p-ticker     p-ticker       p-ticker";
+    "left-ad     primary-ad   secondary-ad   right-ad";
 }
 .glance-commercial-layout.infographic-mode .glance-dashboard-summary {
   display: none;

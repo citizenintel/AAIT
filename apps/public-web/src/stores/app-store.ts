@@ -619,7 +619,7 @@ export const useAppStore = create<AppStore>()(
       customText: 'AAIT Incident Tracker — live situational awareness for South Africa\nAll incidents currently shown are synthetic test data\nReport an incident from the map toolbar',
       rssFeedId: null,
       direction: 'rtl',
-      speedSeconds: 45,
+      speedSeconds: 90,
       tone: 'normal',
       fontBold: false,
       fontColor: 'white',
