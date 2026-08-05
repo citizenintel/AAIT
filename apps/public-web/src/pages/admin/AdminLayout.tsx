@@ -13,6 +13,7 @@ const NAV_ITEMS: { to: string; label: string; icon: string; end?: true; modPermK
   { to: '/admin/feeds', label: 'News Feeds', icon: 'M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z', modPermKey: 'feeds' },
   { to: '/admin/ticker', label: 'Live Ticker', icon: 'M3 8h18M3 8l2 8a2 2 0 002 2h10a2 2 0 002-2l2-8M8 12h8', modPermKey: 'ticker' },
   { to: '/admin/reports', label: 'Reports', icon: 'M9 17v-6h6v6M9 7h6M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z', modPermKey: 'reports' },
+  { to: '/admin/corrections', label: 'Corrections', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', modPermKey: 'submissions' },
   { to: '/admin/import', label: 'Import Data', icon: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12', modPermKey: 'import' },
   { to: '/admin/security', label: 'Upload Security', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4', adminOnly: true },
   { to: '/admin/mod-permissions', label: 'Mod Permissions', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z', adminOnly: true },

@@ -10,6 +10,9 @@ import { CommandPalette } from '@/components/shared/CommandPalette';
 import { TickerBar } from '@/components/TickerBar';
 import { TimeFilterDropdown } from '@/components/shell/TimeFilterDropdown';
 import { ReviewQueueBanner } from '@/components/shell/ReviewQueueBanner';
+import { AddressSearch } from '@/components/AddressSearch';
+import { IncidentListView } from '@/components/IncidentListView';
+import { useURLSync } from '@/lib/hooks/useURLSync';
 import { fetchEvents } from '@/lib/api/events';
 import { fetchAssets } from '@/lib/api/assets';
 import type { InterfaceLevel, RenderingTier } from '@/types/ontology';
@@ -116,6 +119,10 @@ export function AppShell() {
   };
 
   const tickerEnabled = useAppStore((s) => s.ticker.enabled);
+  const viewMode = useAppStore((s) => s.ui.viewMode);
+  const setViewMode = useAppStore((s) => s.setViewMode);
+
+  useURLSync();
 
   const alertCount = unacknowledgedCount();
   const hasCritical = alertCount > 0;
@@ -194,6 +201,19 @@ export function AppShell() {
             indistinguishable from a broken map. */}
         <TimeFilterDropdown />
 
+        <div className="view-toggle">
+          <button
+            className="view-toggle-btn"
+            data-active={viewMode === 'map'}
+            onClick={() => setViewMode('map')}
+          >MAP</button>
+          <button
+            className="view-toggle-btn"
+            data-active={viewMode === 'list'}
+            onClick={() => setViewMode('list')}
+          >LIST</button>
+        </div>
+
         <button className="header-nav-btn" onClick={() => navigate('/about')}>About</button>
         <button className="header-nav-btn" onClick={() => navigate('/methodology')}>Methodology</button>
         <button className="header-nav-btn accent" onClick={() => navigate('/report')}>+ Report</button>
@@ -252,13 +272,18 @@ export function AppShell() {
           and Brief with one instance, and because this tree is inside
           IncidentDataProvider (App.tsx:38) — /admin/* is not. */}
       <ReviewQueueBanner />
+      <AddressSearch />
 
       <div className="app-content">
-        <div key={interfaceLevel} className="level-panel" style={{ height: '100%' }}>
-          {interfaceLevel === 'glance' && <GlanceView />}
-          {interfaceLevel === 'investigate' && <InvestigateView />}
-          {interfaceLevel === 'brief' && <BriefView />}
-        </div>
+        {viewMode === 'list' ? (
+          <IncidentListView />
+        ) : (
+          <div key={interfaceLevel} className="level-panel" style={{ height: '100%' }}>
+            {interfaceLevel === 'glance' && <GlanceView />}
+            {interfaceLevel === 'investigate' && <InvestigateView />}
+            {interfaceLevel === 'brief' && <BriefView />}
+          </div>
+        )}
       </div>
 
       {commandPaletteOpen && <CommandPalette />}

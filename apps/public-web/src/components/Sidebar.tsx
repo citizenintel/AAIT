@@ -2,7 +2,20 @@ import { useState, useMemo } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { MODULE_META } from '../data/mock-incidents';
 import { useIncidentData } from '@/lib/hooks/useIncidentData';
+import { useFilteredIncidents } from '@/lib/hooks/useFilteredIncidents';
 import type { ModuleKey } from '../data/types';
+
+const SA_PROVINCES = [
+  { code: 'Eastern Cape', label: 'Eastern Cape' },
+  { code: 'Free State', label: 'Free State' },
+  { code: 'Gauteng', label: 'Gauteng' },
+  { code: 'KwaZulu-Natal', label: 'KwaZulu-Natal' },
+  { code: 'Limpopo', label: 'Limpopo' },
+  { code: 'Mpumalanga', label: 'Mpumalanga' },
+  { code: 'Northern Cape', label: 'Northern Cape' },
+  { code: 'North West', label: 'North West' },
+  { code: 'Western Cape', label: 'Western Cape' },
+];
 
 interface LayerItem {
   id: string;
@@ -81,11 +94,16 @@ function isModuleOn(modules: Record<string, boolean>, module: string): boolean {
 
 export function Sidebar() {
   const { incidents, filterLabel } = useIncidentData();
+  const { filtered, total, activeFilterNames, isFiltered } = useFilteredIncidents();
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['ait']));
   const modules = useAppStore((s) => s.filters.modules);
   const categories = useAppStore((s) => s.filters.categories);
+  const province = useAppStore((s) => s.filters.province);
+  const searchQuery = useAppStore((s) => s.filters.searchQuery);
   const setModuleFilter = useAppStore((s) => s.setModuleFilter);
   const setCategoryFilter = useAppStore((s) => s.setCategoryFilter);
+  const setProvince = useAppStore((s) => s.setProvince);
+  const setSearchQuery = useAppStore((s) => s.setSearchQuery);
 
   const moduleCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -157,6 +175,44 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">Layers</div>
+
+      {/* Feature 1: Results count bar */}
+      <div className="sidebar-results-count">
+        <span className="results-count-number">{filtered.length.toLocaleString()}</span>
+        <span className="results-count-label">
+          {filtered.length === 1 ? ' incident displayed' : ' incidents displayed'}
+        </span>
+        {isFiltered && (
+          <span className="results-filter-status">
+            {activeFilterNames.join(' + ').toUpperCase()}
+          </span>
+        )}
+        {isFiltered && filtered.length < total && (
+          <span className="results-count-of"> of {total}</span>
+        )}
+      </div>
+
+      {/* Feature 6: Search + Province filter */}
+      <div className="sidebar-filters">
+        <input
+          type="text"
+          className="sidebar-search-input"
+          placeholder="Search incidents..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <select
+          className="sidebar-province-select"
+          value={province || ''}
+          onChange={(e) => setProvince(e.target.value || null)}
+        >
+          <option value="">All provinces</option>
+          {SA_PROVINCES.map((p) => (
+            <option key={p.code} value={p.code}>{p.label}</option>
+          ))}
+        </select>
+      </div>
+
       {LAYER_GROUPS.map(group => {
         const meta = MODULE_META[group.id];
         const count = moduleCounts[group.id] ?? 0;

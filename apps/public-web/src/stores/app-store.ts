@@ -138,6 +138,27 @@ interface FilterState {
   province: string | null;
 }
 
+export interface Correction {
+  id: string;
+  incidentId: string;
+  incidentTitle: string;
+  field: string;
+  currentValue: string;
+  suggestedValue: string;
+  reason: string;
+  submitterName: string;
+  submitterEmail: string;
+  submittedAt: string;
+  status: 'pending' | 'accepted' | 'dismissed';
+}
+
+export interface SearchLocation {
+  lat: number;
+  lng: number;
+  radiusKm: number;
+  label: string;
+}
+
 interface UIState {
   sidebarOpen: boolean;
   activePanel: 'layers' | 'details' | 'report' | 'search' | null;
@@ -145,6 +166,7 @@ interface UIState {
   mapStyle: 'standard' | 'light' | 'terrain' | 'satellite';
   measureActive: boolean;
   mobileMenuOpen: boolean;
+  viewMode: 'map' | 'list';
 }
 
 interface WidgetState {
@@ -260,6 +282,16 @@ interface AppStore {
   setMapStyle: (style: UIState['mapStyle']) => void;
   setMeasureActive: (active: boolean) => void;
   setMobileMenuOpen: (open: boolean) => void;
+  setViewMode: (mode: 'map' | 'list') => void;
+
+  // --- Search location slice ---
+  searchLocation: SearchLocation | null;
+  setSearchLocation: (loc: SearchLocation | null) => void;
+
+  // --- Corrections slice ---
+  corrections: Correction[];
+  addCorrection: (c: Omit<Correction, 'id' | 'submittedAt' | 'status'>) => void;
+  updateCorrectionStatus: (id: string, status: Correction['status']) => void;
 
   // --- Widget slice (legacy) ---
   widgetState: WidgetState;
@@ -565,6 +597,7 @@ export const useAppStore = create<AppStore>()(
       mapStyle: 'standard',
       measureActive: false,
       mobileMenuOpen: false,
+      viewMode: 'map',
     },
     setActivePanel: (panel) => set((s) => { s.ui.activePanel = panel; }),
     setSelectedIncident: (id) => set((s) => {
@@ -575,6 +608,26 @@ export const useAppStore = create<AppStore>()(
     setMapStyle: (style) => set((s) => { s.ui.mapStyle = style; }),
     setMeasureActive: (active) => set((s) => { s.ui.measureActive = active; }),
     setMobileMenuOpen: (open) => set((s) => { s.ui.mobileMenuOpen = open; }),
+    setViewMode: (mode) => set((s) => { s.ui.viewMode = mode; }),
+
+    // --- Search location ---
+    searchLocation: null,
+    setSearchLocation: (loc) => set((s) => { s.searchLocation = loc; }),
+
+    // --- Corrections ---
+    corrections: [],
+    addCorrection: (c) => set((s) => {
+      s.corrections.push({
+        ...c,
+        id: `corr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        submittedAt: new Date().toISOString(),
+        status: 'pending',
+      });
+    }),
+    updateCorrectionStatus: (id, status) => set((s) => {
+      const c = s.corrections.find((x) => x.id === id);
+      if (c) c.status = status;
+    }),
 
     // --- Widgets (legacy) ---
     widgetState: {

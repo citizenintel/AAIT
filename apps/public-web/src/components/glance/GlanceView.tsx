@@ -4,6 +4,7 @@ import { useAppStore } from '@/stores/app-store';
 import { getPriorityDevelopments } from '@/lib/attention-engine';
 import { IntelligenceMap } from '@/components/map/IntelligenceMap';
 import { useIncidentData } from '@/lib/hooks/useIncidentData';
+import { useFilteredIncidents } from '@/lib/hooks/useFilteredIncidents';
 import ConfidenceAnatomy from '@/components/shared/ConfidenceAnatomy';
 import { WidgetPanel } from '@/components/widgets/WidgetPanel';
 import { LeftRail } from '@/components/shell/LeftRail';
@@ -32,7 +33,8 @@ function getSeverityForEvent(e: IntelligenceEvent): 'critical' | 'high' | 'mediu
 }
 
 export function GlanceView() {
-  const { incidents } = useIncidentData();
+  const { incidents: rawIncidents } = useIncidentData();
+  const { filtered: incidents } = useFilteredIncidents();
   const events = useAppStore((s) => s.events);
   const assets = useAppStore((s) => s.assets);
   const watchAreas = useAppStore((s) => s.watchAreas);

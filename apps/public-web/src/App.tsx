@@ -19,6 +19,7 @@ import { AdminSettings } from '@/pages/admin/AdminSettings';
 import { AdminSecurity } from '@/pages/admin/AdminSecurity';
 import { AdminModPermissions } from '@/pages/admin/AdminModPermissions';
 import { AdminBackupRestore } from '@/pages/admin/AdminBackupRestore';
+import { AdminCorrections } from '@/pages/admin/AdminCorrections';
 import { LoginPage } from '@/pages/LoginPage';
 import { IncidentPage } from '@/pages/IncidentPage';
 import { AboutPage } from '@/pages/AboutPage';
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="feeds" element={<AdminFeeds />} />
           <Route path="ticker" element={<AdminTicker />} />
           <Route path="reports" element={<AdminReports />} />
+          <Route path="corrections" element={<AdminCorrections />} />
           <Route path="import" element={<AdminImport />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="subscriptions" element={<AdminSubscriptions />} />

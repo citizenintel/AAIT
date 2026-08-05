@@ -288,6 +288,7 @@ export function IntelligenceMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const hoverPopupRef = useRef<maplibregl.Popup | null>(null);
   const deckOverlayRef = useRef<unknown>(null);
 
   // Which basemap key the CURRENT map instance was built with. Reset by the
@@ -874,6 +875,7 @@ export function IntelligenceMap({
           (p.injured > 0 ? `<span style="color:#ed8936;font-weight:700">${p.injured} injured</span>` : '') +
           `</div>` : '';
 
+      if (hoverPopupRef.current) { hoverPopupRef.current.remove(); hoverPopupRef.current = null; }
       if (popupRef.current) popupRef.current.remove();
 
       popupRef.current = new maplibregl.Popup({ offset: 14, closeButton: true, maxWidth: '300px' })
@@ -893,11 +895,37 @@ export function IntelligenceMap({
         .addTo(map);
     });
 
-    map.on('mouseenter', INCIDENTS_LAYER, () => {
-      if (!measureRef.current.active) map.getCanvas().style.cursor = 'pointer';
+    map.on('mouseenter', INCIDENTS_LAYER, (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+      if (measureRef.current.active) return;
+      map.getCanvas().style.cursor = 'pointer';
+      const feature = e.features?.[0];
+      if (!feature?.properties) return;
+      const p = feature.properties;
+      const coords = (feature.geometry as GeoJSON.Point).coordinates.slice() as [number, number];
+      if (hoverPopupRef.current) hoverPopupRef.current.remove();
+      hoverPopupRef.current = new maplibregl.Popup({
+        offset: 12, closeButton: false, closeOnClick: false, maxWidth: '260px',
+        className: 'hover-tooltip',
+      })
+        .setLngLat(coords)
+        .setHTML(
+          `<div style="font-family:var(--font-sans);padding:4px 2px">` +
+          `<div style="font-size:12px;font-weight:600;margin-bottom:3px">${escapeHtml(String(p.title))}</div>` +
+          `<div style="font-size:10px;color:#888;margin-bottom:4px">` +
+          `${escapeHtml(String(p.dateOccurred || 'Date unknown'))} &bull; ${escapeHtml(String(p.town))}, ${escapeHtml(String(p.province))}` +
+          `</div>` +
+          `<span style="display:inline-block;padding:1px 5px;border-radius:2px;font-size:9px;font-weight:600;letter-spacing:.04em;` +
+          `background:${escapeHtml(String(p.moduleColour))}22;color:${escapeHtml(String(p.moduleColour))};` +
+          `border:1px solid ${escapeHtml(String(p.moduleColour))}40">${escapeHtml(String(p.moduleLabel).toUpperCase())}</span>` +
+          `<span style="margin-left:4px;display:inline-block;padding:1px 5px;border-radius:2px;font-size:9px;font-weight:600;` +
+          `background:${escapeHtml(String(p.severityColour))}22;color:${escapeHtml(String(p.severityColour))}">${escapeHtml(String(p.severityLabel))}</span>` +
+          `</div>`,
+        )
+        .addTo(map);
     });
     map.on('mouseleave', INCIDENTS_LAYER, () => {
       if (!measureRef.current.active) map.getCanvas().style.cursor = '';
+      if (hoverPopupRef.current) { hoverPopupRef.current.remove(); hoverPopupRef.current = null; }
     });
 
     // Resize observer for container changes
@@ -910,6 +938,7 @@ export function IntelligenceMap({
       stopWatchdog();
       ro.disconnect();
       if (popupRef.current) popupRef.current.remove();
+      if (hoverPopupRef.current) hoverPopupRef.current.remove();
       map.remove();
       mapRef.current = null;
       appliedStyleKeyRef.current = null;
