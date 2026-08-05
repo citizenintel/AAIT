@@ -56,24 +56,7 @@ export function LoginPage() {
               </button>
             </form>
 
-            {!configured && (
-              <div className="login-demo">
-                <h3>Demo accounts</h3>
-                <p>Database not configured — using demo mode:</p>
-                <div className="demo-account">
-                  <code>admin@altafrikaner.com</code> / <code>demo</code>
-                  <span className="demo-role">Platform Admin</span>
-                </div>
-                <div className="demo-account">
-                  <code>editor@altafrikaner.com</code> / <code>demo</code>
-                  <span className="demo-role">Senior Editor</span>
-                </div>
-                <div className="demo-account">
-                  <code>mod.demo@example.com</code> / <code>demo</code>
-                  <span className="demo-role">Moderator (limited)</span>
-                </div>
-              </div>
-            )}
+            {/* Demo accounts removed — will be re-added when needed */}
           </div>
         </div>
       </div>
