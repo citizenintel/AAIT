@@ -309,6 +309,8 @@ interface AppStore {
   // --- Ticker slice (legacy) ---
   ticker: TickerConfig;
   updateTicker: (patch: Partial<TickerConfig>) => void;
+  bottomTicker: TickerConfig;
+  updateBottomTicker: (patch: Partial<TickerConfig>) => void;
 
   // --- Priority ticker (infographic mode) ---
   priorityTicker: {
