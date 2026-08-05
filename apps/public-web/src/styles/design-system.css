@@ -207,10 +207,11 @@ body {
 }
 .header-nav-btn:hover { color: var(--text-primary); background: var(--surface-2); }
 .header-nav-btn.accent {
-  color: var(--accent);
-  border: 1px solid var(--accent);
+  color: #fff;
+  background: #dc2626;
+  border: 1px solid #dc2626;
 }
-.header-nav-btn.accent:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.header-nav-btn.accent:hover { background: #b91c1c; }
 
 /* Layers toggle button in header */
 .layers-toggle {
