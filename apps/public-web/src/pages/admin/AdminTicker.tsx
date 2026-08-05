@@ -179,8 +179,11 @@ function TickerSection({ label, description, ticker, update, radioName, fontSize
             <button className={`btn btn-small${ticker.speedSeconds === 79 ? ' btn-primary' : ' btn-secondary'}`} onClick={() => update({ speedSeconds: 79 })}>
               75% slower
             </button>
-            <button className={`btn btn-small${ticker.speedSeconds >= 83 ? ' btn-primary' : ' btn-secondary'}`} onClick={() => update({ speedSeconds: 83 })}>
+            <button className={`btn btn-small${ticker.speedSeconds === 83 ? ' btn-primary' : ' btn-secondary'}`} onClick={() => update({ speedSeconds: 83 })}>
               85% slower
+            </button>
+            <button className={`btn btn-small${ticker.speedSeconds >= 86 ? ' btn-primary' : ' btn-secondary'}`} onClick={() => update({ speedSeconds: 86 })}>
+              95% slower
             </button>
           </div>
         </div>
