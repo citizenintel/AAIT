@@ -677,7 +677,7 @@ export const useAppStore = create<AppStore>()(
       tone: 'normal',
       fontBold: false,
       fontColor: 'white',
-      fontSize: 14,
+      fontSize: 98,
     },
     updateTicker: (patch) => set((s) => { Object.assign(s.ticker, patch); }),
 
