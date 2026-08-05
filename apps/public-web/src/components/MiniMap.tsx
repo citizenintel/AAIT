@@ -5,6 +5,7 @@ import { useAppStore } from '@/stores/app-store';
 const SA_CENTER: [number, number] = [25.5, -30.0];
 const SA_ZOOM = 3.0;
 const MIN_BOX_DEG = 1.5;
+const SA_BOUNDS = { w: 16.5, e: 32.9, s: -34.8, n: -22.1 };
 
 const LIGHT_STYLE: maplibregl.StyleSpecification = {
   version: 8,
@@ -72,11 +73,13 @@ export function MiniMap() {
     const src = map.getSource('viewport-box') as maplibregl.GeoJSONSource | undefined;
     if (!src) return;
 
-    const [[w, s], [e, n]] = viewport.bounds;
-    const cx = (w + e) / 2;
-    const cy = (s + n) / 2;
-    const halfW = Math.max((e - w) / 2, MIN_BOX_DEG / 2);
-    const halfH = Math.max((n - s) / 2, MIN_BOX_DEG / 2);
+    const [[vw, vs], [ve, vn]] = viewport.bounds;
+    const cx = (vw + ve) / 2;
+    const cy = (vs + vn) / 2;
+    const saW = SA_BOUNDS.e - SA_BOUNDS.w;
+    const saH = SA_BOUNDS.n - SA_BOUNDS.s;
+    const halfW = Math.min(Math.max((ve - vw) / 2, MIN_BOX_DEG / 2), saW / 2);
+    const halfH = Math.min(Math.max((vn - vs) / 2, MIN_BOX_DEG / 2), saH / 2);
 
     src.setData({
       type: 'Feature',
