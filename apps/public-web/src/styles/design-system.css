@@ -2173,6 +2173,35 @@ body {
   .bottom-ticker-track { animation: none; }
 }
 
+/* Mini-map (overview inset) */
+.mini-map-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #f0f0f0;
+  position: relative;
+}
+.mini-map-label {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  z-index: 2;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #555;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.mini-map {
+  flex: 1;
+  min-height: 0;
+}
+.mini-map .maplibregl-canvas {
+  outline: none;
+}
+
 .correction-overlay {
   position: fixed;
   inset: 0;

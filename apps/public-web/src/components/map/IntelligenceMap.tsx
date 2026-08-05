@@ -772,6 +772,18 @@ export function IntelligenceMap({
       tryAddDeckOverlayRef.current(map);
     });
 
+    const pushViewport = () => {
+      const b = map.getBounds();
+      const c = map.getCenter();
+      useAppStore.getState().setMapViewport({
+        bounds: [[b.getWest(), b.getSouth()], [b.getEast(), b.getNorth()]],
+        center: [c.lng, c.lat],
+        zoom: map.getZoom(),
+      });
+    };
+    map.on('moveend', pushViewport);
+    map.on('load', pushViewport);
+
     // Force repaints when raster tiles finish loading (fixes blank tile boxes in MapLibre v6)
     map.on('sourcedata', (e: maplibregl.MapSourceDataEvent) => {
       if (e.isSourceLoaded && e.dataType === 'source') {

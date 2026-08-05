@@ -285,6 +285,10 @@ interface AppStore {
   setMobileMenuOpen: (open: boolean) => void;
   setViewMode: (mode: 'map' | 'list') => void;
 
+  // --- Map viewport slice (for mini-map) ---
+  mapViewport: { bounds: [[number, number], [number, number]]; center: [number, number]; zoom: number } | null;
+  setMapViewport: (vp: { bounds: [[number, number], [number, number]]; center: [number, number]; zoom: number } | null) => void;
+
   // --- Search location slice ---
   searchLocation: SearchLocation | null;
   setSearchLocation: (loc: SearchLocation | null) => void;
@@ -610,6 +614,10 @@ export const useAppStore = create<AppStore>()(
     setMeasureActive: (active) => set((s) => { s.ui.measureActive = active; }),
     setMobileMenuOpen: (open) => set((s) => { s.ui.mobileMenuOpen = open; }),
     setViewMode: (mode) => set((s) => { s.ui.viewMode = mode; }),
+
+    // --- Map viewport (for mini-map) ---
+    mapViewport: null,
+    setMapViewport: (vp) => set((s) => { s.mapViewport = vp; }),
 
     // --- Search location ---
     searchLocation: null,

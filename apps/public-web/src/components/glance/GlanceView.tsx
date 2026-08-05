@@ -10,6 +10,7 @@ import { WidgetPanel } from '@/components/widgets/WidgetPanel';
 import { LeftRail } from '@/components/shell/LeftRail';
 import { ManagedContentSlot } from '@/components/widgets/ManagedContentSlot';
 import { BottomTicker } from '@/components/BottomTicker';
+import { MiniMap } from '@/components/MiniMap';
 import type { IntelligenceEvent } from '@/types/ontology';
 
 const BASELINE_STATS = {
@@ -153,6 +154,7 @@ export function GlanceView() {
       </section>
 
       <section className="glance-ad-secondary-slot">
+        <MiniMap />
       </section>
 
       <section className="glance-ad-right" data-placement-location="right-lower-rail">
