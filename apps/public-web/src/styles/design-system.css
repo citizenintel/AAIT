@@ -661,7 +661,7 @@ body {
 
 .glance-ad-primary-split {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 0;
 }
 .glance-ad-primary-split > * {
@@ -670,6 +670,9 @@ body {
   overflow: hidden;
 }
 .glance-ad-primary-split > *:first-child {
+  border-right: 1px solid var(--border);
+}
+.glance-ad-primary-split > *:nth-child(2) {
   border-right: 1px solid var(--border);
 }
 
@@ -696,9 +699,12 @@ body {
     clamp(180px, 26vh, 250px);
   grid-template-areas:
     "priority    map          map            right-ad"
-    "left-ad     primary-ad   secondary-ad   right-ad";
+    "left-ad     primary-ad   primary-ad     right-ad";
 }
 .glance-commercial-layout.infographic-mode .glance-dashboard-summary {
+  display: none;
+}
+.glance-commercial-layout.infographic-mode .glance-ad-blank {
   display: none;
 }
 .glance-commercial-layout.infographic-mode .glance-ad-right {
