@@ -1,5 +1,4 @@
 import { useAppStore } from '@/stores/app-store';
-import { MOCK_RSS_FEEDS } from '../../data/mock-news';
 import { TickerBar } from '../../components/TickerBar';
 import { BottomTicker } from '../../components/BottomTicker';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -16,7 +15,8 @@ interface TickerSectionProps {
 }
 
 function TickerSection({ label, description, ticker, update, radioName, fontSizes, preview }: TickerSectionProps) {
-  const enabledFeeds = MOCK_RSS_FEEDS.filter((f) => f.enabled);
+  const rssFeeds = useAppStore((s) => s.rssFeeds);
+  const enabledFeeds = rssFeeds.filter((f) => f.enabled);
 
   return (
     <div style={{ borderLeft: '3px solid var(--accent)', paddingLeft: 16, marginBottom: 32 }}>

@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
-import { MOCK_NEWS, sourceDomain } from '../../data/mock-news';
+import { sourceDomain } from '../../data/mock-news';
 import { MODULE_META } from '../../data/mock-incidents';
 import { useIncidentData } from '../../lib/hooks/useIncidentData';
+import { useAppStore } from '@/stores/app-store';
 import { ManagedContentSlot, useResolvedContentSlot } from './ManagedContentSlot';
 
 function timeAgo(dateStr: string) {
@@ -14,11 +15,12 @@ function timeAgo(dateStr: string) {
 
 function LivePanel() {
   const { incidents } = useIncidentData();
+  const newsItems = useAppStore((s) => s.newsItems);
   const stats = useMemo(() => {
     const critical = incidents.filter((i) => i.severity === 'critical').length;
-    const sources = new Set(MOCK_NEWS.map((n) => n.source)).size;
-    return { total: incidents.length, critical, sources, articles: MOCK_NEWS.length };
-  }, [incidents]);
+    const sources = new Set(newsItems.map((n) => n.source)).size;
+    return { total: incidents.length, critical, sources, articles: newsItems.length };
+  }, [incidents, newsItems]);
 
   return (
     <div className="bottom-panel-live">
@@ -80,8 +82,9 @@ export function NewsTicker() {
   const [expanded, setExpanded] = useState(false);
   const bottomSlot = useResolvedContentSlot('BOTTOM_PRIMARY_BILLBOARD');
   const bottomVisible = bottomSlot.type !== 'hidden';
+  const newsItems = useAppStore((s) => s.newsItems);
 
-  const news = MOCK_NEWS.slice(0, expanded ? 12 : 4);
+  const news = newsItems.slice(0, expanded ? 12 : 4);
 
   return (
     <div className={`bottom-zone-grid${expanded ? ' expanded' : ''}`} data-has-sponsor={bottomVisible}>
@@ -123,7 +126,7 @@ export function NewsTicker() {
           })}
         </div>
         <div className="widget-news-footer">
-          Synthetic feed — {MOCK_NEWS.length} articles from {new Set(MOCK_NEWS.map(n => n.source)).size} sources
+          Synthetic feed — {newsItems.length} articles from {new Set(newsItems.map(n => n.source)).size} sources
         </div>
       </div>
 

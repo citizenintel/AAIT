@@ -1,5 +1,5 @@
 import { useAppStore } from '@/stores/app-store';
-import { MOCK_NEWS, MOCK_RSS_FEEDS, sourceDomain } from '../data/mock-news';
+import { sourceDomain } from '../data/mock-news';
 
 /**
  * Full-width scrolling ticker pinned to the very top of the page.
@@ -8,6 +8,8 @@ import { MOCK_NEWS, MOCK_RSS_FEEDS, sourceDomain } from '../data/mock-news';
  */
 export function TickerBar() {
   const ticker = useAppStore((s) => s.ticker);
+  const newsItems = useAppStore((s) => s.newsItems);
+  const rssFeeds = useAppStore((s) => s.rssFeeds);
 
   if (!ticker.enabled) return null;
 
@@ -15,13 +17,11 @@ export function TickerBar() {
   if (ticker.mode === 'custom') {
     items = ticker.customText.split('\n').map((s) => s.trim()).filter(Boolean);
   } else {
-    // RSS mode — pull headlines from the selected feed (or all feeds). Mock data for now;
-    // in production these come from the ingested RSS articles for ticker.rssFeedId.
-    const feed = ticker.rssFeedId ? MOCK_RSS_FEEDS.find((f) => f.id === ticker.rssFeedId) : null;
+    const feed = ticker.rssFeedId ? rssFeeds.find((f) => f.id === ticker.rssFeedId) : null;
     const pool = feed
-      ? MOCK_NEWS.filter((n) => n.source === feed.name || feed.name.includes(n.source))
-      : MOCK_NEWS;
-    const source = pool.length > 0 ? pool : MOCK_NEWS;
+      ? newsItems.filter((n) => n.source === feed.name || feed.name.includes(n.source))
+      : newsItems;
+    const source = pool.length > 0 ? pool : newsItems;
     items = source.map((n) => `${n.title}  ·  ${sourceDomain(n.source)}`);
   }
 

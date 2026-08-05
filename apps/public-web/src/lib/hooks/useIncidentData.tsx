@@ -158,6 +158,7 @@ export function IncidentDataProvider({ children }: { children: ReactNode }) {
   // prop-drilling. Default is All time — see app-store.ts.
   const timeFilter = useAppStore((s) => s.timeFilter);
   const includeUndated = useAppStore((s) => s.includeUndated);
+  const refreshCounter = useAppStore((s) => s.refreshCounter);
 
   useEffect(() => {
     hydrate();
@@ -176,7 +177,7 @@ export function IncidentDataProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshCounter]);
 
   /**
    * BLOCKER FIX. `importedIncidents` used to be merged straight into the

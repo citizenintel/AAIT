@@ -13,6 +13,7 @@ import { ReviewQueueBanner } from '@/components/shell/ReviewQueueBanner';
 import { AddressSearch } from '@/components/AddressSearch';
 import { IncidentListView } from '@/components/IncidentListView';
 import { useURLSync } from '@/lib/hooks/useURLSync';
+import { useAutoRefresh } from '@/lib/hooks/useAutoRefresh';
 import { fetchEvents } from '@/lib/api/events';
 import { fetchAssets } from '@/lib/api/assets';
 import type { InterfaceLevel, RenderingTier } from '@/types/ontology';
@@ -26,6 +27,7 @@ const LEVEL_LABELS: Record<InterfaceLevel, string> = {
 const TIER_CYCLE: RenderingTier[] = ['essential', 'enhanced', 'cinematic'];
 
 export function AppShell() {
+  useAutoRefresh();
   const navigate = useNavigate();
   const isAuth = useAppStore((s) => s.auth.isAuthenticated);
   const user = useAppStore((s) => s.auth.user);

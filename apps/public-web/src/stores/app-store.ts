@@ -18,6 +18,8 @@ import type { ModuleKey, IncidentSeverity, AppRole } from '@/data/types';
 import type { MockIncident } from '@/data/mock-incidents';
 import { deduplicateByContent, mockIncidentFingerprint } from '@/lib/utils/deduplicate';
 import { ALL_TIME, isTimeFilter, type TimeFilter } from '@/lib/utils/time-filter';
+import { MOCK_NEWS, MOCK_RSS_FEEDS } from '@/data/mock-news';
+import type { NewsItem, RssFeedConfig } from '@/data/mock-news';
 
 // ---------------------------------------------------------------------------
 // IndexedDB persistence
@@ -348,6 +350,18 @@ interface AppStore {
   setModEnabled: (email: string, enabled: boolean) => void;
   addModerator: (email: string) => void;
   removeModerator: (email: string) => void;
+
+  // --- News items (reactive, for tickers and widgets) ---
+  newsItems: NewsItem[];
+  rssFeeds: RssFeedConfig[];
+  setNewsItems: (items: NewsItem[]) => void;
+  setRssFeeds: (feeds: RssFeedConfig[]) => void;
+  lastRefreshAt: number | null;
+  setLastRefreshAt: (ts: number) => void;
+
+  // --- Refresh counter (triggers IncidentDataProvider re-fetch) ---
+  refreshCounter: number;
+  triggerRefresh: () => void;
 
   // --- Feed freshness ---
   feedLastRefresh: Record<string, number>;
@@ -798,6 +812,18 @@ export const useAppStore = create<AppStore>()(
       delete s.modPermissions[email];
       delete s.modEnabled[email];
     }),
+
+    // --- News items (reactive) ---
+    newsItems: MOCK_NEWS,
+    rssFeeds: MOCK_RSS_FEEDS,
+    setNewsItems: (items) => set((s) => { s.newsItems = items; }),
+    setRssFeeds: (feeds) => set((s) => { s.rssFeeds = feeds; }),
+    lastRefreshAt: null,
+    setLastRefreshAt: (ts) => set((s) => { s.lastRefreshAt = ts; }),
+
+    // --- Refresh counter ---
+    refreshCounter: 0,
+    triggerRefresh: () => set((s) => { s.refreshCounter += 1; }),
 
     // --- Feed freshness ---
     feedLastRefresh: {},

@@ -1,5 +1,5 @@
 import { useAppStore } from '@/stores/app-store';
-import { MOCK_NEWS, sourceDomain } from '../data/mock-news';
+import { sourceDomain } from '../data/mock-news';
 
 const FONT_SIZES: Record<string, number> = { small: 10, medium: 12, large: 15 };
 const FONT_COLORS: Record<string, string> = { white: '#e2e8f0', yellow: '#eab308', red: '#ef4444' };
@@ -7,6 +7,7 @@ const FONT_COLORS: Record<string, string> = { white: '#e2e8f0', yellow: '#eab308
 export function PriorityTicker() {
   const pt = useAppStore((s) => s.priorityTicker);
   const sponsorsEnabled = useAppStore((s) => s.sponsorsEnabled);
+  const newsItems = useAppStore((s) => s.newsItems);
 
   if (sponsorsEnabled || !pt.enabled) return null;
 
@@ -27,7 +28,7 @@ export function PriorityTicker() {
     );
   }
 
-  const items = MOCK_NEWS.map((n) => `${n.title}  ·  ${sourceDomain(n.source)}`);
+  const items = newsItems.map((n) => `${n.title}  ·  ${sourceDomain(n.source)}`);
   if (items.length === 0) return null;
   const loop = [...items, ...items];
 
