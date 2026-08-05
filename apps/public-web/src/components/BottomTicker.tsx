@@ -2,7 +2,7 @@ import { useAppStore } from '@/stores/app-store';
 import { MOCK_NEWS, MOCK_RSS_FEEDS, sourceDomain } from '../data/mock-news';
 
 export function BottomTicker() {
-  const ticker = useAppStore((s) => s.ticker);
+  const ticker = useAppStore((s) => s.bottomTicker);
 
   if (!ticker.enabled) return null;
 

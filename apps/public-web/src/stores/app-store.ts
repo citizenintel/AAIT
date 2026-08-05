@@ -687,9 +687,22 @@ export const useAppStore = create<AppStore>()(
       tone: 'normal',
       fontBold: false,
       fontColor: 'white',
-      fontSize: 98,
+      fontSize: 14,
     },
     updateTicker: (patch) => set((s) => { Object.assign(s.ticker, patch); }),
+    bottomTicker: {
+      enabled: true,
+      mode: 'rss',
+      customText: 'AAIT Incident Tracker — live situational awareness for South Africa\nAll incidents currently shown are synthetic test data\nReport an incident from the map toolbar',
+      rssFeedId: null,
+      direction: 'rtl',
+      speedSeconds: 90,
+      tone: 'normal',
+      fontBold: true,
+      fontColor: 'white',
+      fontSize: 98,
+    },
+    updateBottomTicker: (patch) => set((s) => { Object.assign(s.bottomTicker, patch); }),
 
     // --- Priority ticker (infographic mode) ---
     priorityTicker: (() => {
