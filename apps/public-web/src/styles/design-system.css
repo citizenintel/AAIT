@@ -659,10 +659,28 @@ body {
   border-top: 1px solid var(--border);
 }
 
+.glance-ad-primary-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+.glance-ad-primary-split > * {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.glance-ad-primary-split > *:first-child {
+  border-right: 1px solid var(--border);
+}
+
 .glance-ad-secondary {
   grid-area: secondary-ad;
   border-top: 1px solid var(--border);
   border-left: 1px solid var(--border);
+}
+
+.glance-ad-blank {
+  background: var(--bg-surface);
 }
 
 .glance-ad-right {
