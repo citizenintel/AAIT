@@ -151,6 +151,9 @@ export function GlanceView() {
         <ManagedContentSlot slotKey="BOTTOM_PRIMARY_BILLBOARD" />
       </section>
 
+      <section className="glance-ad-secondary-slot">
+      </section>
+
       <section className="glance-ad-right" data-placement-location="right-lower-rail">
         <ManagedContentSlot slotKey="RIGHT_RAIL_HALF_PAGE" />
       </section>
