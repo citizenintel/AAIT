@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { TopBar } from '../components/TopBar';
 import { SEVERITY_META, VERIFICATION_META, MODULE_META } from '../data/mock-incidents';
 import { fetchIncidentById } from '@/lib/api/incidents';
@@ -9,8 +9,13 @@ import { CorrectionForm } from '@/components/CorrectionForm';
 export function IncidentPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: incident, loading } = useQuery(() => fetchIncidentById(id!), [id]);
   const [showCorrection, setShowCorrection] = useState(false);
+
+  useEffect(() => {
+    if (location.hash === '#correct' && incident) setShowCorrection(true);
+  }, [location.hash, incident]);
 
   if (loading) {
     return (

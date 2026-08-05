@@ -889,7 +889,10 @@ export function IntelligenceMap({
           `<span>${escapeHtml(String(p.town))}, ${escapeHtml(String(p.province))}</span>` +
           `</div>` +
           casualtyHtml +
-          `<div style="margin-top:8px"><a href="${import.meta.env.BASE_URL}incident/${escapeHtml(String(p.id))}" style="font-size:11px;color:#2563eb;text-decoration:none;font-weight:600">View full details →</a></div>` +
+          `<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">` +
+          `<a href="${import.meta.env.BASE_URL}incident/${escapeHtml(String(p.id))}" style="font-size:11px;color:#2563eb;text-decoration:none;font-weight:600">View full details →</a>` +
+          `<a href="${import.meta.env.BASE_URL}incident/${escapeHtml(String(p.id))}#correct" class="popup-correction-link" style="font-size:10px;color:#ef4444;text-decoration:none;font-weight:700;border:1px solid #ef444466;padding:2px 8px;border-radius:3px;letter-spacing:.03em">Submit Correction</a>` +
+          `</div>` +
           `</div>`,
         )
         .addTo(map);
@@ -1283,7 +1286,11 @@ export function IntelligenceMap({
 
     map.flyTo({ center: [searchLocation.lng, searchLocation.lat], zoom: Math.max(8, 13 - Math.log2(searchLocation.radiusKm / 5)), duration: 1500 });
 
-    return removeCircle;
+    const marker = new maplibregl.Marker({ color: '#3b82f6' })
+      .setLngLat([searchLocation.lng, searchLocation.lat])
+      .addTo(map);
+
+    return () => { removeCircle(); marker.remove(); };
   }, [searchLocation]);
 
   // ------------------------------------------------------------------
