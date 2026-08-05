@@ -2,8 +2,8 @@ import { useEffect, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import { useAppStore } from '@/stores/app-store';
 
-const SA_CENTER: [number, number] = [25.0, -29.0];
-const SA_ZOOM = 3.6;
+const SA_CENTER: [number, number] = [25.5, -30.0];
+const SA_ZOOM = 3.0;
 const MIN_BOX_DEG = 1.5;
 
 const LIGHT_STYLE: maplibregl.StyleSpecification = {
