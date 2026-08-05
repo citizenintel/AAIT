@@ -2,8 +2,9 @@ import { useEffect, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import { useAppStore } from '@/stores/app-store';
 
-const SA_CENTER: [number, number] = [25.5, -28.0];
-const SA_ZOOM = 4.2;
+const SA_CENTER: [number, number] = [25.0, -29.0];
+const SA_ZOOM = 3.6;
+const MIN_BOX_DEG = 1.5;
 
 const LIGHT_STYLE: maplibregl.StyleSpecification = {
   version: 8,
@@ -72,12 +73,17 @@ export function MiniMap() {
     if (!src) return;
 
     const [[w, s], [e, n]] = viewport.bounds;
+    const cx = (w + e) / 2;
+    const cy = (s + n) / 2;
+    const halfW = Math.max((e - w) / 2, MIN_BOX_DEG / 2);
+    const halfH = Math.max((n - s) / 2, MIN_BOX_DEG / 2);
+
     src.setData({
       type: 'Feature',
       properties: {},
       geometry: {
         type: 'Polygon',
-        coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]],
+        coordinates: [[[cx - halfW, cy - halfH], [cx + halfW, cy - halfH], [cx + halfW, cy + halfH], [cx - halfW, cy + halfH], [cx - halfW, cy - halfH]]],
       },
     });
   }, [viewport]);
