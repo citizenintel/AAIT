@@ -9,6 +9,7 @@ import ConfidenceAnatomy from '@/components/shared/ConfidenceAnatomy';
 import { WidgetPanel } from '@/components/widgets/WidgetPanel';
 import { LeftRail } from '@/components/shell/LeftRail';
 import { ManagedContentSlot } from '@/components/widgets/ManagedContentSlot';
+import { BottomTicker } from '@/components/BottomTicker';
 import type { IntelligenceEvent } from '@/types/ontology';
 
 const BASELINE_STATS = {
@@ -148,7 +149,7 @@ export function GlanceView() {
 
       <section className="glance-ad-primary glance-ad-primary-split">
         <ManagedContentSlot slotKey="BOTTOM_SECONDARY_BILLBOARD" />
-        <ManagedContentSlot slotKey="BOTTOM_PRIMARY_BILLBOARD" />
+        <BottomTicker />
       </section>
 
       <section className="glance-ad-secondary-slot">

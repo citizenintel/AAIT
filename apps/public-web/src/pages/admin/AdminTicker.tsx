@@ -168,6 +168,22 @@ export function AdminTicker() {
           </div>
           <div className="form-hint">Set the ticker text colour for emphasis. Use red/yellow for urgent alerts, green for positive updates.</div>
         </div>
+
+        <div className="form-group">
+          <label className="form-label">Font size: {ticker.fontSize || 14}px</label>
+          <div className="ticker-dir-toggle">
+            {([12, 14, 18, 22, 28] as const).map((sz) => (
+              <button
+                key={sz}
+                className={`btn btn-small${(ticker.fontSize || 14) === sz ? ' btn-primary' : ' btn-secondary'}`}
+                onClick={() => updateTicker({ fontSize: sz })}
+              >
+                {sz}px
+              </button>
+            ))}
+          </div>
+          <div className="form-hint">Controls the font size of the bottom live ticker on the public map. Larger sizes are bolder and more visible.</div>
+        </div>
       </div>
 
       {/* Motion */}

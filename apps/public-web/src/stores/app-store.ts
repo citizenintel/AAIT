@@ -96,6 +96,7 @@ export interface TickerConfig {
   tone: 'normal' | 'alert';
   fontBold: boolean;
   fontColor: 'white' | 'green' | 'yellow' | 'red';
+  fontSize: number;
 }
 
 export interface ModPermissions {
@@ -676,6 +677,7 @@ export const useAppStore = create<AppStore>()(
       tone: 'normal',
       fontBold: false,
       fontColor: 'white',
+      fontSize: 14,
     },
     updateTicker: (patch) => set((s) => { Object.assign(s.ticker, patch); }),
 

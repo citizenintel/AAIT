@@ -45,6 +45,7 @@ export function TickerBar() {
           style={{
             animationDuration: `${ticker.speedSeconds}s`,
             fontWeight: ticker.fontBold ? 700 : 400,
+            fontSize: ticker.fontSize || 14,
             ...(textColor ? { color: textColor } : {}),
           }}
         >

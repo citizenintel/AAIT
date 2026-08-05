@@ -2122,6 +2122,57 @@ body {
    Feature 7: Correction form (modal)
    --------------------------------------------------------------------------- */
 
+/* --- Bottom Live Ticker --- */
+.bottom-ticker {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  background: linear-gradient(90deg, #14161f, #191c27);
+  border-top: 1px solid var(--border);
+}
+.bottom-ticker-viewport {
+  flex: 1;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+.bottom-ticker-track {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  will-change: transform;
+  animation: bottom-ticker-scroll linear infinite;
+  letter-spacing: 0.02em;
+}
+@keyframes bottom-ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.bottom-ticker:hover .bottom-ticker-track {
+  animation-play-state: paused;
+}
+.bottom-ticker-item {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+}
+.bottom-ticker-sep {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.4;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bottom-ticker-track { animation: none; }
+}
+
 .correction-overlay {
   position: fixed;
   inset: 0;
