@@ -10,6 +10,16 @@ export interface FilteredIncidentsResult {
   isFiltered: boolean;
 }
 
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export function useFilteredIncidents(): FilteredIncidentsResult {
   const { incidents } = useIncidentData();
   const modules = useAppStore((s) => s.filters.modules);
@@ -17,6 +27,7 @@ export function useFilteredIncidents(): FilteredIncidentsResult {
   const severities = useAppStore((s) => s.filters.severities);
   const province = useAppStore((s) => s.filters.province);
   const searchQuery = useAppStore((s) => s.filters.searchQuery);
+  const searchLocation = useAppStore((s) => s.searchLocation);
 
   return useMemo(() => {
     const activeFilterNames: string[] = [];
@@ -33,6 +44,7 @@ export function useFilteredIncidents(): FilteredIncidentsResult {
     if (!allSevsOn) activeFilterNames.push('severity filtered');
     if (province) activeFilterNames.push(province);
     if (searchQuery) activeFilterNames.push(`"${searchQuery}"`);
+    if (searchLocation) activeFilterNames.push(`within ${searchLocation.radiusKm}km`);
 
     const filtered = incidents.filter((inc) => {
       if (modules[inc.module] === false) return false;
@@ -49,6 +61,10 @@ export function useFilteredIncidents(): FilteredIncidentsResult {
           (inc.summary && inc.summary.toLowerCase().includes(q));
         if (!match) return false;
       }
+      if (searchLocation && inc.lat != null && inc.lng != null) {
+        const dist = haversineKm(searchLocation.lat, searchLocation.lng, inc.lat, inc.lng);
+        if (dist > searchLocation.radiusKm) return false;
+      }
       return true;
     });
 
@@ -58,5 +74,5 @@ export function useFilteredIncidents(): FilteredIncidentsResult {
       activeFilterNames,
       isFiltered: activeFilterNames.length > 0,
     };
-  }, [incidents, modules, categories, severities, province, searchQuery]);
+  }, [incidents, modules, categories, severities, province, searchQuery, searchLocation]);
 }

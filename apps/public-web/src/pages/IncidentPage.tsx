@@ -1,13 +1,16 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { TopBar } from '../components/TopBar';
 import { SEVERITY_META, VERIFICATION_META, MODULE_META } from '../data/mock-incidents';
 import { fetchIncidentById } from '@/lib/api/incidents';
 import { useQuery } from '@/lib/hooks/useQuery';
+import { CorrectionForm } from '@/components/CorrectionForm';
 
 export function IncidentPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: incident, loading } = useQuery(() => fetchIncidentById(id!), [id]);
+  const [showCorrection, setShowCorrection] = useState(false);
 
   if (loading) {
     return (
@@ -148,11 +151,28 @@ export function IncidentPage() {
                     <p>This incident was generated for development and testing purposes. It does not represent a real event.</p>
                   </div>
                 )}
+
+                <button className="correction-suggest-btn" onClick={() => setShowCorrection(true)}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Submit a Correction
+                </button>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {showCorrection && (
+        <div className="correction-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowCorrection(false); }}>
+          <CorrectionForm
+            incidentId={incident.id}
+            incidentTitle={incident.title}
+            onClose={() => setShowCorrection(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }

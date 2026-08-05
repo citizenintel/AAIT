@@ -1232,6 +1232,61 @@ export function IntelligenceMap({
   }, [flyToCenter, flyToZoom]);
 
   // ------------------------------------------------------------------
+  // Address search radius circle overlay
+  // ------------------------------------------------------------------
+  const searchLocation = useAppStore((s) => s.searchLocation);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const SRC = 'search-radius-src';
+    const FILL = 'search-radius-fill';
+    const LINE = 'search-radius-line';
+
+    const removeCircle = () => {
+      try { if (map.getLayer(LINE)) map.removeLayer(LINE); } catch {}
+      try { if (map.getLayer(FILL)) map.removeLayer(FILL); } catch {}
+      try { if (map.getSource(SRC)) map.removeSource(SRC); } catch {}
+    };
+
+    if (!searchLocation) { removeCircle(); return; }
+
+    const steps = 64;
+    const coords: [number, number][] = [];
+    for (let i = 0; i <= steps; i++) {
+      const angle = (i / steps) * 2 * Math.PI;
+      const dx = searchLocation.radiusKm * Math.cos(angle);
+      const dy = searchLocation.radiusKm * Math.sin(angle);
+      const lat = searchLocation.lat + (dy / 111.32);
+      const lng = searchLocation.lng + (dx / (111.32 * Math.cos((searchLocation.lat * Math.PI) / 180)));
+      coords.push([lng, lat]);
+    }
+
+    const geojson: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'Polygon', coordinates: [coords] },
+      }],
+    };
+
+    const apply = () => {
+      removeCircle();
+      map.addSource(SRC, { type: 'geojson', data: geojson });
+      map.addLayer({ id: FILL, type: 'fill', source: SRC, paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.08 } });
+      map.addLayer({ id: LINE, type: 'line', source: SRC, paint: { 'line-color': '#3b82f6', 'line-width': 2, 'line-dasharray': [3, 2] } });
+    };
+
+    if (map.isStyleLoaded()) { apply(); }
+    else { map.once('styledata', apply); }
+
+    map.flyTo({ center: [searchLocation.lng, searchLocation.lat], zoom: Math.max(8, 13 - Math.log2(searchLocation.radiusKm / 5)), duration: 1500 });
+
+    return removeCircle;
+  }, [searchLocation]);
+
+  // ------------------------------------------------------------------
   // Measure toggle / undo helpers
   // ------------------------------------------------------------------
   function toggleMeasure() {
