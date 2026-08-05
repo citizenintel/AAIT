@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import { useAppStore } from '@/stores/app-store';
 
@@ -26,7 +26,7 @@ const LIGHT_STYLE: maplibregl.StyleSpecification = {
 export function MiniMap() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const boxSourceRef = useRef(false);
+  const [sourceReady, setSourceReady] = useState(false);
   const viewport = useAppStore((s) => s.mapViewport);
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export function MiniMap() {
         source: 'viewport-box',
         paint: { 'line-color': '#facc15', 'line-width': 2 },
       });
-      boxSourceRef.current = true;
+      setSourceReady(true);
     });
 
     return () => { map.remove(); mapRef.current = null; };
@@ -68,7 +68,7 @@ export function MiniMap() {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !boxSourceRef.current || !viewport) return;
+    if (!map || !sourceReady || !viewport) return;
 
     const src = map.getSource('viewport-box') as maplibregl.GeoJSONSource | undefined;
     if (!src) return;
@@ -89,7 +89,7 @@ export function MiniMap() {
         coordinates: [[[cx - halfW, cy - halfH], [cx + halfW, cy - halfH], [cx + halfW, cy + halfH], [cx - halfW, cy + halfH], [cx - halfW, cy - halfH]]],
       },
     });
-  }, [viewport]);
+  }, [viewport, sourceReady]);
 
   return (
     <div className="mini-map-container">
