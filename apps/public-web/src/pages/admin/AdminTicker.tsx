@@ -165,10 +165,16 @@ function TickerSection({ label, description, ticker, update, radioName, fontSize
           <label className="form-label">Speed</label>
           <div className="ticker-dir-toggle">
             <button className={`btn btn-small${ticker.speedSeconds <= 45 ? ' btn-primary' : ' btn-secondary'}`} onClick={() => update({ speedSeconds: 45 })}>
-              Normal speed
+              Normal
             </button>
-            <button className={`btn btn-small${ticker.speedSeconds > 45 ? ' btn-primary' : ' btn-secondary'}`} onClick={() => update({ speedSeconds: 68 })}>
-              Slower (50%)
+            <button className={`btn btn-small${ticker.speedSeconds === 50 ? ' btn-primary' : ' btn-secondary'}`} onClick={() => update({ speedSeconds: 50 })}>
+              10% slower
+            </button>
+            <button className={`btn btn-small${ticker.speedSeconds === 56 ? ' btn-primary' : ' btn-secondary'}`} onClick={() => update({ speedSeconds: 56 })}>
+              25% slower
+            </button>
+            <button className={`btn btn-small${ticker.speedSeconds >= 68 ? ' btn-primary' : ' btn-secondary'}`} onClick={() => update({ speedSeconds: 68 })}>
+              50% slower
             </button>
           </div>
         </div>
