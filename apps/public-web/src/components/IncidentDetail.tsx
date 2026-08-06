@@ -91,7 +91,7 @@ export function IncidentDetail() {
           {incident.splitFrom && (
             <div style={{ fontSize: 11, marginTop: 6, opacity: 0.85 }}>
               Split out of source row <code>{incident.splitFrom.rootId}</code> by the “{incident.splitFrom.strategy}” rule.
-              {incident.splitFrom.parentVictimName && <> Parent record named <strong>{incident.splitFrom.parentVictimName}</strong>; that name has NOT been attributed to this entry.</>}
+              {(incident.splitFrom.parentVictimFirstName || incident.splitFrom.parentVictimSurname) && <> Parent record named <strong>{[incident.splitFrom.parentVictimFirstName, incident.splitFrom.parentVictimSurname].filter(Boolean).join(' ')}</strong>; that name has NOT been attributed to this entry.</>}
               {incident.splitFrom.parentCasualties && <> Parent casualty figure: {incident.splitFrom.parentCasualties.deceased ?? '—'} deceased / {incident.splitFrom.parentCasualties.injured ?? '—'} injured (unassigned).</>}
             </div>
           )}

@@ -2,6 +2,13 @@ import { supabase, isSupabaseConfigured, editorial } from '../supabase';
 import { MOCK_SUBMISSIONS, summariseSubmission } from '../../data/mock-submissions';
 import type { SubmissionSummary } from '../../data/mock-submissions';
 
+function splitDisplayName(name: string | undefined | null): { first: string; surname: string } {
+  if (!name) return { first: '', surname: '' };
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return { first: '', surname: parts[0] ?? '' };
+  return { first: parts.slice(0, -1).join(' '), surname: parts[parts.length - 1] ?? '' };
+}
+
 export interface SubmissionRow {
   id: string;
   contributor_id: string;
@@ -184,7 +191,8 @@ export async function summariseWithAI(id: string): Promise<SubmissionSummary> {
         severity: 'medium',
       },
       sensitive: {
-        reporterName: submission.contributor?.display_name ?? '',
+        reporterFirstName: splitDisplayName(submission.contributor?.display_name).first,
+        reporterSurname: splitDisplayName(submission.contributor?.display_name).surname,
         reporterEmail: submission.contributor?.email ?? '',
         sapsNumber: submission.police_case_number ?? '',
         contactsInText: [],
@@ -203,7 +211,8 @@ export async function summariseWithAI(id: string): Promise<SubmissionSummary> {
       severity: 'medium',
     },
     sensitive: {
-      reporterName: submission.contributor?.display_name ?? '',
+      reporterFirstName: splitDisplayName(submission.contributor?.display_name).first,
+      reporterSurname: splitDisplayName(submission.contributor?.display_name).surname,
       reporterEmail: submission.contributor?.email ?? '',
       sapsNumber: submission.police_case_number ?? '',
       contactsInText: [],
@@ -251,7 +260,7 @@ function mockToSingleRow(m: (typeof MOCK_SUBMISSIONS)[number]): SubmissionRow {
     submitted_at: m.submitted,
     created_at: m.submitted,
     updated_at: m.submitted,
-    contributor: { display_name: m.reporter, email: m.reporterEmail },
+    contributor: { display_name: [m.reporterFirstName, m.reporterSurname].filter(Boolean).join(' '), email: m.reporterEmail },
     location: { province: m.province, town: m.town },
     category: { slug: m.module, label_en: m.module, module: m.module },
     evidence_items: m.attachments > 0

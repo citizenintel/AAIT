@@ -32,11 +32,12 @@ export interface SplitProvenance {
   /** The parent's casualty figure, preserved for audit. NOT divided among children. */
   parentCasualties?: { deceased?: number; injured?: number };
   /**
-   * The parent's victimName, preserved for audit. For CSV / AI-sorted imports
-   * this came from an explicitly mapped SOURCE COLUMN, so it must survive the
-   * split even though it cannot be attributed to any one child.
+   * The parent's victim name fields, preserved for audit. For CSV / AI-sorted
+   * imports these came from an explicitly mapped SOURCE COLUMN, so they must
+   * survive the split even though they cannot be attributed to any one child.
    */
-  parentVictimName?: string;
+  parentVictimFirstName?: string;
+  parentVictimSurname?: string;
   /** The parent's title, preserved for audit — the parent record is replaced. */
   parentTitle?: string;
   /** The parent's full summary text, so a child is always traceable to source. */
@@ -69,14 +70,17 @@ export interface MockIncident {
    * make, and it is summed into published totals.
    */
   casualties?: { deceased?: number; injured?: number };
-  victimName?: string;
-  suspectName?: string;
+  victimFirstName?: string;
+  victimSurname?: string;
+  suspectFirstName?: string;
+  suspectSurname?: string;
   incidentType?: string;
   courtCase?: string;
   verdict?: string;
   caseStatus?: string;
   sourceUrl?: string;
-  reporter?: string;
+  reporterFirstName?: string;
+  reporterSurname?: string;
   contactPhone?: string;
   contactEmail?: string;
   evidence?: IncidentEvidence[];

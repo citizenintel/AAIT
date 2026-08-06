@@ -173,7 +173,7 @@ export function AdminSubmissions() {
                                   {isAdmin ? (
                                     <>
                                       <div className="ai-fields">
-                                        <div><span>Reporter</span><strong>{summary.sensitive.reporterName}</strong></div>
+                                        <div><span>Reporter</span><strong>{[summary.sensitive.reporterFirstName, summary.sensitive.reporterSurname].filter(Boolean).join(' ') || '—'}</strong></div>
                                         <div><span>Email</span><strong>{summary.sensitive.reporterEmail}</strong></div>
                                         <div><span>SAPS / case</span><strong>{summary.sensitive.sapsNumber || '—'}</strong></div>
                                         <div><span>Contacts in text</span><strong>{summary.sensitive.contactsInText.length > 0 ? summary.sensitive.contactsInText.join(', ') : '—'}</strong></div>

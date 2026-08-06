@@ -20,7 +20,7 @@ export const INFERRED_FIELD_LABELS: Record<string, string> = {
   'casualties:from-summary': 'Casualties — read from a number written in the summary text, not from a source column',
   'entries:capped': 'This record holds the leftover text of a source row that exceeded the per-row split cap',
   'title:structural': 'Title — generated from place and date; the source supplied no usable title',
-  'victimName:extracted': 'Victim name — pattern-matched out of the summary text, not read from a source column',
+  'victimSurname:extracted': 'Victim name — pattern-matched out of the summary text, not read from a source column',
 
   // --- import ---
   'module:unclassified': 'Category — no keyword matched; the record is deliberately left unclassified',
@@ -32,7 +32,7 @@ export const INFERRED_FIELD_LABELS: Record<string, string> = {
   'coords:from-province': 'Map position — province centroid only; accurate to the province, not the place',
   'date:missing': 'Date — the source stated none; the field is deliberately blank',
   'town:missing': 'Location — the source stated none; the field is deliberately blank',
-  'victimName:from-text': 'Victim name — pattern-matched out of document text, not read from a source column',
+  'victimSurname:from-text': 'Victim name — pattern-matched out of document text, not read from a source column',
   'casualties:from-text': 'Casualties — read from a number written in the document text',
   'summary:from-document': 'Summary — a raw text chunk lifted from a PDF/DOCX, not a source-supplied field',
 };

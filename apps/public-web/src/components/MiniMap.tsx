@@ -73,13 +73,24 @@ export function MiniMap() {
     const src = map.getSource('viewport-box') as maplibregl.GeoJSONSource | undefined;
     if (!src) return;
 
+    // In 3D globe mode getBounds() is unreliable, so prefer the center
+    // that was captured from getCenter() — it's always correct.
+    const [cx, cy] = viewport.center ?? SA_CENTER;
     const [[vw, vs], [ve, vn]] = viewport.bounds;
-    const cx = (vw + ve) / 2;
-    const cy = (vs + vn) / 2;
     const saW = SA_BOUNDS.e - SA_BOUNDS.w;
     const saH = SA_BOUNDS.n - SA_BOUNDS.s;
-    const halfW = Math.min(Math.max((ve - vw) / 2, MIN_BOX_DEG / 2), saW / 2);
-    const halfH = Math.min(Math.max((vn - vs) / 2, MIN_BOX_DEG / 2), saH / 2);
+
+    // In globe mode the bounds can wrap or be wildly off.  Derive the box
+    // half-size from the zoom level instead when the bounds look degenerate.
+    let bw = ve - vw;
+    let bh = vn - vs;
+    if (bw <= 0 || bw > 360 || bh <= 0 || bh > 180) {
+      const degsPerZoom = 360 / Math.pow(2, viewport.zoom ?? SA_ZOOM);
+      bw = degsPerZoom;
+      bh = degsPerZoom * 0.6;
+    }
+    const halfW = Math.min(Math.max(bw / 2, MIN_BOX_DEG / 2), saW / 2);
+    const halfH = Math.min(Math.max(bh / 2, MIN_BOX_DEG / 2), saH / 2);
 
     src.setData({
       type: 'Feature',

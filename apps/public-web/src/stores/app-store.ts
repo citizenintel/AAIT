@@ -149,7 +149,8 @@ export interface Correction {
   currentValue: string;
   suggestedValue: string;
   reason: string;
-  submitterName: string;
+  submitterFirstName: string;
+  submitterSurname: string;
   submitterEmail: string;
   submittedAt: string;
   status: 'pending' | 'accepted' | 'dismissed';

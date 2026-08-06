@@ -30,10 +30,10 @@ export function calculateCredibility(inc: MockIncident): {
   const hasSource = inc.sourceUrl ? 8 : 0;
   breakdown.push({ label: 'Source URL', points: hasSource, max: 8 });
 
-  const hasWitness = inc.reporter ? 7 : 0;
+  const hasWitness = (inc.reporterFirstName || inc.reporterSurname) ? 7 : 0;
   breakdown.push({ label: 'Reporter/witness', points: hasWitness, max: 7 });
 
-  const hasVictim = inc.victimName ? 5 : 0;
+  const hasVictim = (inc.victimFirstName || inc.victimSurname) ? 5 : 0;
   breakdown.push({ label: 'Victim identified', points: hasVictim, max: 5 });
 
   const hasDate = inc.dateOccurred ? 5 : 0;

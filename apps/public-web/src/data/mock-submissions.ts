@@ -5,7 +5,8 @@ export interface Submission {
   module: string;
   submitted: string;
   knowledgeType: string;
-  reporter: string;
+  reporterFirstName: string;
+  reporterSurname: string;
   reporterEmail: string;
   attachments: number;
   attachmentBytes: number;
@@ -23,7 +24,7 @@ export interface Submission {
 export const MOCK_SUBMISSIONS: Submission[] = [
   {
     id: 'SUB-001', title: 'Farm attack report — Polokwane area', status: 'pending_review', module: 'ait',
-    submitted: '2026-07-20', knowledgeType: 'witness', reporter: 'J. van der Merwe DEMO', reporterEmail: 'jvdm.demo@example.com',
+    submitted: '2026-07-20', knowledgeType: 'witness', reporterFirstName: 'J.', reporterSurname: 'van der Merwe DEMO', reporterEmail: 'jvdm.demo@example.com',
     attachments: 2, attachmentBytes: 524288, oversized: false, retentionExpiry: null,
     town: 'Polokwane', province: 'Limpopo', dateOccurred: '2026-07-19', severity: 'critical', sapsNumber: 'CAS 214/07/2026',
     narrative: 'My neighbour Johan Pretorius phoned me around 03:00. Two armed men entered the farmhouse on the R81 smallholding. The owner was assaulted and taken to hospital. A case was opened at Polokwane SAPS, CAS 214/07/2026. You can reach me on 082 555 1234 or jvdm.demo@example.com for follow-up.',
@@ -31,7 +32,7 @@ export const MOCK_SUBMISSIONS: Submission[] = [
   },
   {
     id: 'SUB-002', title: 'Water outage Soweto', status: 'under_review', module: 'infrastructure',
-    submitted: '2026-07-19', knowledgeType: 'victim', reporter: 'Nomsa D. DEMO', reporterEmail: 'nomsa.demo@example.com',
+    submitted: '2026-07-19', knowledgeType: 'victim', reporterFirstName: 'Nomsa', reporterSurname: 'D. DEMO', reporterEmail: 'nomsa.demo@example.com',
     attachments: 0, attachmentBytes: 0, oversized: false, retentionExpiry: null,
     town: 'Soweto', province: 'Gauteng', dateOccurred: '2026-07-18', severity: 'medium', sapsNumber: '',
     narrative: 'No water in Zone 4 for five days. Johannesburg Water says a pump failed. Whole street affected. My number is 073 111 2222 if you need more.',
@@ -39,7 +40,7 @@ export const MOCK_SUBMISSIONS: Submission[] = [
   },
   {
     id: 'SUB-003', title: 'Protest N1 Musina', status: 'pending_review', module: 'unrest',
-    submitted: '2026-07-20', knowledgeType: 'media', reporter: 'Anon DEMO', reporterEmail: 'tipoff.demo@example.com',
+    submitted: '2026-07-20', knowledgeType: 'media', reporterFirstName: 'Anon', reporterSurname: 'DEMO', reporterEmail: 'tipoff.demo@example.com',
     attachments: 1, attachmentBytes: 102400, oversized: false, retentionExpiry: null,
     town: 'Musina', province: 'Limpopo', dateOccurred: '2026-07-20', severity: 'high', sapsNumber: '',
     narrative: 'Residents blockaded the N1 with burning tyres over water. Traffic backed up 8km. Police fired rubber bullets. Saw it reported on eNCA.',
@@ -47,7 +48,7 @@ export const MOCK_SUBMISSIONS: Submission[] = [
   },
   {
     id: 'SUB-004', title: 'Farm attack with video evidence — Tzaneen', status: 'pending_review', module: 'ait',
-    submitted: '2026-07-21', knowledgeType: 'witness', reporter: 'Citizen Reporter DEMO', reporterEmail: 'test.demo@example.com',
+    submitted: '2026-07-21', knowledgeType: 'witness', reporterFirstName: 'Citizen', reporterSurname: 'Reporter DEMO', reporterEmail: 'test.demo@example.com',
     attachments: 1, attachmentBytes: 7340032, oversized: true, retentionExpiry: '2026-07-28',
     town: 'Tzaneen', province: 'Limpopo', dateOccurred: '2026-07-21', severity: 'high', sapsNumber: '',
     narrative: 'Large video file attached showing security footage. Incident occurred on the R71 near Tzaneen.',
@@ -60,10 +61,14 @@ const NOT_A_NAME = /^(SAPS|Police|Water|Municipality|Metro|Council|News|Hospital
 
 // Strip SA phone, email and case-number patterns, the reporter's own name, and any
 // First-Last person names appearing in the free text. Deterministic — never invents.
-function redact(text: string, reporterName: string): string {
+function redact(text: string, firstName: string, surname: string): string {
   let out = text;
-  const clean = reporterName.replace(/\s*DEMO\s*/i, '').trim();
-  if (clean) out = out.split(clean).join('[name withheld]');
+  const cleanFirst = firstName.replace(/\s*DEMO\s*/i, '').trim();
+  const cleanSurname = surname.replace(/\s*DEMO\s*/i, '').trim();
+  const fullName = [cleanFirst, cleanSurname].filter(Boolean).join(' ');
+  if (fullName) out = out.split(fullName).join('[name withheld]');
+  if (cleanSurname && cleanSurname !== fullName) out = out.split(cleanSurname).join('[name withheld]');
+  if (cleanFirst && cleanFirst !== fullName) out = out.split(cleanFirst).join('[name withheld]');
   out = out.replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, '[email withheld]');
   out = out.replace(/(\+?27|0)\s?\d{2}[\s-]?\d{3}[\s-]?\d{4}/g, '[contact withheld]');
   out = out.replace(/\b(CAS|CASE|MAS)\s?\d+\/\d+\/\d+/gi, '[case ref withheld]');
@@ -88,7 +93,7 @@ function extractContacts(text: string): string[] {
 
 export interface SubmissionSummary {
   public: { module: string; title: string; summary: string; town: string; province: string; dateOccurred: string; severity: string };
-  sensitive: { reporterName: string; reporterEmail: string; sapsNumber: string; contactsInText: string[] };
+  sensitive: { reporterFirstName: string; reporterSurname: string; reporterEmail: string; sapsNumber: string; contactsInText: string[] };
 }
 
 /**
@@ -105,14 +110,15 @@ export function summariseSubmission(sub: Submission): SubmissionSummary {
     public: {
       module: sub.module,
       title: sub.title,
-      summary: condense(redact(sub.narrative, sub.reporter)),
+      summary: condense(redact(sub.narrative, sub.reporterFirstName, sub.reporterSurname)),
       town: sub.town,
       province: sub.province,
       dateOccurred: sub.dateOccurred,
       severity: sub.severity,
     },
     sensitive: {
-      reporterName: sub.reporter.replace(/\s*DEMO\s*/i, '').trim(),
+      reporterFirstName: sub.reporterFirstName.replace(/\s*DEMO\s*/i, '').trim(),
+      reporterSurname: sub.reporterSurname.replace(/\s*DEMO\s*/i, '').trim(),
       reporterEmail: sub.reporterEmail,
       sapsNumber: sub.sapsNumber,
       contactsInText: extractContacts(sub.narrative),

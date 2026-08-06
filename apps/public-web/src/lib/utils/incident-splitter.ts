@@ -570,7 +570,24 @@ function splitWithPlan(
     // G2. The name in the title and in victimName is pattern-matched out of the
     // entry text, never read from a source column. Flag it like every other
     // machine-derived field so the UI can say so.
-    if (uniqueNames.length > 0) inferredFields.add('victimName:extracted');
+    if (uniqueNames.length > 0) inferredFields.add('victimSurname:extracted');
+
+    // Split extracted name into firstName / surname. The last word is treated as
+    // the surname; everything before it as the first name. Multi-word surnames
+    // (van der Merwe, du Plessis) will need manual correction, but this is the
+    // best heuristic for machine-extracted names.
+    const extractedName = uniqueNames[0];
+    let extractedFirst: string | undefined;
+    let extractedSurname: string | undefined;
+    if (extractedName) {
+      const parts = extractedName.trim().split(/\s+/);
+      if (parts.length === 1) {
+        extractedSurname = parts[0];
+      } else {
+        extractedSurname = parts[parts.length - 1];
+        extractedFirst = parts.slice(0, -1).join(' ');
+      }
+    }
 
     results.push({
       ...inc,
@@ -582,13 +599,8 @@ function splitWithPlan(
       lat,
       lng,
       casualties: own,
-      // Do not inherit the parent's victimName — attributing the parent's named
-      // victim to an arbitrary sub-incident is a fabricated attribution.
-      // G3 (BLOCKER): but do not DESTROY it either. For CSV / AI-sorted imports
-      // that value came from an explicitly mapped SOURCE COLUMN, and the parent
-      // record is replaced by its children, so dropping it loses source data
-      // irrecoverably. It is preserved verbatim on splitFrom.parentVictimName.
-      victimName: uniqueNames[0] ?? undefined,
+      victimFirstName: extractedFirst ?? undefined,
+      victimSurname: extractedSurname ?? undefined,
       splitFrom: {
         rootId,
         parentId: inc.id,
@@ -597,7 +609,8 @@ function splitWithPlan(
         entryHash,
         capped: plan.capped || undefined,
         parentCasualties: inc.casualties ? { ...inc.casualties } : undefined,
-        parentVictimName: inc.victimName || undefined,
+        parentVictimFirstName: inc.victimFirstName || undefined,
+        parentVictimSurname: inc.victimSurname || undefined,
         parentTitle: inc.title || undefined,
         parentSummary: inc.summary || undefined,
       },

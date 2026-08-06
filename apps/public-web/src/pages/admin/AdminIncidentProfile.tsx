@@ -335,8 +335,11 @@ export function AdminIncidentProfile() {
               <FieldRow label="Title">
                 <input className="form-input" style={fieldInputStyle} value={current.title} onChange={e => updateField('title', e.target.value)} />
               </FieldRow>
-              <FieldRow label="Victim name">
-                <input className="form-input" style={fieldInputStyle} value={current.victimName ?? ''} onChange={e => updateField('victimName', e.target.value)} placeholder="Full name of victim" />
+              <FieldRow label="Victim first name">
+                <input className="form-input" style={fieldInputStyle} value={current.victimFirstName ?? ''} onChange={e => updateField('victimFirstName', e.target.value)} placeholder="First name" />
+              </FieldRow>
+              <FieldRow label="Victim surname">
+                <input className="form-input" style={fieldInputStyle} value={current.victimSurname ?? ''} onChange={e => updateField('victimSurname', e.target.value)} placeholder="Surname" />
               </FieldRow>
               <FieldRow label="Date occurred">
                 <input className="form-input" type="date" style={fieldInputStyle} value={current.dateOccurred ?? ''} onChange={e => updateField('dateOccurred', e.target.value)} />
@@ -395,14 +398,20 @@ export function AdminIncidentProfile() {
           <div className="admin-card">
             <div style={{ ...sectionTitleStyle, color: '#d97706' }}>Confidential — stored locally only</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <FieldRow label="Suspect name" confidential>
-                <input className="form-input" style={fieldInputStyle} value={current.suspectName ?? ''} onChange={e => updateField('suspectName', e.target.value)} placeholder="Name of suspect (if known)" />
+              <FieldRow label="Suspect first name" confidential>
+                <input className="form-input" style={fieldInputStyle} value={current.suspectFirstName ?? ''} onChange={e => updateField('suspectFirstName', e.target.value)} placeholder="First name" />
+              </FieldRow>
+              <FieldRow label="Suspect surname" confidential>
+                <input className="form-input" style={fieldInputStyle} value={current.suspectSurname ?? ''} onChange={e => updateField('suspectSurname', e.target.value)} placeholder="Surname" />
               </FieldRow>
               <FieldRow label="Court case / docket" confidential>
                 <input className="form-input" style={fieldInputStyle} value={current.courtCase ?? ''} onChange={e => updateField('courtCase', e.target.value)} placeholder="CAS number, court docket, SAPS ref" />
               </FieldRow>
-              <FieldRow label="Reporter / contact" confidential>
-                <input className="form-input" style={fieldInputStyle} value={current.reporter ?? ''} onChange={e => updateField('reporter', e.target.value)} placeholder="Name of person who reported" />
+              <FieldRow label="Reporter first name" confidential>
+                <input className="form-input" style={fieldInputStyle} value={current.reporterFirstName ?? ''} onChange={e => updateField('reporterFirstName', e.target.value)} placeholder="First name" />
+              </FieldRow>
+              <FieldRow label="Reporter surname" confidential>
+                <input className="form-input" style={fieldInputStyle} value={current.reporterSurname ?? ''} onChange={e => updateField('reporterSurname', e.target.value)} placeholder="Surname" />
               </FieldRow>
               <FieldRow label="Phone number" confidential>
                 <input className="form-input" style={fieldInputStyle} value={current.contactPhone ?? ''} onChange={e => updateField('contactPhone', e.target.value)} placeholder="Contact number" />

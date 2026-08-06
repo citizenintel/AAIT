@@ -877,6 +877,15 @@ function buildImportTitle(
   };
 }
 
+/** Split a full name string into first name and surname (last word). */
+function splitName(full: string | undefined): { first: string | undefined; surname: string | undefined } {
+  if (!full) return { first: undefined, surname: undefined };
+  const parts = full.trim().split(/\s+/);
+  if (parts.length === 0) return { first: undefined, surname: undefined };
+  if (parts.length === 1) return { first: undefined, surname: parts[0] };
+  return { first: parts.slice(0, -1).join(' '), surname: parts[parts.length - 1] };
+}
+
 /** Options shared by both builders. */
 interface BuildOptions {
   /** True when rows came from a PDF/DOCX, i.e. every field is pattern-matched. */
@@ -904,13 +913,17 @@ function sortedRowToIncident(row: AISortedRow, index: number, opts: BuildOptions
   if (!dateOccurred) inferredFields.add('date:missing');
   if (opts.documentDerived) {
     inferredFields.add('summary:from-document');
-    if (victimName) inferredFields.add('victimName:from-text');
+    if (victimName) inferredFields.add('victimSurname:from-text');
     if (get('Casualties')) inferredFields.add('casualties:from-text');
   }
 
   const sources: string[] = [];
   const sourceUrl = get('Source URL');
   if (sourceUrl) sources.push(sourceUrl);
+
+  const victimSplit = splitName(victimName);
+  const suspectSplit = splitName(row.confidential['Suspect name']);
+  const reporterSplit = splitName(row.confidential['Reporter / contact']);
 
   return {
     id: `imp-${Date.now().toString(36)}-${index.toString(36)}`,
@@ -919,9 +932,6 @@ function sortedRowToIncident(row: AISortedRow, index: number, opts: BuildOptions
     module: row.module,
     category: row.module,
     severity: row.severity,
-    // 'v1_unverified' is not a member of VerificationState — the cast hid that, so
-    // these records carried a verification value no lookup could resolve and the
-    // badge rendered blank rather than saying 'unverified'.
     verification: 'v0_unverified',
     locationTier: 'l3_area' as MockIncident['locationTier'],
     lng: pos.lng,
@@ -930,26 +940,25 @@ function sortedRowToIncident(row: AISortedRow, index: number, opts: BuildOptions
     town: town,
     dateOccurred,
     dateReported: new Date().toISOString().slice(0, 10),
-    // Never claim a source that is not there.
     sourceCount: sources.length,
     sources,
     tags: [],
     isSynthetic: false,
     casualties: parseCasualtyCell(get('Casualties')),
-    victimName: victimName || undefined,
-    suspectName: row.confidential['Suspect name'] || undefined,
+    victimFirstName: victimSplit.first,
+    victimSurname: victimSplit.surname,
+    suspectFirstName: suspectSplit.first,
+    suspectSurname: suspectSplit.surname,
     incidentType: get('Incident type') || undefined,
     courtCase: row.confidential['Court case / docket'] || undefined,
     verdict: get('Verdict / outcome') || undefined,
     caseStatus: get('Case status') || undefined,
     sourceUrl: sourceUrl || undefined,
-    reporter: row.confidential['Reporter / contact'] || undefined,
+    reporterFirstName: reporterSplit.first,
+    reporterSurname: reporterSplit.surname,
     contactPhone: row.confidential['Phone number'] || undefined,
     contactEmail: row.confidential['Email address'] || undefined,
     inferredFields: [...inferredFields],
-    // Everything on this path carries at least one machine-derived field
-    // (module and severity are always keyword guesses), so nothing from an
-    // import is publishable until an editor has looked at it.
     needsReview: true,
   };
 }
@@ -987,13 +996,17 @@ function rawRowToIncident(
   if (!mappedProvince && province) inferredFields.add('province:from-text');
   if (opts.documentDerived) {
     inferredFields.add('summary:from-document');
-    if (victimName) inferredFields.add('victimName:from-text');
+    if (victimName) inferredFields.add('victimSurname:from-text');
     if (get('casualties')) inferredFields.add('casualties:from-text');
   }
 
   const sources: string[] = [];
   const sourceUrl = get('sourceUrl');
   if (sourceUrl) sources.push(sourceUrl);
+
+  const victimSplit = splitName(victimName);
+  const suspectSplit = splitName(get('suspectName'));
+  const reporterSplit = splitName(get('reporter'));
 
   return {
     id: `imp-${Date.now().toString(36)}-${index.toString(36)}`,
@@ -1002,9 +1015,6 @@ function rawRowToIncident(
     module,
     category: module,
     severity,
-    // 'v1_unverified' is not a member of VerificationState — the cast hid that, so
-    // these records carried a verification value no lookup could resolve and the
-    // badge rendered blank rather than saying 'unverified'.
     verification: 'v0_unverified',
     locationTier: 'l3_area' as MockIncident['locationTier'],
     lng: pos.lng,
@@ -1018,14 +1028,17 @@ function rawRowToIncident(
     tags: [],
     isSynthetic: false,
     casualties: parseCasualtyCell(get('casualties')),
-    victimName: victimName || undefined,
-    suspectName: get('suspectName') || undefined,
+    victimFirstName: victimSplit.first,
+    victimSurname: victimSplit.surname,
+    suspectFirstName: suspectSplit.first,
+    suspectSurname: suspectSplit.surname,
     incidentType: get('incidentType') || undefined,
     courtCase: get('courtCase') || undefined,
     verdict: get('verdict') || undefined,
     caseStatus: get('caseStatus') || undefined,
     sourceUrl: sourceUrl || undefined,
-    reporter: get('reporter') || undefined,
+    reporterFirstName: reporterSplit.first,
+    reporterSurname: reporterSplit.surname,
     contactPhone: get('contactPhone') || undefined,
     contactEmail: get('contactEmail') || undefined,
     inferredFields: [...inferredFields],

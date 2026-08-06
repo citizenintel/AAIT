@@ -263,8 +263,12 @@ function ExpandedRow({ incidentRow, onCollapse }: { incidentRow: IncidentRow; on
                   <input className="form-input" style={{ ...fieldInputStyle, marginTop: 2 }} value={current.title} onChange={e => updateField('title', e.target.value)} />
                 </div>
                 <div>
-                  <div style={fieldLabelStyle}>Victim name</div>
-                  <input className="form-input" style={{ ...fieldInputStyle, marginTop: 2 }} value={current.victimName ?? ''} onChange={e => updateField('victimName', e.target.value)} placeholder="Full name" />
+                  <div style={fieldLabelStyle}>Victim first name</div>
+                  <input className="form-input" style={{ ...fieldInputStyle, marginTop: 2 }} value={current.victimFirstName ?? ''} onChange={e => updateField('victimFirstName', e.target.value)} placeholder="First name" />
+                </div>
+                <div>
+                  <div style={fieldLabelStyle}>Victim surname</div>
+                  <input className="form-input" style={{ ...fieldInputStyle, marginTop: 2 }} value={current.victimSurname ?? ''} onChange={e => updateField('victimSurname', e.target.value)} placeholder="Surname" />
                 </div>
                 <div>
                   <div style={fieldLabelStyle}>Date occurred</div>
@@ -335,16 +339,24 @@ function ExpandedRow({ incidentRow, onCollapse }: { incidentRow: IncidentRow; on
                 <div style={{ ...sectionTitleStyle, color: '#d97706' }}>Confidential — stored locally only</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                   <div>
-                    <div style={fieldLabelStyle}>Suspect name</div>
-                    <input className="form-input" style={{ ...fieldInputStyle, marginTop: 2 }} value={current.suspectName ?? ''} onChange={e => updateField('suspectName', e.target.value)} placeholder="If known" />
+                    <div style={fieldLabelStyle}>Suspect first name</div>
+                    <input className="form-input" style={{ ...fieldInputStyle, marginTop: 2 }} value={current.suspectFirstName ?? ''} onChange={e => updateField('suspectFirstName', e.target.value)} placeholder="First name" />
+                  </div>
+                  <div>
+                    <div style={fieldLabelStyle}>Suspect surname</div>
+                    <input className="form-input" style={{ ...fieldInputStyle, marginTop: 2 }} value={current.suspectSurname ?? ''} onChange={e => updateField('suspectSurname', e.target.value)} placeholder="Surname" />
                   </div>
                   <div>
                     <div style={fieldLabelStyle}>Court case / docket</div>
                     <input className="form-input" style={{ ...fieldInputStyle, marginTop: 2 }} value={current.courtCase ?? ''} onChange={e => updateField('courtCase', e.target.value)} placeholder="CAS number, docket ref" />
                   </div>
                   <div>
-                    <div style={fieldLabelStyle}>Reporter / contact</div>
-                    <input className="form-input" style={{ ...fieldInputStyle, marginTop: 2 }} value={current.reporter ?? ''} onChange={e => updateField('reporter', e.target.value)} placeholder="Who reported" />
+                    <div style={fieldLabelStyle}>Reporter first name</div>
+                    <input className="form-input" style={{ ...fieldInputStyle, marginTop: 2 }} value={current.reporterFirstName ?? ''} onChange={e => updateField('reporterFirstName', e.target.value)} placeholder="First name" />
+                  </div>
+                  <div>
+                    <div style={fieldLabelStyle}>Reporter surname</div>
+                    <input className="form-input" style={{ ...fieldInputStyle, marginTop: 2 }} value={current.reporterSurname ?? ''} onChange={e => updateField('reporterSurname', e.target.value)} placeholder="Surname" />
                   </div>
                   <div>
                     <div style={fieldLabelStyle}>Phone number</div>
@@ -428,7 +440,8 @@ function ExpandedRow({ incidentRow, onCollapse }: { incidentRow: IncidentRow; on
 
 function AddIncidentForm({ onAdd, onCancel }: { onAdd: (inc: MockIncident) => void; onCancel: () => void }) {
   const [title, setTitle] = useState('');
-  const [victimName, setVictimName] = useState('');
+  const [victimFirstName, setVictimFirstName] = useState('');
+  const [victimSurname, setVictimSurname] = useState('');
   const [dateOccurred, setDateOccurred] = useState('');
   const [town, setTown] = useState('');
   const [province, setProvince] = useState('');
@@ -437,7 +450,8 @@ function AddIncidentForm({ onAdd, onCancel }: { onAdd: (inc: MockIncident) => vo
   const [summary, setSummary] = useState('');
 
   const handleAdd = () => {
-    const finalTitle = title.trim() || (victimName ? `${victimName} — ${town || province || 'Unknown'}` : 'Untitled incident');
+    const fullName = [victimFirstName, victimSurname].filter(s => s.trim()).join(' ');
+    const finalTitle = title.trim() || (fullName ? `${fullName} — ${town || province || 'Unknown'}` : 'Untitled incident');
     const inc: MockIncident = {
       id: `man-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
       title: finalTitle,
@@ -453,7 +467,8 @@ function AddIncidentForm({ onAdd, onCancel }: { onAdd: (inc: MockIncident) => vo
       dateReported: new Date().toISOString().slice(0, 10),
       sourceCount: 0, sources: [], tags: [],
       isSynthetic: false,
-      victimName: victimName || undefined,
+      victimFirstName: victimFirstName.trim() || undefined,
+      victimSurname: victimSurname.trim() || undefined,
     };
     onAdd(inc);
   };
@@ -463,8 +478,12 @@ function AddIncidentForm({ onAdd, onCancel }: { onAdd: (inc: MockIncident) => vo
       <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Add New Incident</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
         <div>
-          <div style={fieldLabelStyle}>Victim name</div>
-          <input className="form-input" value={victimName} onChange={e => setVictimName(e.target.value)} placeholder="Full name" style={{ fontSize: 12, marginTop: 2 }} />
+          <div style={fieldLabelStyle}>Victim first name</div>
+          <input className="form-input" value={victimFirstName} onChange={e => setVictimFirstName(e.target.value)} placeholder="First name" style={{ fontSize: 12, marginTop: 2 }} />
+        </div>
+        <div>
+          <div style={fieldLabelStyle}>Victim surname</div>
+          <input className="form-input" value={victimSurname} onChange={e => setVictimSurname(e.target.value)} placeholder="Surname" style={{ fontSize: 12, marginTop: 2 }} />
         </div>
         <div>
           <div style={fieldLabelStyle}>Title (auto-generated if blank)</div>
@@ -513,6 +532,7 @@ function AddIncidentForm({ onAdd, onCancel }: { onAdd: (inc: MockIncident) => vo
 export function AdminIncidents() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const [surnameFilter, setSurnameFilter] = useState('');
   const [moduleFilter, setModuleFilter] = useState('all');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [showAdd, setShowAdd] = useState(false);
@@ -543,6 +563,15 @@ export function AdminIncidents() {
     return incidents.filter(inc => {
       if (moduleFilter !== 'all' && inc.category?.module !== moduleFilter) return false;
       if (severityFilter !== 'all' && inc.severity !== severityFilter) return false;
+      if (surnameFilter) {
+        const sq = surnameFilter.toLowerCase();
+        const imp = importedIncidents.find(i => i.id === inc.id);
+        if (!imp) return false;
+        const hasSurname = (imp.victimSurname ?? '').toLowerCase().includes(sq)
+          || (imp.suspectSurname ?? '').toLowerCase().includes(sq)
+          || (imp.reporterSurname ?? '').toLowerCase().includes(sq);
+        if (!hasSurname) return false;
+      }
       if (search) {
         const q = search.toLowerCase();
         if (
@@ -554,7 +583,7 @@ export function AdminIncidents() {
       }
       return true;
     });
-  }, [search, moduleFilter, severityFilter, incidents]);
+  }, [search, surnameFilter, moduleFilter, severityFilter, incidents, importedIncidents]);
 
   const handleAddIncident = useCallback((inc: MockIncident) => {
     addImportedIncidents([inc]);
@@ -583,7 +612,8 @@ export function AdminIncidents() {
       {showAdd && <AddIncidentForm onAdd={handleAddIncident} onCancel={() => setShowAdd(false)} />}
 
       <div className="admin-toolbar">
-        <input type="text" className="form-input" placeholder="Search title, location, or case notes..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 340 }} />
+        <input type="text" className="form-input" placeholder="Search title, location, or case notes..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 300 }} />
+        <input type="text" className="form-input" placeholder="Filter by surname..." value={surnameFilter} onChange={(e) => setSurnameFilter(e.target.value)} style={{ maxWidth: 180 }} />
         <select className="form-input" value={moduleFilter} onChange={(e) => setModuleFilter(e.target.value)} style={{ maxWidth: 180 }}>
           <option value="all">All modules</option>
           {Object.entries(MODULE_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}

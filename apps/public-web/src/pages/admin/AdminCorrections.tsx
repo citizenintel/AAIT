@@ -47,9 +47,9 @@ export function AdminCorrections() {
                 <div className="correction-card-reason">
                   Reason: {c.reason}
                 </div>
-                {(c.submitterName || c.submitterEmail) && (
+                {(c.submitterFirstName || c.submitterSurname || c.submitterEmail) && (
                   <div className="correction-card-submitter">
-                    From: {c.submitterName}{c.submitterEmail ? ` (${c.submitterEmail})` : ''}
+                    From: {[c.submitterFirstName, c.submitterSurname].filter(Boolean).join(' ')}{c.submitterEmail ? ` (${c.submitterEmail})` : ''}
                   </div>
                 )}
                 <div className="correction-card-actions">

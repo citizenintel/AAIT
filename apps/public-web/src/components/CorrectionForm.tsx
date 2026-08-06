@@ -25,7 +25,8 @@ export function CorrectionForm({ incidentId, incidentTitle, onClose }: Correctio
   const [currentValue, setCurrentValue] = useState('');
   const [suggestedValue, setSuggestedValue] = useState('');
   const [reason, setReason] = useState('');
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [surname, setSurname] = useState('');
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
@@ -40,7 +41,8 @@ export function CorrectionForm({ incidentId, incidentTitle, onClose }: Correctio
       currentValue,
       suggestedValue,
       reason,
-      submitterName: name,
+      submitterFirstName: firstName,
+      submitterSurname: surname,
       submitterEmail: email,
     });
     setSubmitted(true);
@@ -92,8 +94,12 @@ export function CorrectionForm({ incidentId, incidentTitle, onClose }: Correctio
 
       <div className="correction-row">
         <label className="correction-label">
-          Your name
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Optional" />
+          First name
+          <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Optional" />
+        </label>
+        <label className="correction-label">
+          Surname
+          <input type="text" value={surname} onChange={(e) => setSurname(e.target.value)} placeholder="Optional" />
         </label>
         <label className="correction-label">
           Your email
